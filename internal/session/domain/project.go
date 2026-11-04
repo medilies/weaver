@@ -3,8 +3,10 @@
 package domain
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -57,16 +59,42 @@ func (r ProjectRoot) String() string {
 	return r.path
 }
 
-// Project is a registered dev project: a name and the directory its
-// session is rooted at.
+// Project is a registered dev project: a name, the directory its session
+// is rooted at, and the windows its session opens.
 type Project struct {
-	name ProjectName
-	root ProjectRoot
+	name    ProjectName
+	root    ProjectRoot
+	windows []Window
 }
 
-// NewProject constructs a Project from its already-validated parts.
+// NewProject constructs a Project from its already-validated parts. Until
+// it is given windows, it opens one window, named after it, holding one
+// shell in its root.
 func NewProject(name ProjectName, root ProjectRoot) Project {
-	return Project{name: name, root: root}
+	return Project{name: name, root: root, windows: []Window{defaultWindow(name)}}
+}
+
+// WithWindows replaces the windows the project's session opens, in order.
+// Window names must be unique. With no windows, the project falls back to
+// its default window.
+func (p Project) WithWindows(windows ...Window) (Project, error) {
+	if len(windows) == 0 {
+		p.windows = []Window{defaultWindow(p.name)}
+		return p, nil
+	}
+	seen := make(map[string]bool, len(windows))
+	for _, window := range windows {
+		if seen[window.name.value] {
+			return Project{}, fmt.Errorf("window %q: %w", window.name.value, ErrDuplicateWindowName)
+		}
+		seen[window.name.value] = true
+	}
+	p.windows = slices.Clone(windows)
+	return p, nil
+}
+
+func defaultWindow(name ProjectName) Window {
+	return Window{name: WindowName(name), panes: []Pane{NewPane()}}
 }
 
 func (p Project) Name() ProjectName {
@@ -75,6 +103,11 @@ func (p Project) Name() ProjectName {
 
 func (p Project) Root() ProjectRoot {
 	return p.root
+}
+
+// Windows are the windows the project's session opens, in order.
+func (p Project) Windows() []Window {
+	return slices.Clone(p.windows)
 }
 
 // Describe renders a short human-readable summary, e.g. for `weaver show`.

@@ -1,0 +1,408 @@
+package domain
+
+import (
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"unicode"
+)
+
+// oneLine trims raw and rejects control characters such as tabs, newlines
+// and escapes: names end up in tmux borders and commands are typed into a
+// shell, where those would misfire.
+func oneLine(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if strings.IndexFunc(trimmed, unicode.IsControl) >= 0 {
+		return "", fmt.Errorf("%q: %w", raw, ErrControlCharacters)
+	}
+	return trimmed, nil
+}
+
+// WindowName names a tmux window. It is unique within a project, which is
+// how a running session's closed windows are found again.
+type WindowName struct {
+	value string
+}
+
+// NewWindowName validates and constructs a WindowName: trimmed, non-empty,
+// one line.
+func NewWindowName(raw string) (WindowName, error) {
+	value, err := oneLine(raw)
+	if err != nil {
+		return WindowName{}, err
+	}
+	if value == "" {
+		return WindowName{}, ErrEmptyWindowName
+	}
+	return WindowName{value: value}, nil
+}
+
+func (n WindowName) String() string {
+	return n.value
+}
+
+// PaneName labels a pane in its window's top border. The zero value is an
+// unnamed pane, which only a window's single pane may be.
+type PaneName struct {
+	value string
+}
+
+// NewPaneName validates and constructs a PaneName: trimmed, non-empty, one
+// line.
+func NewPaneName(raw string) (PaneName, error) {
+	value, err := oneLine(raw)
+	if err != nil {
+		return PaneName{}, err
+	}
+	if value == "" {
+		return PaneName{}, ErrEmptyPaneName
+	}
+	return PaneName{value: value}, nil
+}
+
+func (n PaneName) String() string {
+	return n.value
+}
+
+// IsZero reports whether the pane is unnamed.
+func (n PaneName) IsZero() bool {
+	return n.value == ""
+}
+
+// PaneDir is the directory a pane's shell starts in: relative to the
+// project root, or absolute. The zero value is the project root itself.
+type PaneDir struct {
+	path string
+}
+
+// NewPaneDir validates and constructs a PaneDir. Blank and "." both mean
+// the project root.
+func NewPaneDir(raw string) (PaneDir, error) {
+	path, err := oneLine(raw)
+	if err != nil {
+		return PaneDir{}, err
+	}
+	if path == "" {
+		return PaneDir{}, nil
+	}
+	if cleaned := filepath.Clean(path); cleaned != "." {
+		return PaneDir{path: cleaned}, nil
+	}
+	return PaneDir{}, nil
+}
+
+// String is the cleaned path, or "" for the project root.
+func (d PaneDir) String() string {
+	return d.path
+}
+
+// IsRoot reports whether the pane starts in the project root.
+func (d PaneDir) IsRoot() bool {
+	return d.path == ""
+}
+
+// Direction is where a split puts the new pane relative to the pane it
+// splits.
+type Direction int
+
+const (
+	// Right puts the new pane to the right (tmux split-window -h).
+	Right Direction = iota + 1
+	// Below puts the new pane underneath (tmux split-window -v).
+	Below
+)
+
+// ParseDirection reads "right" or "below".
+func ParseDirection(raw string) (Direction, error) {
+	switch strings.TrimSpace(raw) {
+	case "right":
+		return Right, nil
+	case "below":
+		return Below, nil
+	}
+	return 0, fmt.Errorf("%w: %q (want right or below)", ErrInvalidDirection, raw)
+}
+
+func (d Direction) String() string {
+	switch d {
+	case Right:
+		return "right"
+	case Below:
+		return "below"
+	}
+	return "invalid"
+}
+
+// Size is how much of the split pane a new pane takes: a percentage, a
+// number of cells, or tmux's default of half.
+type Size struct {
+	amount  int
+	percent bool
+}
+
+// DefaultSize lets tmux split the pane in half.
+func DefaultSize() Size {
+	return Size{}
+}
+
+// Percent is a share of the split pane, from 1% to 99%.
+func Percent(n int) (Size, error) {
+	if n < 1 || n > 99 {
+		return Size{}, fmt.Errorf("%w: %d%% (want 1%% to 99%%)", ErrInvalidSize, n)
+	}
+	return Size{amount: n, percent: true}, nil
+}
+
+// Cells is a number of columns (right) or lines (below).
+func Cells(n int) (Size, error) {
+	if n < 1 {
+		return Size{}, fmt.Errorf("%w: %d cells (want at least 1)", ErrInvalidSize, n)
+	}
+	return Size{amount: n}, nil
+}
+
+// ParseSize reads "40%" (a percentage), "20" (cells) or "" (the default).
+func ParseSize(raw string) (Size, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return DefaultSize(), nil
+	}
+	digits, percent := strings.CutSuffix(trimmed, "%")
+	n, err := strconv.Atoi(digits)
+	if err != nil {
+		return Size{}, fmt.Errorf("%w: %q (want e.g. 40%% or 20)", ErrInvalidSize, raw)
+	}
+	if percent {
+		return Percent(n)
+	}
+	return Cells(n)
+}
+
+// IsDefault reports whether tmux picks the size.
+func (s Size) IsDefault() bool {
+	return s.amount == 0
+}
+
+// String is the size as tmux's split-window -l takes it, or "" for the
+// default.
+func (s Size) String() string {
+	switch {
+	case s.IsDefault():
+		return ""
+	case s.percent:
+		return strconv.Itoa(s.amount) + "%"
+	default:
+		return strconv.Itoa(s.amount)
+	}
+}
+
+// Split says how a pane is carved out of an earlier pane of its window,
+// with tmux split-window semantics: the size is a share of the split pane.
+type Split struct {
+	of        int
+	direction Direction
+	size      Size
+}
+
+// NewSplit splits the window's pane at index of (0 is the first pane).
+func NewSplit(of int, direction Direction, size Size) (Split, error) {
+	if direction != Right && direction != Below {
+		return Split{}, fmt.Errorf("%w: %d", ErrInvalidDirection, direction)
+	}
+	return Split{of: of, direction: direction, size: size}, nil
+}
+
+// Of is the index, within the window, of the pane being split.
+func (s Split) Of() int {
+	return s.of
+}
+
+func (s Split) Direction() Direction {
+	return s.direction
+}
+
+func (s Split) Size() Size {
+	return s.size
+}
+
+// Command is one shell command line, typed into a pane.
+type Command struct {
+	text string
+}
+
+// NewCommand validates and constructs a Command: trimmed, non-empty, one
+// line.
+func NewCommand(raw string) (Command, error) {
+	text, err := oneLine(raw)
+	if err != nil {
+		return Command{}, err
+	}
+	if text == "" {
+		return Command{}, ErrEmptyCommand
+	}
+	return Command{text: text}, nil
+}
+
+func (c Command) String() string {
+	return c.text
+}
+
+// Startup is what a pane does once its shell is up: nothing, run a
+// command, or leave a command typed at the prompt for the user to run.
+type Startup struct {
+	command Command
+	submit  bool
+}
+
+// Command is the command typed into the pane, if any.
+func (s Startup) Command() (Command, bool) {
+	return s.command, s.command.text != ""
+}
+
+// Submits reports whether the typed command is run (Enter is pressed).
+func (s Startup) Submits() bool {
+	return s.submit
+}
+
+// Pane is one shell in a window. Build it fluently from NewPane; each
+// method returns a new Pane.
+type Pane struct {
+	name    PaneName
+	dir     PaneDir
+	split   Split
+	splits  bool
+	startup Startup
+	note    []string
+}
+
+// NewPane is an unnamed shell in the project root.
+func NewPane() Pane {
+	return Pane{}
+}
+
+// Named labels the pane.
+func (p Pane) Named(name PaneName) Pane {
+	p.name = name
+	return p
+}
+
+// In starts the pane's shell in dir.
+func (p Pane) In(dir PaneDir) Pane {
+	p.dir = dir
+	return p
+}
+
+// Splitting creates the pane by splitting an earlier pane of its window.
+func (p Pane) Splitting(split Split) Pane {
+	p.split = split
+	p.splits = true
+	return p
+}
+
+// Running types cmd into the pane's shell and runs it. Typing it keeps it
+// in the shell history, so it can be run again after Ctrl-C.
+func (p Pane) Running(cmd Command) Pane {
+	p.startup = Startup{command: cmd, submit: true}
+	return p
+}
+
+// Prefilling types cmd at the pane's prompt without running it.
+func (p Pane) Prefilling(cmd Command) Pane {
+	p.startup = Startup{command: cmd}
+	return p
+}
+
+// WithNote prints lines in the pane before its shell starts.
+func (p Pane) WithNote(lines ...string) Pane {
+	p.note = slices.Clone(lines)
+	return p
+}
+
+func (p Pane) Name() PaneName {
+	return p.name
+}
+
+func (p Pane) Dir() PaneDir {
+	return p.dir
+}
+
+// Split is how the pane is created, unless it is its window's first pane.
+func (p Pane) Split() (Split, bool) {
+	return p.split, p.splits
+}
+
+func (p Pane) Startup() Startup {
+	return p.startup
+}
+
+// Note is the lines printed before the pane's shell starts.
+func (p Pane) Note() []string {
+	return slices.Clone(p.note)
+}
+
+// Window is a tmux window and its panes, in creation order: the first pane
+// fills the window and each later one splits an earlier one.
+type Window struct {
+	name  WindowName
+	panes []Pane
+}
+
+// NewWindow validates and constructs a Window. With no panes, it holds one
+// shell in the project root. Panes must be named, uniquely, when there are
+// several: the names label their borders.
+func NewWindow(name WindowName, panes ...Pane) (Window, error) {
+	if len(panes) == 0 {
+		panes = []Pane{NewPane()}
+	}
+	named := make(map[string]bool, len(panes))
+	for i, pane := range panes {
+		if err := checkPlacement(i, pane); err != nil {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), err)
+		}
+		if len(panes) == 1 {
+			continue
+		}
+		if pane.name.IsZero() {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), ErrUnnamedPane)
+		}
+		if named[pane.name.value] {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), ErrDuplicatePaneName)
+		}
+		named[pane.name.value] = true
+	}
+	return Window{name: name, panes: slices.Clone(panes)}, nil
+}
+
+// checkPlacement enforces the creation order: the first pane fills the
+// window, every later pane splits one created before it.
+func checkPlacement(index int, pane Pane) error {
+	split, splits := pane.Split()
+	switch {
+	case index == 0 && splits:
+		return ErrFirstPaneSplits
+	case index > 0 && !splits:
+		return ErrPaneWithoutSplit
+	case splits && (split.of < 0 || split.of >= index):
+		return fmt.Errorf("%w (it splits pane #%d)", ErrSplitTargetNotEarlier, split.of+1)
+	}
+	return nil
+}
+
+// paneRef names a pane in errors: by name, else by 1-based position.
+func paneRef(index int, pane Pane) string {
+	if pane.name.IsZero() {
+		return "#" + strconv.Itoa(index+1)
+	}
+	return strconv.Quote(pane.name.value)
+}
+
+func (w Window) Name() WindowName {
+	return w.name
+}
+
+// Panes are the window's panes in creation order.
+func (w Window) Panes() []Pane {
+	return slices.Clone(w.panes)
+}

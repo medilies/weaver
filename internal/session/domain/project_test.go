@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/domain"
@@ -74,6 +75,38 @@ func TestNewProjectRoot(t *testing.T) {
 		_, err := domain.NewProjectRoot("dev/weaver")
 		if !errors.Is(err, domain.ErrRelativeProjectRoot) {
 			t.Fatalf("got %v, want ErrRelativeProjectRoot", err)
+		}
+	})
+}
+
+func TestProjectWindows(t *testing.T) {
+	project := domain.NewProject(projectName(t, "didata"), projectRoot(t, "/home/ilies/dev/didata"))
+
+	t.Run("opens one window named after the project by default", func(t *testing.T) {
+		windows := project.Windows()
+		if len(windows) != 1 || windows[0].Name().String() != "didata" {
+			t.Fatalf("got %d windows, want one named didata", len(windows))
+		}
+	})
+
+	t.Run("opens the windows it is given, in order", func(t *testing.T) {
+		withWindows, err := project.WithWindows(window(t, "api"), window(t, "app"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var names []string
+		for _, w := range withWindows.Windows() {
+			names = append(names, w.Name().String())
+		}
+		if want := []string{"api", "app"}; !slices.Equal(names, want) {
+			t.Fatalf("got %q, want %q", names, want)
+		}
+	})
+
+	t.Run("rejects two windows with the same name", func(t *testing.T) {
+		_, err := project.WithWindows(window(t, "api"), window(t, "api"))
+		if !errors.Is(err, domain.ErrDuplicateWindowName) {
+			t.Fatalf("got %v, want ErrDuplicateWindowName", err)
 		}
 	})
 }
