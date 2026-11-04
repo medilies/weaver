@@ -24,12 +24,7 @@ type tmuxServer struct {
 
 func newTmuxServer(t *testing.T) tmuxServer {
 	t.Helper()
-	if _, err := exec.LookPath("tmux"); err != nil {
-		if os.Getenv("CI") != "" {
-			t.Fatal("tmux is required in CI")
-		}
-		t.Skip("tmux is not installed")
-	}
+	requireTool(t, "tmux")
 	// Not t.TempDir(): its long path would overflow a socket address.
 	dir, err := os.MkdirTemp("", "wv")
 	if err != nil {
