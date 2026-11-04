@@ -9,6 +9,9 @@ var (
 	// a filename, a tmux session name or a command-line argument can't
 	// carry safely.
 	ErrInvalidProjectName = errors.New("project name must start with a letter or digit and contain only letters, digits, '-' and '_'")
+	// ErrReservedProjectName is returned when a project name is one of
+	// weaver's commands, which `weaver <name>` would run instead.
+	ErrReservedProjectName = errors.New("project name is a weaver command")
 	// ErrEmptyProjectRoot is returned when a project root path is blank.
 	ErrEmptyProjectRoot = errors.New("project root must not be empty")
 	// ErrRelativeProjectRoot is returned when a project root is not an
@@ -68,6 +71,9 @@ var (
 	// ErrRuntimeNotInstalled is returned when a pinned version can't be
 	// found on this machine.
 	ErrRuntimeNotInstalled = errors.New("runtime not installed")
+	// ErrMissingDirectory is returned when a pane's directory doesn't
+	// exist, and no repository would be cloned there.
+	ErrMissingDirectory = errors.New("directory not found")
 	// ErrInvalidCheckoutDir is returned for a repository directory that
 	// isn't inside the project root.
 	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")

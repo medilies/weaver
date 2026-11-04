@@ -15,6 +15,10 @@ import (
 // names and expands "#", and a leading "-" reads as a flag.
 var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
+// reservedNames are weaver's own commands: `weaver <name>` runs the
+// command, so a project named after one could never be opened.
+var reservedNames = []string{"completion", "help", "show"}
+
 // ProjectName is a registered project's identifier: non-empty, trimmed,
 // and used both as a lookup key and as the tmux session name.
 type ProjectName struct {
@@ -29,6 +33,9 @@ func NewProjectName(value string) (ProjectName, error) {
 	}
 	if !projectNamePattern.MatchString(trimmed) {
 		return ProjectName{}, ErrInvalidProjectName
+	}
+	if slices.Contains(reservedNames, trimmed) {
+		return ProjectName{}, fmt.Errorf("%w: %q", ErrReservedProjectName, trimmed)
 	}
 	return ProjectName{value: trimmed}, nil
 }

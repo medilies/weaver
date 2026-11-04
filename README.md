@@ -4,26 +4,53 @@ Weaver drives tmux sessions, windows and panes from a per-project JSON
 config, so starting a dev environment is one command instead of a
 bespoke script per project.
 
-## Status
-
-Early bootstrap. weaver reads the full project config below, and
-`weaver show <project>` prints a registered project; building the tmux
-session from it is the next piece of work.
-
-## Commands
+## Usage
 
 ```sh
-go build ./...              # build everything
-go run ./cmd/weaver show X  # run without building
-go test ./...                # run tests
+go install ./cmd/weaver   # puts weaver in ~/go/bin
+weaver bicyclette         # start or attach the bicyclette session, from anywhere
+weaver show bicyclette    # print a registered project
+```
+
+`weaver <project>` attaches to the project's tmux session (inside tmux,
+it switches to it). When the session isn't running, weaver first:
+
+1. finds every pinned PHP and Node version, and stops if one isn't
+   installed;
+2. clones the project's repositories that are missing;
+3. checks every pane's directory exists;
+4. builds the session, sized like your terminal so percentage splits
+   come out right, labels its panes in their top border, and types each
+   pane's command into its shell.
+
+If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
+newer.
+
+Runtimes are found where Ubuntu and nvm install them: `"php": "8.4"` is
+`/usr/bin/php8.4`, linked as `php` in `~/.cache/weaver/php/8.4`, and
+`"node": "20"` is the newest `$NVM_DIR/versions/node/v20.*`. Either
+directory goes first on the pane's PATH before its login shell starts;
+nvm, sourced from `.bashrc`, keeps a Node version that is already on
+PATH.
+
+## Development
+
+```sh
+go build ./...               # build everything
+go run ./cmd/weaver show X   # run without building
+go test ./...                # run tests (the tmux and git adapters need tmux and git)
 golangci-lint run ./...      # format check, static analysis, layer boundaries
 ```
 
+The tmux adapter's tests start private tmux servers on their own
+sockets; they never touch your sessions.
+
 ## Project config
 
-A project is a JSON file at `~/.config/weaver/projects/<name>.json`. The
-file name is the project's name and its tmux session's name: letters,
-digits, `-` and `_`.
+A project is a JSON file at `~/.config/weaver/projects/<name>.json`
+(`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
+the project's name and its tmux session's name: letters, digits, `-` and
+`_`, and not one of weaver's commands.
 
 The smallest config opens one window with one shell in the root:
 

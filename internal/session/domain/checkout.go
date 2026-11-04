@@ -46,6 +46,11 @@ func (c Checkout) Remote() string {
 	return c.remote
 }
 
+// Path is where the checkout lives under root.
+func (c Checkout) Path(root ProjectRoot) string {
+	return filepath.Join(root.path, c.dir)
+}
+
 // Checkouts are a project's repositories, at most one per directory.
 type Checkouts struct {
 	list []Checkout

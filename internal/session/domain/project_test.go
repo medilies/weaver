@@ -51,6 +51,13 @@ func TestNewProjectName(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("rejects a weaver command's name", func(t *testing.T) {
+		_, err := domain.NewProjectName("show")
+		if !errors.Is(err, domain.ErrReservedProjectName) {
+			t.Fatalf("got %v, want ErrReservedProjectName", err)
+		}
+	})
 }
 
 func TestNewProjectRoot(t *testing.T) {
