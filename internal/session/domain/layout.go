@@ -269,12 +269,14 @@ func (s Startup) Submits() bool {
 // Pane is one shell in a window. Build it fluently from NewPane; each
 // method returns a new Pane.
 type Pane struct {
-	name    PaneName
-	dir     PaneDir
-	split   Split
-	splits  bool
-	startup Startup
-	note    []string
+	name     PaneName
+	dir      PaneDir
+	split    Split
+	splits   bool
+	startup  Startup
+	note     []string
+	env      Env
+	runtimes Runtimes
 }
 
 // NewPane is an unnamed shell in the project root.
@@ -320,6 +322,19 @@ func (p Pane) WithNote(lines ...string) Pane {
 	return p
 }
 
+// WithEnv sets variables for the pane's shell, over its project's.
+func (p Pane) WithEnv(env Env) Pane {
+	p.env = env
+	return p
+}
+
+// WithRuntimes pins toolchain versions for the pane's shell, over its
+// project's.
+func (p Pane) WithRuntimes(runtimes Runtimes) Pane {
+	p.runtimes = runtimes
+	return p
+}
+
 func (p Pane) Name() PaneName {
 	return p.name
 }
@@ -340,6 +355,16 @@ func (p Pane) Startup() Startup {
 // Note is the lines printed before the pane's shell starts.
 func (p Pane) Note() []string {
 	return slices.Clone(p.note)
+}
+
+// Env is the pane's own variables, without its project's.
+func (p Pane) Env() Env {
+	return p.env
+}
+
+// Runtimes is the pane's own pins, without its project's.
+func (p Pane) Runtimes() Runtimes {
+	return p.runtimes
 }
 
 // Window is a tmux window and its panes, in creation order: the first pane

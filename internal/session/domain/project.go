@@ -60,11 +60,15 @@ func (r ProjectRoot) String() string {
 }
 
 // Project is a registered dev project: a name, the directory its session
-// is rooted at, and the windows its session opens.
+// is rooted at, the repositories expected in it, and the windows its
+// session opens.
 type Project struct {
-	name    ProjectName
-	root    ProjectRoot
-	windows []Window
+	name      ProjectName
+	root      ProjectRoot
+	checkouts Checkouts
+	env       Env
+	runtimes  Runtimes
+	windows   []Window
 }
 
 // NewProject constructs a Project from its already-validated parts. Until
@@ -93,6 +97,24 @@ func (p Project) WithWindows(windows ...Window) (Project, error) {
 	return p, nil
 }
 
+// WithCheckouts sets the repositories expected in the project root.
+func (p Project) WithCheckouts(checkouts Checkouts) Project {
+	p.checkouts = checkouts
+	return p
+}
+
+// WithEnv sets variables for every pane of the project.
+func (p Project) WithEnv(env Env) Project {
+	p.env = env
+	return p
+}
+
+// WithRuntimes pins toolchain versions for every pane of the project.
+func (p Project) WithRuntimes(runtimes Runtimes) Project {
+	p.runtimes = runtimes
+	return p
+}
+
 func defaultWindow(name ProjectName) Window {
 	return Window{name: WindowName(name), panes: []Pane{NewPane()}}
 }
@@ -103,6 +125,20 @@ func (p Project) Name() ProjectName {
 
 func (p Project) Root() ProjectRoot {
 	return p.root
+}
+
+func (p Project) Checkouts() Checkouts {
+	return p.checkouts
+}
+
+// Env is the variables every pane gets, unless the pane overrides them.
+func (p Project) Env() Env {
+	return p.env
+}
+
+// Runtimes is the pins every pane gets, unless the pane overrides them.
+func (p Project) Runtimes() Runtimes {
+	return p.runtimes
 }
 
 // Windows are the windows the project's session opens, in order.

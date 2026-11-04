@@ -52,6 +52,29 @@ var (
 	ErrDuplicateWindowName = errors.New("window names must be unique within a project")
 )
 
+var (
+	// ErrInvalidEnvName is returned for an environment variable name that
+	// a shell can't export.
+	ErrInvalidEnvName = errors.New("invalid environment variable name")
+	// ErrPathInEnv is returned when env sets PATH, which runtimes manage.
+	ErrPathInEnv = errors.New("PATH can't be set in env: pin versions with runtimes instead")
+	// ErrUnknownRuntime is returned for a toolchain weaver can't pin.
+	ErrUnknownRuntime = errors.New("unknown runtime")
+	// ErrInvalidRuntimeVersion is returned for a version that isn't
+	// dot-separated numbers.
+	ErrInvalidRuntimeVersion = errors.New("invalid runtime version")
+	// ErrDuplicateRuntime is returned when a toolchain is pinned twice.
+	ErrDuplicateRuntime = errors.New("runtime pinned twice")
+	// ErrInvalidCheckoutDir is returned for a repository directory that
+	// isn't inside the project root.
+	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")
+	// ErrEmptyRemote is returned when a repository has no remote to clone.
+	ErrEmptyRemote = errors.New("repository remote must not be empty")
+	// ErrDuplicateCheckout is returned when two repositories share a
+	// directory.
+	ErrDuplicateCheckout = errors.New("two repositories share a directory")
+)
+
 // ProjectNotFound is returned when a repository has no project under the
 // given name.
 type ProjectNotFound struct {
