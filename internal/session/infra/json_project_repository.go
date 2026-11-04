@@ -48,7 +48,11 @@ func (r JSONProjectRepository) FindByName(name domain.ProjectName) (domain.Proje
 		return domain.Project{}, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
-	root, err := domain.NewProjectRoot(file.Root)
+	rootPath, err := expandHome(file.Root)
+	if err != nil {
+		return domain.Project{}, fmt.Errorf("%s: %w", path, err)
+	}
+	root, err := domain.NewProjectRoot(rootPath)
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("%s: %w", path, err)
 	}

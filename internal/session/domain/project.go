@@ -3,6 +3,7 @@
 package domain
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -34,8 +35,8 @@ func (n ProjectName) String() string {
 	return n.value
 }
 
-// ProjectRoot is the directory a project's panes and windows are rooted
-// at, e.g. the repository checkout.
+// ProjectRoot is the absolute directory a project's panes and windows are
+// rooted at, e.g. the repository checkout.
 type ProjectRoot struct {
 	path string
 }
@@ -46,7 +47,10 @@ func NewProjectRoot(path string) (ProjectRoot, error) {
 	if trimmed == "" {
 		return ProjectRoot{}, ErrEmptyProjectRoot
 	}
-	return ProjectRoot{path: trimmed}, nil
+	if !filepath.IsAbs(trimmed) {
+		return ProjectRoot{}, ErrRelativeProjectRoot
+	}
+	return ProjectRoot{path: filepath.Clean(trimmed)}, nil
 }
 
 func (r ProjectRoot) String() string {

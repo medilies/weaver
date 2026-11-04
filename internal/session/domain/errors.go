@@ -11,6 +11,9 @@ var (
 	ErrInvalidProjectName = errors.New("project name must start with a letter or digit and contain only letters, digits, '-' and '_'")
 	// ErrEmptyProjectRoot is returned when a project root path is blank.
 	ErrEmptyProjectRoot = errors.New("project root must not be empty")
+	// ErrRelativeProjectRoot is returned when a project root is not an
+	// absolute path: `weaver <project>` runs from anywhere.
+	ErrRelativeProjectRoot = errors.New("project root must be an absolute path")
 )
 
 // ProjectNotFound is returned when a repository has no project under the

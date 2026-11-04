@@ -52,6 +52,32 @@ func TestNewProjectName(t *testing.T) {
 	}
 }
 
+func TestNewProjectRoot(t *testing.T) {
+	t.Run("cleans the path", func(t *testing.T) {
+		root, err := domain.NewProjectRoot(" /home/ilies/dev/../dev/weaver/ ")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := root.String(); got != "/home/ilies/dev/weaver" {
+			t.Fatalf("got %q, want %q", got, "/home/ilies/dev/weaver")
+		}
+	})
+
+	t.Run("rejects blank paths", func(t *testing.T) {
+		_, err := domain.NewProjectRoot("  ")
+		if !errors.Is(err, domain.ErrEmptyProjectRoot) {
+			t.Fatalf("got %v, want ErrEmptyProjectRoot", err)
+		}
+	})
+
+	t.Run("rejects relative paths", func(t *testing.T) {
+		_, err := domain.NewProjectRoot("dev/weaver")
+		if !errors.Is(err, domain.ErrRelativeProjectRoot) {
+			t.Fatalf("got %v, want ErrRelativeProjectRoot", err)
+		}
+	})
+}
+
 func TestProjectDescribe(t *testing.T) {
 	name, err := domain.NewProjectName("weaver")
 	if err != nil {

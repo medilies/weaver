@@ -39,6 +39,31 @@ func TestJSONProjectRepositoryFindByName(t *testing.T) {
 		}
 	})
 
+	t.Run("expands a leading ~ in the root to the home directory", func(t *testing.T) {
+		t.Setenv("HOME", "/home/someone")
+		if err := os.WriteFile(
+			filepath.Join(dir, "portable.json"),
+			[]byte(`{"root": "~/dev/portable"}`),
+			0o600,
+		); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+
+		name, err := domain.NewProjectName("portable")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		project, err := repo.FindByName(name)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := project.Root().String(); got != "/home/someone/dev/portable" {
+			t.Fatalf("got %q, want %q", got, "/home/someone/dev/portable")
+		}
+	})
+
 	t.Run("reports a not-found error when the file is missing", func(t *testing.T) {
 		name, err := domain.NewProjectName("missing")
 		if err != nil {
