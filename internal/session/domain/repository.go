@@ -1,0 +1,7 @@
+package domain
+
+// ProjectRepository is the port application use cases depend on to look
+// up registered projects. Infrastructure provides the implementation.
+type ProjectRepository interface {
+	FindByName(name ProjectName) (Project, error)
+}
