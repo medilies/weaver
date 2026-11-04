@@ -3,7 +3,6 @@
 package infra
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,16 +11,8 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// projectFile is the on-disk shape of a project config, e.g.
-// ~/.config/weaver/projects/<name>.json:
-//
-//	{"root": "/home/ilies/dev/weaver"}
-type projectFile struct {
-	Root string `json:"root"`
-}
-
 // JSONProjectRepository reads project configs from a directory of
-// "<name>.json" files.
+// "<name>.json" files, in the format of projectFile.
 type JSONProjectRepository struct {
 	dir string
 }
@@ -43,19 +34,9 @@ func (r JSONProjectRepository) FindByName(name domain.ProjectName) (domain.Proje
 		return domain.Project{}, fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	var file projectFile
-	if err := json.Unmarshal(raw, &file); err != nil {
-		return domain.Project{}, fmt.Errorf("parsing %s: %w", path, err)
-	}
-
-	rootPath, err := expandHome(file.Root)
+	project, err := decodeProject(name, raw)
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("%s: %w", path, err)
 	}
-	root, err := domain.NewProjectRoot(rootPath)
-	if err != nil {
-		return domain.Project{}, fmt.Errorf("%s: %w", path, err)
-	}
-
-	return domain.NewProject(name, root), nil
+	return project, nil
 }
