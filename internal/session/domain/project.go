@@ -2,7 +2,10 @@
 // objects and ports. It imports nothing outside the standard library.
 package domain
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
 
 // ProjectName is a registered project's identifier: non-empty, trimmed,
 // and used both as a lookup key and as the tmux session name.
@@ -15,6 +18,9 @@ func NewProjectName(value string) (ProjectName, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
 		return ProjectName{}, ErrEmptyProjectName
+	}
+	if trimmed != filepath.Base(trimmed) {
+		return ProjectName{}, ErrInvalidProjectName
 	}
 	return ProjectName{value: trimmed}, nil
 }

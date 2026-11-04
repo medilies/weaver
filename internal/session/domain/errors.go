@@ -5,6 +5,10 @@ import "errors"
 var (
 	// ErrEmptyProjectName is returned when a project name is blank.
 	ErrEmptyProjectName = errors.New("project name must not be empty")
+	// ErrInvalidProjectName is returned when a project name contains a
+	// path separator: it doubles as a filename and a tmux session name,
+	// neither of which can contain one.
+	ErrInvalidProjectName = errors.New("project name must not contain a path separator")
 	// ErrEmptyProjectRoot is returned when a project root path is blank.
 	ErrEmptyProjectRoot = errors.New("project root must not be empty")
 )

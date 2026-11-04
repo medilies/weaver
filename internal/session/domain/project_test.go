@@ -24,6 +24,13 @@ func TestNewProjectName(t *testing.T) {
 			t.Fatalf("got %v, want ErrEmptyProjectName", err)
 		}
 	})
+
+	t.Run("rejects names with a path separator", func(t *testing.T) {
+		_, err := domain.NewProjectName("../etc")
+		if !errors.Is(err, domain.ErrInvalidProjectName) {
+			t.Fatalf("got %v, want ErrInvalidProjectName", err)
+		}
+	})
 }
 
 func TestProjectDescribe(t *testing.T) {
