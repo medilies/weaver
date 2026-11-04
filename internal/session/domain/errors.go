@@ -16,14 +16,19 @@ var (
 // ProjectNotFound is returned when a repository has no project under the
 // given name.
 type ProjectNotFound struct {
-	Name ProjectName
+	name ProjectName
 }
 
 // NewProjectNotFound constructs a ProjectNotFound for the given name.
 func NewProjectNotFound(name ProjectName) ProjectNotFound {
-	return ProjectNotFound{Name: name}
+	return ProjectNotFound{name: name}
+}
+
+// Name is the project name that could not be found.
+func (e ProjectNotFound) Name() ProjectName {
+	return e.name
 }
 
 func (e ProjectNotFound) Error() string {
-	return "project not found: " + e.Name.String()
+	return "project not found: " + e.name.String()
 }
