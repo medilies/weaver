@@ -59,6 +59,19 @@ func (r ProjectRoot) String() string {
 	return r.path
 }
 
+// Resolve is the absolute directory dir points to: the root itself, a
+// directory under it, or dir as is when absolute.
+func (r ProjectRoot) Resolve(dir PaneDir) string {
+	switch {
+	case dir.IsRoot():
+		return r.path
+	case filepath.IsAbs(dir.path):
+		return dir.path
+	default:
+		return filepath.Join(r.path, dir.path)
+	}
+}
+
 // Project is a registered dev project: a name, the directory its session
 // is rooted at, the repositories expected in it, and the windows its
 // session opens.

@@ -65,6 +65,9 @@ var (
 	ErrInvalidRuntimeVersion = errors.New("invalid runtime version")
 	// ErrDuplicateRuntime is returned when a toolchain is pinned twice.
 	ErrDuplicateRuntime = errors.New("runtime pinned twice")
+	// ErrRuntimeNotInstalled is returned when a pinned version can't be
+	// found on this machine.
+	ErrRuntimeNotInstalled = errors.New("runtime not installed")
 	// ErrInvalidCheckoutDir is returned for a repository directory that
 	// isn't inside the project root.
 	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")

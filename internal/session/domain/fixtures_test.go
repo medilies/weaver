@@ -45,6 +45,15 @@ func paneName(t *testing.T, raw string) domain.PaneName {
 	return name
 }
 
+func paneDir(t *testing.T, raw string) domain.PaneDir {
+	t.Helper()
+	dir, err := domain.NewPaneDir(raw)
+	if err != nil {
+		t.Fatalf("NewPaneDir(%q): %v", raw, err)
+	}
+	return dir
+}
+
 func split(t *testing.T, of int, direction domain.Direction, rawSize string) domain.Split {
 	t.Helper()
 	size, err := domain.ParseSize(rawSize)
