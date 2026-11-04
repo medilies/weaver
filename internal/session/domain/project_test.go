@@ -25,12 +25,31 @@ func TestNewProjectName(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects names with a path separator", func(t *testing.T) {
-		_, err := domain.NewProjectName("../etc")
-		if !errors.Is(err, domain.ErrInvalidProjectName) {
-			t.Fatalf("got %v, want ErrInvalidProjectName", err)
-		}
-	})
+	for _, valid := range []string{"bicyclette", "my-app_2", "2fa"} {
+		t.Run("accepts "+valid, func(t *testing.T) {
+			if _, err := domain.NewProjectName(valid); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+
+	invalid := map[string]string{
+		"a path separator":           "../etc",
+		"a dot tmux would rewrite":   "my.app",
+		"a colon tmux would rewrite": "my:app",
+		"a hash tmux would expand":   "my#app",
+		"inner whitespace":           "my app",
+		"a leading dash":             "-app",
+		"a leading underscore":       "_app",
+	}
+	for reason, name := range invalid {
+		t.Run("rejects "+reason, func(t *testing.T) {
+			_, err := domain.NewProjectName(name)
+			if !errors.Is(err, domain.ErrInvalidProjectName) {
+				t.Fatalf("got %v, want ErrInvalidProjectName", err)
+			}
+		})
+	}
 }
 
 func TestProjectDescribe(t *testing.T) {

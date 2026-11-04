@@ -3,9 +3,14 @@
 package domain
 
 import (
-	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+// projectNamePattern keeps names usable as a filename, a tmux session
+// name and a command-line argument: tmux rewrites "." and ":" in session
+// names and expands "#", and a leading "-" reads as a flag.
+var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 // ProjectName is a registered project's identifier: non-empty, trimmed,
 // and used both as a lookup key and as the tmux session name.
@@ -19,7 +24,7 @@ func NewProjectName(value string) (ProjectName, error) {
 	if trimmed == "" {
 		return ProjectName{}, ErrEmptyProjectName
 	}
-	if trimmed != filepath.Base(trimmed) {
+	if !projectNamePattern.MatchString(trimmed) {
 		return ProjectName{}, ErrInvalidProjectName
 	}
 	return ProjectName{value: trimmed}, nil
