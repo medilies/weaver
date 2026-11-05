@@ -74,7 +74,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-	if err := newRootCommand(weaver).Execute(); err != nil {
+	root := newRootCommand(weaver)
+	root.Version = buildVersion()
+	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
