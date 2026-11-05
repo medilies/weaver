@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -248,4 +249,135 @@ func (s splitFile) toSplit(index int, siblings []paneFile) (domain.Split, error)
 		return domain.Split{}, err
 	}
 	return domain.NewSplit(of, direction, size)
+}
+
+// encodeProject writes a config in its canonical form: defaults left out,
+// "split.of" only when it isn't the previous pane, pane directories under
+// the root relative to it, the home directory as "~", and pointing to the
+// schema saved next to it.
+func encodeProject(project domain.Project) ([]byte, error) {
+	root := project.Root()
+	file := projectFile{
+		Schema:   "./" + schemaFileName,
+		Root:     contractHome(root.String()),
+		Env:      envMap(project.Env()),
+		Runtimes: runtimeMap(project.Runtimes()),
+	}
+	for _, checkout := range project.Checkouts().List() {
+		if file.Repositories == nil {
+			file.Repositories = make(map[string]string)
+		}
+		file.Repositories[checkout.Dir()] = checkout.Remote()
+	}
+	if windows := project.Windows(); !onlyDefaultWindow(project.Name(), windows) {
+		for _, window := range windows {
+			file.Windows = append(file.Windows, windowFileOf(root, window))
+		}
+	}
+
+	var doc bytes.Buffer
+	encoder := json.NewEncoder(&doc)
+	encoder.SetEscapeHTML(false) // keep "&&" and ">" readable in commands
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(file); err != nil {
+		return nil, err
+	}
+	return doc.Bytes(), nil
+}
+
+func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
+	file := windowFile{Name: window.Name().String()}
+	panes := window.Panes()
+	if len(panes) == 1 && isPlain(panes[0]) {
+		return file
+	}
+	for i := range panes {
+		file.Panes = append(file.Panes, paneFileOf(root, i, panes))
+	}
+	return file
+}
+
+// paneFileOf is the file shape of panes[index].
+func paneFileOf(root domain.ProjectRoot, index int, panes []domain.Pane) paneFile {
+	pane := panes[index]
+	file := paneFile{
+		Name:     pane.Name().String(),
+		Dir:      dirOf(root, pane.Dir()),
+		Note:     pane.Note(),
+		Env:      envMap(pane.Env()),
+		Runtimes: runtimeMap(pane.Runtimes()),
+	}
+	if split, ok := pane.Split(); ok {
+		file.Split = &splitFile{Direction: split.Direction().String(), Size: split.Size().String()}
+		if split.Of() != index-1 {
+			file.Split.Of = panes[split.Of()].Name().String()
+		}
+	}
+	if cmd, ok := pane.Startup().Command(); ok {
+		if pane.Startup().Submits() {
+			file.Command = cmd.String()
+		} else {
+			file.Prefill = cmd.String()
+		}
+	}
+	return file
+}
+
+// dirOf writes a pane directory under the root relative to it.
+func dirOf(root domain.ProjectRoot, dir domain.PaneDir) string {
+	path := dir.String()
+	if !filepath.IsAbs(path) {
+		return path
+	}
+	if !root.Contains(path) {
+		return contractHome(path)
+	}
+	rel, err := filepath.Rel(root.String(), path)
+	if err != nil || rel == "." {
+		return ""
+	}
+	return rel
+}
+
+// isPlain reports whether pane is a bare shell in the root, which a
+// window without panes means.
+func isPlain(pane domain.Pane) bool {
+	_, splits := pane.Split()
+	_, types := pane.Startup().Command()
+	return pane.Name().IsZero() && pane.Dir().IsRoot() && !splits && !types &&
+		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Runtimes().List()) == 0
+}
+
+// onlyDefaultWindow reports whether windows are what a project without
+// windows opens: one window named after it, holding a bare shell.
+func onlyDefaultWindow(name domain.ProjectName, windows []domain.Window) bool {
+	if len(windows) != 1 || windows[0].Name().String() != name.String() {
+		return false
+	}
+	panes := windows[0].Panes()
+	return len(panes) == 1 && isPlain(panes[0])
+}
+
+func envMap(env domain.Env) map[string]string {
+	vars := env.Vars()
+	if len(vars) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(vars))
+	for _, v := range vars {
+		m[v.Name()] = v.Value()
+	}
+	return m
+}
+
+func runtimeMap(runtimes domain.Runtimes) map[string]string {
+	list := runtimes.List()
+	if len(list) == 0 {
+		return nil
+	}
+	m := make(map[string]string, len(list))
+	for _, runtime := range list {
+		m[string(runtime.Kind())] = runtime.Version()
+	}
+	return m
 }

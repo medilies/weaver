@@ -6,4 +6,6 @@ type ProjectRepository interface {
 	FindByName(name ProjectName) (Project, error)
 	// Names lists the registered projects' names, sorted.
 	Names() ([]ProjectName, error)
+	// Save registers project, replacing a project of the same name.
+	Save(project Project) error
 }

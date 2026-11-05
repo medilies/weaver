@@ -1,0 +1,156 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "weaver project",
+  "description": "A project's tmux session, opened with `weaver <project>`. See https://github.com/medilies/weaver#project-config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["root"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "root": {
+      "description": "Directory the session is rooted at: absolute, or starting with ~/.",
+      "type": "string",
+      "pattern": "^(/|~/|~$)"
+    },
+    "repositories": {
+      "description": "Git repositories expected under root, cloned when missing: directory relative to root (\".\" is root itself) → remote.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "env": {
+      "$ref": "#/definitions/env"
+    },
+    "runtimes": {
+      "$ref": "#/definitions/runtimes"
+    },
+    "windows": {
+      "description": "Windows in order. Without any, the session opens one window named after the project.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/window"
+      }
+    }
+  },
+  "definitions": {
+    "env": {
+      "description": "Environment variables, set literally. A pane's override its project's.",
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+        "not": {
+          "const": "PATH"
+        }
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "runtimes": {
+      "description": "Toolchain versions put first on PATH. A pane's override its project's.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node": {
+          "description": "Node.js version installed by nvm, e.g. 20 for the newest 20.x.y.",
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
+        },
+        "php": {
+          "description": "PHP version installed side by side in /usr/bin, e.g. 8.4.",
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
+        }
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "description": "Window name, unique in the project.",
+          "type": "string",
+          "minLength": 1
+        },
+        "panes": {
+          "description": "Panes in creation order: the first fills the window, each later one splits an earlier one. Without any, one shell in root.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/pane"
+          }
+        }
+      }
+    },
+    "pane": {
+      "type": "object",
+      "additionalProperties": false,
+      "not": {
+        "required": ["command", "prefill"]
+      },
+      "properties": {
+        "name": {
+          "description": "Shown in the pane's top border. Required, and unique, when the window has several panes.",
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "description": "Where the pane's shell starts: relative to root, or absolute.",
+          "type": "string"
+        },
+        "split": {
+          "$ref": "#/definitions/split"
+        },
+        "command": {
+          "description": "Typed into the shell and run, so it stays in the shell history.",
+          "type": "string",
+          "minLength": 1
+        },
+        "prefill": {
+          "description": "Typed at the prompt but not run: press Enter to run it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "note": {
+          "description": "Lines printed before the shell starts.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "$ref": "#/definitions/env"
+        },
+        "runtimes": {
+          "$ref": "#/definitions/runtimes"
+        }
+      }
+    },
+    "split": {
+      "description": "How the pane is made from an earlier one. Every pane but the first has one.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction"],
+      "properties": {
+        "of": {
+          "description": "Name of the pane it splits. Default: the previous pane.",
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "description": "Where the new pane goes.",
+          "enum": ["right", "below"]
+        },
+        "size": {
+          "description": "Share of the split pane: a percentage (40%) or cells (20). Default: half.",
+          "type": "string",
+          "pattern": "^([1-9][0-9]?%|[1-9][0-9]*)$"
+        }
+      }
+    }
+  }
+}

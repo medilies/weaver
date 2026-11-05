@@ -24,6 +24,11 @@ func (r inMemoryRepository) FindByName(name domain.ProjectName) (domain.Project,
 	return project, nil
 }
 
+func (r inMemoryRepository) Save(project domain.Project) error {
+	r.projects[project.Name().String()] = project
+	return nil
+}
+
 func (r inMemoryRepository) Names() ([]domain.ProjectName, error) {
 	var names []domain.ProjectName
 	for _, key := range slices.Sorted(maps.Keys(r.projects)) {

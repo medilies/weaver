@@ -132,6 +132,10 @@ toolchain versions:
 
 Unknown fields are errors: they are usually typos.
 
+When weaver saves a config, it writes `weaver.schema.json` next to it
+and points the config at it with `"$schema": "./weaver.schema.json"`, so
+editors such as VS Code complete fields and flag mistakes as you type.
+
 ## Architecture
 
 The `Session` bounded context is organized by layer. `domain` and `app`

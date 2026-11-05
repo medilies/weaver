@@ -17,6 +17,10 @@ func (r registered) FindByName(name domain.ProjectName) (domain.Project, error) 
 	return domain.Project{}, domain.NewProjectNotFound(name)
 }
 
+func (r registered) Save(domain.Project) error {
+	return nil
+}
+
 func (r registered) Names() ([]domain.ProjectName, error) {
 	var names []domain.ProjectName
 	for _, raw := range r {
