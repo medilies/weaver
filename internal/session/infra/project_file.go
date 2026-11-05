@@ -31,24 +31,25 @@ type projectFile struct {
 	Root         string            `yaml:"root"`
 	Repositories map[string]string `yaml:"repositories,omitempty"`
 	Env          map[string]string `yaml:"env,omitempty"`
-	Runtimes     map[string]string `yaml:"runtimes,omitempty"`
+	Before       []string          `yaml:"before,omitempty"`
 	Windows      []windowFile      `yaml:"windows,omitempty"`
 }
 
 type windowFile struct {
-	Name  string     `yaml:"name"`
-	Panes []paneFile `yaml:"panes,omitempty"`
+	Name   string     `yaml:"name"`
+	Before []string   `yaml:"before,omitempty"`
+	Panes  []paneFile `yaml:"panes,omitempty"`
 }
 
 type paneFile struct {
-	Name     string            `yaml:"name,omitempty"`
-	Dir      string            `yaml:"dir,omitempty"`
-	Split    *splitFile        `yaml:"split,omitempty"`
-	Command  string            `yaml:"command,omitempty"`
-	Prefill  string            `yaml:"prefill,omitempty"`
-	Note     []string          `yaml:"note,omitempty"`
-	Env      map[string]string `yaml:"env,omitempty"`
-	Runtimes map[string]string `yaml:"runtimes,omitempty"`
+	Name    string            `yaml:"name,omitempty"`
+	Dir     string            `yaml:"dir,omitempty"`
+	Split   *splitFile        `yaml:"split,omitempty"`
+	Before  []string          `yaml:"before,omitempty"`
+	Command string            `yaml:"command,omitempty"`
+	Prefill string            `yaml:"prefill,omitempty"`
+	Note    []string          `yaml:"note,omitempty"`
+	Env     map[string]string `yaml:"env,omitempty"`
 }
 
 type splitFile struct {
@@ -62,8 +63,7 @@ type splitFile struct {
 const schemaHeader = "# yaml-language-server: $schema=./" + schemaFileName + "\n"
 
 // decodeProject strictly parses a config: unknown fields (usually typos)
-// and a second document are errors, not silently ignored. Values are read
-// as written, so "php: 8.10" pins 8.10, not the number 8.1.
+// and a second document are errors, not silently ignored.
 func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) {
 	var file projectFile
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
@@ -95,9 +95,9 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("env: %w", err)
 	}
-	runtimes, err := toRuntimes(f.Runtimes)
+	before, err := toCommands(f.Before)
 	if err != nil {
-		return domain.Project{}, fmt.Errorf("runtimes: %w", err)
+		return domain.Project{}, fmt.Errorf("before: %w", err)
 	}
 	windows := make([]domain.Window, 0, len(f.Windows))
 	for _, w := range f.Windows {
@@ -110,7 +110,7 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 	return domain.NewProject(name, root).
 		WithCheckouts(checkouts).
 		WithEnv(env).
-		WithRuntimes(runtimes).
+		RunningFirst(before...).
 		WithWindows(windows...)
 }
 
@@ -126,16 +126,16 @@ func toCheckouts(repositories map[string]string) (domain.Checkouts, error) {
 	return domain.NewCheckouts(checkouts...)
 }
 
-func toRuntimes(pins map[string]string) (domain.Runtimes, error) {
-	runtimes := make([]domain.Runtime, 0, len(pins))
-	for kind, version := range pins {
-		runtime, err := domain.NewRuntime(kind, version)
+func toCommands(lines []string) ([]domain.Command, error) {
+	cmds := make([]domain.Command, 0, len(lines))
+	for _, line := range lines {
+		cmd, err := domain.NewCommand(line)
 		if err != nil {
-			return domain.Runtimes{}, err
+			return nil, err
 		}
-		runtimes = append(runtimes, runtime)
+		cmds = append(cmds, cmd)
 	}
-	return domain.NewRuntimes(runtimes...)
+	return cmds, nil
 }
 
 func (w windowFile) toWindow() (domain.Window, error) {
@@ -151,7 +151,15 @@ func (w windowFile) toWindow() (domain.Window, error) {
 		}
 		panes = append(panes, pane)
 	}
-	return domain.NewWindow(name, panes...)
+	before, err := toCommands(w.Before)
+	if err != nil {
+		return domain.Window{}, fmt.Errorf("before: %w", err)
+	}
+	window, err := domain.NewWindow(name, panes...)
+	if err != nil {
+		return domain.Window{}, err
+	}
+	return window.RunningFirst(before...), nil
 }
 
 // toPane builds the pane at index of its window; siblings are all the
@@ -184,6 +192,12 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 		pane = pane.Splitting(split)
 	}
 
+	before, err := toCommands(p.Before)
+	if err != nil {
+		return domain.Pane{}, fmt.Errorf("before: %w", err)
+	}
+	pane = pane.RunningFirst(before...)
+
 	if pane, err = p.withStartup(pane); err != nil {
 		return domain.Pane{}, err
 	}
@@ -196,11 +210,7 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 	if err != nil {
 		return domain.Pane{}, fmt.Errorf("env: %w", err)
 	}
-	runtimes, err := toRuntimes(p.Runtimes)
-	if err != nil {
-		return domain.Pane{}, fmt.Errorf("runtimes: %w", err)
-	}
-	return pane.WithEnv(env).WithRuntimes(runtimes), nil
+	return pane.WithEnv(env), nil
 }
 
 func (p paneFile) withStartup(pane domain.Pane) (domain.Pane, error) {
@@ -264,9 +274,9 @@ func (s splitFile) toSplit(index int, siblings []paneFile) (domain.Split, error)
 func encodeProject(project domain.Project) ([]byte, error) {
 	root := project.Root()
 	file := projectFile{
-		Root:     contractHome(root.String()),
-		Env:      envMap(project.Env()),
-		Runtimes: runtimeMap(project.Runtimes()),
+		Root:   contractHome(root.String()),
+		Env:    envMap(project.Env()),
+		Before: lines(project.Before()),
 	}
 	for _, checkout := range project.Checkouts().List() {
 		if file.Repositories == nil {
@@ -294,7 +304,7 @@ func encodeProject(project domain.Project) ([]byte, error) {
 }
 
 func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
-	file := windowFile{Name: window.Name().String()}
+	file := windowFile{Name: window.Name().String(), Before: lines(window.Before())}
 	panes := window.Panes()
 	if len(panes) == 1 && isPlain(panes[0]) {
 		return file
@@ -309,11 +319,11 @@ func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
 func paneFileOf(root domain.ProjectRoot, index int, panes []domain.Pane) paneFile {
 	pane := panes[index]
 	file := paneFile{
-		Name:     pane.Name().String(),
-		Dir:      dirOf(root, pane.Dir()),
-		Note:     pane.Note(),
-		Env:      envMap(pane.Env()),
-		Runtimes: runtimeMap(pane.Runtimes()),
+		Name:   pane.Name().String(),
+		Dir:    dirOf(root, pane.Dir()),
+		Before: lines(pane.Before()),
+		Note:   pane.Note(),
+		Env:    envMap(pane.Env()),
 	}
 	if split, ok := pane.Split(); ok {
 		file.Split = &splitFile{Direction: split.Direction().String(), Size: split.Size().String()}
@@ -353,13 +363,13 @@ func isPlain(pane domain.Pane) bool {
 	_, splits := pane.Split()
 	_, types := pane.Startup().Command()
 	return pane.Name().IsZero() && pane.Dir().IsRoot() && !splits && !types &&
-		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Runtimes().List()) == 0
+		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Before()) == 0
 }
 
 // onlyDefaultWindow reports whether windows are what a project without
 // windows opens: one window named after it, holding a bare shell.
 func onlyDefaultWindow(name domain.ProjectName, windows []domain.Window) bool {
-	if len(windows) != 1 || windows[0].Name().String() != name.String() {
+	if len(windows) != 1 || windows[0].Name().String() != name.String() || len(windows[0].Before()) > 0 {
 		return false
 	}
 	panes := windows[0].Panes()
@@ -378,14 +388,14 @@ func envMap(env domain.Env) map[string]string {
 	return m
 }
 
-func runtimeMap(runtimes domain.Runtimes) map[string]string {
-	list := runtimes.List()
-	if len(list) == 0 {
+// lines is the commands' text, or nil for none.
+func lines(cmds []domain.Command) []string {
+	if len(cmds) == 0 {
 		return nil
 	}
-	m := make(map[string]string, len(list))
-	for _, runtime := range list {
-		m[string(runtime.Kind())] = runtime.Version()
+	out := make([]string, len(cmds))
+	for i, cmd := range cmds {
+		out[i] = cmd.String()
 	}
-	return m
+	return out
 }

@@ -12,7 +12,7 @@ import (
 // `weave .` opens the project holding the current directory: "." is no
 // project's name.
 func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
-	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, nil, nil)})
+	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, nil)})
 	root.SetArgs([]string{"."})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {

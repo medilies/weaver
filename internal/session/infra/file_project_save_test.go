@@ -3,10 +3,8 @@ package infra_test
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -73,6 +71,20 @@ func TestFileProjectRepositorySave(t *testing.T) {
 		want := "# yaml-language-server: $schema=./weaver.schema.json\nroot: ~/dev/weaver\n"
 		if got != want {
 			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("keeps commands to run first in a project's default window", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "weaver", "root: /srv/weaver\nwindows: [{name: weaver, before: [nvm use 20]}]\n"))
+		if !strings.Contains(got, "    before:\n      - nvm use 20\n") {
+			t.Fatalf("got:\n%s\nwant the default window kept with its before", got)
+		}
+	})
+
+	t.Run("keeps commands to run first in a window's only pane", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "shop", "root: /srv/shop\nwindows: [{name: repo, panes: [{before: [git fetch]}]}]\n"))
+		if !strings.Contains(got, "    panes:\n      - before:\n          - git fetch\n") {
+			t.Fatalf("got:\n%s\nwant the pane's before kept", got)
 		}
 	})
 
@@ -209,15 +221,4 @@ func TestJSONSchema(t *testing.T) {
 		})
 	}
 
-	t.Run("declares every runtime weaver can pin", func(t *testing.T) {
-		properties := schema["definitions"].(map[string]any)["runtimes"].(map[string]any)["properties"].(map[string]any)
-		got := slices.Sorted(maps.Keys(properties))
-		var want []string
-		for _, kind := range domain.RuntimeKinds() {
-			want = append(want, string(kind))
-		}
-		if !slices.Equal(got, want) {
-			t.Fatalf("got %q, want %q", got, want)
-		}
-	})
 }

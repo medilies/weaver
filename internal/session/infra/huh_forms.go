@@ -35,12 +35,11 @@ func (HuhForms) Confirm(question string) (bool, error) {
 // each window, one for its name and one per pane. Windows captured from a
 // running session come first, pre-filled.
 func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
-	versions := versionsByKind(draft.Runtimes)
 	answers := projectAnswers{name: draft.Name, root: draft.Root}
 	for _, checkout := range draft.Checkouts.List() {
 		answers.keep = append(answers.keep, checkout.Dir())
 	}
-	if err := show(answers.groups(draft.Checkouts, versions)...); err != nil {
+	if err := show(answers.groups(draft.Checkouts)...); err != nil {
 		return domain.Project{}, err
 	}
 	project, err := answers.project(draft.Checkouts)
@@ -50,7 +49,7 @@ func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 
 	var windows []domain.Window
 	for _, captured := range draft.Windows {
-		window, kept, err := askWindow(project, windows, versions, &captured)
+		window, kept, err := askWindow(project, windows, &captured)
 		if err != nil {
 			return domain.Project{}, err
 		}
@@ -68,7 +67,7 @@ func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 				return project.WithWindows(windows...)
 			}
 		}
-		window, _, err := askWindow(project, windows, versions, nil)
+		window, _, err := askWindow(project, windows, nil)
 		if err != nil {
 			return domain.Project{}, err
 		}
@@ -95,11 +94,11 @@ type projectAnswers struct {
 	name, root string
 	keep       []string // directories of the found repositories to keep
 	more       string   // "dir = remote" lines
-	php, node  string   // "" for none
+	before     string   // command lines
 	env        string   // "NAME=value" lines
 }
 
-func (a *projectAnswers) groups(found domain.Checkouts, versions map[domain.RuntimeKind][]string) []*huh.Group {
+func (a *projectAnswers) groups(found domain.Checkouts) []*huh.Group {
 	groups := []*huh.Group{huh.NewGroup(
 		huh.NewInput().Title("Project name").
 			Description("Used as `weave <name>` and as the tmux session name.").
@@ -125,9 +124,10 @@ func (a *projectAnswers) groups(found domain.Checkouts, versions map[domain.Runt
 	}
 	groups = append(groups, huh.NewGroup(repositories...).Title("Repositories"))
 
-	every := versionFields("for every pane", "None", versions, &a.php, &a.node)
-	every = append(every, envField("Environment for every pane", &a.env))
-	return append(groups, huh.NewGroup(every...).Title("Every pane"))
+	return append(groups, huh.NewGroup(
+		beforeField("Run first in every pane", &a.before),
+		envField("Environment for every pane", &a.env),
+	).Title("Every pane"))
 }
 
 func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) {
@@ -156,11 +156,11 @@ func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, err
 	}
-	runtimes, err := pins(a.php, a.node)
+	before, err := parseCommands(a.before)
 	if err != nil {
 		return domain.Project{}, err
 	}
-	return domain.NewProject(name, root).WithCheckouts(kept).WithEnv(env).WithRuntimes(runtimes), nil
+	return domain.NewProject(name, root).WithCheckouts(kept).WithEnv(env).RunningFirst(before...), nil
 }
 
 // askWindow asks for a window's name, then for its panes one by one. A
@@ -169,10 +169,9 @@ func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) 
 func askWindow(
 	project domain.Project,
 	earlier []domain.Window,
-	versions map[domain.RuntimeKind][]string,
 	captured *domain.Window,
 ) (domain.Window, bool, error) {
-	raw, keep := "", true
+	raw, before, keep := "", "", true
 	switch {
 	case captured != nil:
 		raw = captured.Name().String()
@@ -191,6 +190,7 @@ func askWindow(
 		}
 		return nil
 	})}
+	fields = append(fields, beforeField("Run first in every pane of this window", &before))
 	if captured != nil {
 		fields = append(fields, huh.NewConfirm().Title("Keep this window?").
 			Description(fmt.Sprintf("It has %d pane(s) in the running session.", len(captured.Panes()))).
@@ -211,7 +211,7 @@ func askWindow(
 	if captured != nil {
 		for _, pane := range captured.Panes() {
 			answers := capturedAnswers(project.Root(), pane)
-			if err := show(answers.groups(name, panes, versions)...); err != nil {
+			if err := show(answers.groups(name, panes)...); err != nil {
 				return domain.Window{}, false, err
 			}
 			panes = append(panes, answers)
@@ -219,7 +219,7 @@ func askWindow(
 	}
 	for captured == nil {
 		pane := &paneAnswers{of: len(panes) - 1, direction: "right", run: true}
-		if err := show(pane.groups(name, panes, versions)...); err != nil {
+		if err := show(pane.groups(name, panes)...); err != nil {
 			return domain.Window{}, false, err
 		}
 		panes = append(panes, pane)
@@ -238,8 +238,15 @@ func askWindow(
 		}
 		built = append(built, p)
 	}
+	cmds, err := parseCommands(before)
+	if err != nil {
+		return domain.Window{}, false, err
+	}
 	window, err := domain.NewWindow(name, built...)
-	return window, err == nil, err
+	if err != nil {
+		return domain.Window{}, false, err
+	}
+	return window.RunningFirst(cmds...), true, nil
 }
 
 // capturedAnswers pre-fills a pane screen from a captured pane, with its
@@ -260,16 +267,16 @@ type paneAnswers struct {
 	name, dir       string
 	of              int // index of the pane split
 	direction, size string
+	before          string // command lines
 	command         string
 	run             bool // run the command, rather than only type it
 	note            string
-	php, node       string // "" for the project's
 	env             string
 	another         bool // add another pane to the window
 	fixed           bool // captured: the window's panes are known
 }
 
-func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, versions map[domain.RuntimeKind][]string) []*huh.Group {
+func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) []*huh.Group {
 	index := len(earlier)
 	layout := []huh.Field{
 		huh.NewInput().Title("Pane name").
@@ -311,7 +318,7 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, v
 				Value(&a.size).Validate(func(s string) error { _, err := domain.ParseSize(s); return err }),
 		)
 	}
-	layout = append(layout, huh.NewInput().Title("Command").
+	layout = append(layout, beforeField("Run first", &a.before), huh.NewInput().Title("Command").
 		Description("Typed into the shell when the pane starts. Empty for a plain shell.").
 		Value(&a.command).Validate(func(s string) error {
 		if strings.TrimSpace(s) == "" {
@@ -327,7 +334,6 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, v
 
 	extras := []huh.Field{huh.NewText().Title("Note").
 		Description("Lines printed in the pane before its shell starts.").Value(&a.note)}
-	extras = append(extras, versionFields("for this pane", "Same as the project", versions, &a.php, &a.node)...)
 	extras = append(extras, envField("Environment for this pane", &a.env))
 	if !a.fixed {
 		extras = append(extras, huh.NewConfirm().Title(fmt.Sprintf("Add another pane to %s?", window)).
@@ -380,6 +386,11 @@ func (a *paneAnswers) pane(index int) (domain.Pane, error) {
 		}
 		pane = pane.Splitting(split)
 	}
+	before, err := parseCommands(a.before)
+	if err != nil {
+		return domain.Pane{}, err
+	}
+	pane = pane.RunningFirst(before...)
 	if strings.TrimSpace(a.command) != "" {
 		cmd, err := domain.NewCommand(a.command)
 		if err != nil {
@@ -398,60 +409,17 @@ func (a *paneAnswers) pane(index int) (domain.Pane, error) {
 	if err != nil {
 		return domain.Pane{}, err
 	}
-	runtimes, err := pins(a.php, a.node)
-	if err != nil {
-		return domain.Pane{}, err
-	}
-	return pane.WithEnv(env).WithRuntimes(runtimes), nil
+	return pane.WithEnv(env), nil
 }
 
-// versionFields offers the installed PHP and Node versions, if any, with
-// none as the first choice.
-func versionFields(scope, none string, versions map[domain.RuntimeKind][]string, php, node *string) []huh.Field {
-	var fields []huh.Field
-	if len(versions[domain.PHP]) > 0 {
-		fields = append(fields, versionField("PHP "+scope, none, versions[domain.PHP], php))
-	}
-	if len(versions[domain.Node]) > 0 {
-		fields = append(fields, versionField("Node.js "+scope, none, versions[domain.Node], node))
-	}
-	return fields
-}
-
-// versionField offers versions, with none as the first choice.
-func versionField(title, none string, versions []string, value *string) huh.Field {
-	options := []huh.Option[string]{huh.NewOption(none, "")}
-	for _, version := range versions {
-		options = append(options, huh.NewOption(version, version))
-	}
-	return huh.NewSelect[string]().Title(title).Options(options...).Value(value)
+// beforeField asks for commands to run, in order, before a pane's own.
+func beforeField(title string, value *string) huh.Field {
+	return huh.NewText().Title(title).
+		Description("One command per line, e.g. nvm use 20, typed and run before the pane's command.").
+		Value(value).Validate(func(s string) error { _, err := parseCommands(s); return err })
 }
 
 func envField(title string, value *string) huh.Field {
 	return huh.NewText().Title(title).Description("One per line: NAME=value, set literally.").
 		Value(value).Validate(func(s string) error { _, err := parseEnv(s); return err })
-}
-
-func versionsByKind(runtimes []domain.Runtime) map[domain.RuntimeKind][]string {
-	versions := make(map[domain.RuntimeKind][]string)
-	for _, runtime := range runtimes {
-		versions[runtime.Kind()] = append(versions[runtime.Kind()], runtime.Version())
-	}
-	return versions
-}
-
-// pins turns chosen versions ("" for none) into Runtimes.
-func pins(php, node string) (domain.Runtimes, error) {
-	var runtimes []domain.Runtime
-	for kind, version := range map[domain.RuntimeKind]string{domain.PHP: php, domain.Node: node} {
-		if version == "" {
-			continue
-		}
-		runtime, err := domain.NewRuntime(string(kind), version)
-		if err != nil {
-			return domain.Runtimes{}, err
-		}
-		runtimes = append(runtimes, runtime)
-	}
-	return domain.NewRuntimes(runtimes...)
 }

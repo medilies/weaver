@@ -47,3 +47,19 @@ func parseCheckouts(text string) ([]domain.Checkout, error) {
 	}
 	return checkouts, nil
 }
+
+// parseCommands reads one command per line, skipping blank ones.
+func parseCommands(text string) ([]domain.Command, error) {
+	var cmds []domain.Command
+	for line := range strings.Lines(text) {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		cmd, err := domain.NewCommand(line)
+		if err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd)
+	}
+	return cmds, nil
+}

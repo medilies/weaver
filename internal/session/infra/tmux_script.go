@@ -7,16 +7,13 @@ import (
 )
 
 // shellCommand is what a pane starts with when a plain shell isn't
-// enough: a short script putting runtimes first on PATH, exporting env
-// vars and printing the note, which then replaces itself with the user's
-// login shell, as tmux would have started. Passed as separate arguments,
+// enough: a short script exporting env vars and printing the note, which
+// then replaces itself with the user's login shell, as tmux would have
+// started. Passed as separate arguments,
 // tmux runs it directly rather than through its default-shell, so the
 // script is always sh. It is nil for a plain shell.
 func shellCommand(pane domain.PanePlan) []string {
 	var lines []string
-	if path := pane.Path(); len(path) > 0 {
-		lines = append(lines, "export PATH="+shellQuote(strings.Join(path, ":"))+`:"$PATH"`)
-	}
 	for _, v := range pane.Env() {
 		lines = append(lines, "export "+v.Name()+"="+shellQuote(v.Value()))
 	}

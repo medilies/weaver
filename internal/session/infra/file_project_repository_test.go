@@ -190,10 +190,21 @@ func TestFileProjectRepositoryReadsEnvironments(t *testing.T) {
 		}
 	})
 
-	t.Run("reads pane runtimes", func(t *testing.T) {
-		runtimes := paneNamed(t, shop, "shop", "back").Runtimes().List()
-		if len(runtimes) != 1 || runtimes[0].String() != "php 8.4" {
-			t.Fatalf("got %v, want php 8.4", runtimes)
+	t.Run("reads the commands to run first in every pane", func(t *testing.T) {
+		if got := shop.Before(); len(got) != 1 || got[0].String() != "source ~/.shop_aliases" {
+			t.Fatalf("got %v, want source ~/.shop_aliases", got)
+		}
+	})
+
+	t.Run("reads the commands to run first in a window's panes", func(t *testing.T) {
+		if got := shop.Windows()[0].Before(); len(got) != 1 || got[0].String() != "git fetch --quiet" {
+			t.Fatalf("got %v, want git fetch --quiet", got)
+		}
+	})
+
+	t.Run("reads the commands to run first in a pane", func(t *testing.T) {
+		if got := paneNamed(t, shop, "shop", "back").Before(); len(got) != 1 || got[0].String() != "alias php=php8.4" {
+			t.Fatalf("got %v, want alias php=php8.4", got)
 		}
 	})
 
@@ -336,16 +347,6 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 			t.Fatalf("got %v (%v), want no projects", names, err)
 		}
 	})
-}
-
-func TestFileProjectRepositoryReadsVersionsAsWritten(t *testing.T) {
-	project, err := load(t, "pins", "root: /srv/pins\nruntimes: {php: 8.10}\n")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := project.Runtimes().List()[0].Version(); got != "8.10" {
-		t.Fatalf("got %q, want %q", got, "8.10")
-	}
 }
 
 func TestFileProjectRepositoryDelete(t *testing.T) {

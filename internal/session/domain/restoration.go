@@ -24,10 +24,8 @@ func (p WindowPlacement) Before() (WindowName, bool) {
 
 // Restoration plans the project windows a running session lacks, given
 // the ones it still has, placed where the project lists them: after the
-// window listed before them, else before the first window left. Only the
-// missing windows are resolved, so a session missing nothing never fails
-// on a runtime uninstalled since it started.
-func (p Project) Restoration(present []WindowName, resolver RuntimeResolver) ([]WindowPlacement, error) {
+// window listed before them, else before the first window left.
+func (p Project) Restoration(present []WindowName) []WindowPlacement {
 	have := make(map[string]bool, len(present))
 	for _, name := range present {
 		have[name.value] = true
@@ -46,16 +44,12 @@ func (p Project) Restoration(present []WindowName, resolver RuntimeResolver) ([]
 			previous = window.name
 			continue
 		}
-		planned, err := p.planWindow(window, resolver)
-		if err != nil {
-			return nil, err
-		}
-		placement := WindowPlacement{window: planned, after: previous}
+		placement := WindowPlacement{window: p.planWindow(window), after: previous}
 		if previous.value == "" {
 			placement.before = firstLeft
 		}
 		placements = append(placements, placement)
 		previous = window.name
 	}
-	return placements, nil
+	return placements
 }

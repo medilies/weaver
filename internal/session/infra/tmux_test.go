@@ -97,28 +97,14 @@ func (s tmuxServer) paneLabelled(t *testing.T, session, label string) string {
 	return ""
 }
 
-// stubRuntimes is a fake domain.RuntimeResolver: "kind version" → dir.
-type stubRuntimes map[string]string
-
-func (s stubRuntimes) Resolve(runtime domain.Runtime) (string, error) {
-	if dir, ok := s[runtime.String()]; ok {
-		return dir, nil
-	}
-	return "", fmt.Errorf("%w: %s", domain.ErrRuntimeNotInstalled, runtime)
-}
-
 // planOf loads doc as project name and resolves it for tmux.
-func planOf(t *testing.T, name, doc string, runtimes stubRuntimes) domain.SessionPlan {
+func planOf(t *testing.T, name, doc string) domain.SessionPlan {
 	t.Helper()
 	project, err := load(t, name, doc)
 	if err != nil {
 		t.Fatalf("loading %s: %v", name, err)
 	}
-	plan, err := project.Plan(runtimes)
-	if err != nil {
-		t.Fatalf("planning %s: %v", name, err)
-	}
-	return plan
+	return project.Plan()
 }
 
 func mkdir(t *testing.T, path string) string {
@@ -133,22 +119,18 @@ func TestTmuxStart(t *testing.T) {
 	server := newTmuxServer(t)
 	root := t.TempDir()
 	mkdir(t, filepath.Join(root, "sub"))
-	probes := t.TempDir()
-	if err := os.WriteFile(filepath.Join(probes, "weaver-probe"), []byte("#!/bin/sh\necho probe-ok\n"), 0o755); err != nil {
-		t.Fatalf("writing probe: %v", err)
-	}
 	plan := planOf(t, "start", fmt.Sprintf(`{"root": %q, "windows": [
 		{"name": "api", "panes": [
 			{"name": "shell"},
 			{"name": "side", "dir": "sub", "split": {"direction": "right", "size": "30%%"}, "command": "echo w-$((40+2))"},
 			{"name": "below", "split": {"direction": "below"}, "prefill": "echo p-$((40+2))"}
 		]},
-		{"name": "env", "panes": [
-			{"note": ["it's a note"], "env": {"GREETING": "hi $HOME"}, "runtimes": {"node": "20"},
-			 "command": "echo \"[$GREETING]\" && weaver-probe"}
+		{"name": "env", "before": ["W=window"], "panes": [
+			{"note": ["it's a note"], "env": {"GREETING": "hi $HOME"}, "before": ["P=$W-pane"],
+			 "command": "echo \"[$GREETING]\" first-$P"}
 		]},
 		{"name": "repo"}
-	]}`, root), stubRuntimes{"node 20": probes})
+	]}`, root))
 
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -224,8 +206,8 @@ func TestTmuxStart(t *testing.T) {
 		server.waitFor(t, "=start:env", "[hi $HOME]")
 	})
 
-	t.Run("puts the pane's runtimes first on PATH", func(t *testing.T) {
-		server.waitFor(t, "=start:env", "probe-ok")
+	t.Run("runs the window's and the pane's commands before the pane's own", func(t *testing.T) {
+		server.waitFor(t, "=start:env", "first-window-pane")
 	})
 }
 
@@ -238,7 +220,7 @@ func TestTmuxStartPassesTextVerbatim(t *testing.T) {
 			{"name": "semicolon", "dir": "x#Sy", "command": "printf '%%s%%s\\n' semi colon\\;"},
 			{"name": "dash", "split": {"direction": "right"}, "prefill": "-n leading-dash"}
 		]}
-	]}`, root), nil)
+	]}`, root))
 
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -274,7 +256,7 @@ func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
 		panes = append(panes, fmt.Sprintf(`{"name": "p%d", "split": {"direction": "below"}}`, i))
 	}
 	plan := planOf(t, "broken", fmt.Sprintf(`{"root": %q, "windows": [{"name": "main", "panes": [%s]}]}`,
-		t.TempDir(), strings.Join(panes, ",")), nil)
+		t.TempDir(), strings.Join(panes, ",")))
 	name, _ := domain.NewProjectName("broken")
 
 	if err := server.tmux().Start(plan); err == nil {
@@ -297,7 +279,7 @@ func TestTmuxKill(t *testing.T) {
 	})
 
 	t.Run("stops a running session", func(t *testing.T) {
-		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q}`, t.TempDir()), nil)); err != nil {
+		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q}`, t.TempDir()))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -321,7 +303,7 @@ func TestTmuxRunning(t *testing.T) {
 
 	t.Run("lists the running sessions", func(t *testing.T) {
 		for _, name := range []string{"api", "front"} {
-			if err := server.tmux().Start(planOf(t, name, fmt.Sprintf(`{"root": %q}`, t.TempDir()), nil)); err != nil {
+			if err := server.tmux().Start(planOf(t, name, fmt.Sprintf(`{"root": %q}`, t.TempDir()))); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		}
@@ -347,7 +329,7 @@ func TestTmuxFind(t *testing.T) {
 		}
 	})
 
-	if err := server.tmux().Start(planOf(t, "shop-api", fmt.Sprintf(`{"root": %q, "windows": [{"name": "api"}, {"name": "app"}]}`, t.TempDir()), nil)); err != nil {
+	if err := server.tmux().Start(planOf(t, "shop-api", fmt.Sprintf(`{"root": %q, "windows": [{"name": "api"}, {"name": "app"}]}`, t.TempDir()))); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	shopAPI, _ := domain.NewProjectName("shop-api")
@@ -407,11 +389,7 @@ func TestTmuxRestore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("loading: %v", err)
 		}
-		plan, err := project.Plan(stubRuntimes{})
-		if err != nil {
-			t.Fatalf("planning: %v", err)
-		}
-		if err := server.tmux().Start(plan); err != nil {
+		if err := server.tmux().Start(project.Plan()); err != nil {
 			t.Fatalf("starting: %v", err)
 		}
 		server.query(t, "new-window", "-d", "-t", "restore:", "-n", "manual")
@@ -423,11 +401,7 @@ func TestTmuxRestore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("finding: %v", err)
 		}
-		placements, err := project.Restoration(session.Windows(), stubRuntimes{})
-		if err != nil {
-			t.Fatalf("planning the restoration: %v", err)
-		}
-		if err := server.tmux().Restore(project.Name(), placements); err != nil {
+		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		return server, server.query(t, "list-windows", "-t", "=restore", "-F", "#{window_name}")
@@ -497,7 +471,7 @@ func TestTmuxCapture(t *testing.T) {
 				{"name": "main", "split": {"of": "side", "direction": "right", "size": "70%%"}},
 				{"name": "under side", "split": {"of": "side", "direction": "below", "size": "20%%"}}
 			]}
-		]}`, root), nil)); err != nil {
+		]}`, root))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 

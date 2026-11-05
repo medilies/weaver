@@ -16,8 +16,9 @@ func newAddCommand(weaver application) *cobra.Command {
 		Use:   "add [name]",
 		Short: "Register a project through interactive forms",
 		Long: `weave add asks for a project's root (the current directory unless
---root says otherwise), the repositories to clone when missing, the PHP
-and Node versions, and its windows and panes, then saves it.
+--root says otherwise), the repositories to clone when missing, the
+commands to run first in its panes, and its windows and panes, then
+saves it.
 
 With --from, the windows and panes start as a running tmux session has
 them: lay them out by hand, then let weaver record them.`,

@@ -26,7 +26,6 @@ type OpenProject struct {
 	projects  domain.ProjectRepository
 	sessions  domain.SessionLauncher
 	workspace domain.Workspace
-	runtimes  domain.RuntimeResolver
 }
 
 // NewOpenProject constructs the use case against its ports.
@@ -34,9 +33,8 @@ func NewOpenProject(
 	projects domain.ProjectRepository,
 	sessions domain.SessionLauncher,
 	workspace domain.Workspace,
-	runtimes domain.RuntimeResolver,
 ) OpenProject {
-	return OpenProject{projects: projects, sessions: sessions, workspace: workspace, runtimes: runtimes}
+	return OpenProject{projects: projects, sessions: sessions, workspace: workspace}
 }
 
 // Handle opens the project named rawName.
@@ -112,17 +110,13 @@ func (uc OpenProject) open(project domain.Project) error {
 	return uc.sessions.Attach(project.Name())
 }
 
-// start checks what can be checked before changing anything: pinned
-// versions first, then pane directories once missing repositories are
-// cloned.
+// start checks pane directories exist, once missing repositories are
+// cloned, before changing anything.
 func (uc OpenProject) start(project domain.Project) error {
-	plan, err := project.Plan(uc.runtimes)
-	if err != nil {
-		return err
-	}
 	if err := uc.cloneMissing(project); err != nil {
 		return err
 	}
+	plan := project.Plan()
 	if err := uc.checkDirs(plan); err != nil {
 		return err
 	}
@@ -133,9 +127,9 @@ func (uc OpenProject) start(project domain.Project) error {
 // started, usually because they were closed. Sessions started otherwise
 // are left as they are: their windows aren't weaver's to complete.
 func (uc OpenProject) restore(project domain.Project, session domain.RunningSession) error {
-	placements, err := project.Restoration(session.Windows(), uc.runtimes)
-	if err != nil || len(placements) == 0 {
-		return err
+	placements := project.Restoration(session.Windows())
+	if len(placements) == 0 {
+		return nil
 	}
 	for _, placement := range placements {
 		if err := uc.checkWindowDirs(placement.Window()); err != nil {

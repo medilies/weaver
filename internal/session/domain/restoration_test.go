@@ -1,7 +1,6 @@
 package domain_test
 
 import (
-	"errors"
 	"slices"
 	"testing"
 
@@ -55,35 +54,9 @@ func TestProjectRestoration(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			placements, err := project.Restoration(windowNames(t, c.present...), installed{})
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got := describe(placements); !slices.Equal(got, c.want) {
+			if got := describe(project.Restoration(windowNames(t, c.present...))); !slices.Equal(got, c.want) {
 				t.Fatalf("got %q, want %q", got, c.want)
 			}
 		})
 	}
-}
-
-func TestProjectRestorationResolvesOnlyMissingWindows(t *testing.T) {
-	pinned := domain.NewPane().WithRuntimes(runtimes(t, "php", "8.4"))
-	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
-		WithWindows(window(t, "back", pinned), window(t, "repo"))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	t.Run("ignores an uninstalled version in a window still there", func(t *testing.T) {
-		if _, err := project.Restoration(windowNames(t, "back"), installed{}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("fails on an uninstalled version in a missing window", func(t *testing.T) {
-		_, err := project.Restoration(windowNames(t, "repo"), installed{})
-		if !errors.Is(err, domain.ErrRuntimeNotInstalled) {
-			t.Fatalf("got %v, want ErrRuntimeNotInstalled", err)
-		}
-	})
 }

@@ -94,7 +94,7 @@ type Project struct {
 	root      ProjectRoot
 	checkouts Checkouts
 	env       Env
-	runtimes  Runtimes
+	before    []Command
 	windows   []Window
 }
 
@@ -136,9 +136,10 @@ func (p Project) WithEnv(env Env) Project {
 	return p
 }
 
-// WithRuntimes pins toolchain versions for every pane of the project.
-func (p Project) WithRuntimes(runtimes Runtimes) Project {
-	p.runtimes = runtimes
+// RunningFirst runs cmds in every pane of the project, in order, before
+// its window's and its own.
+func (p Project) RunningFirst(cmds ...Command) Project {
+	p.before = slices.Clone(cmds)
 	return p
 }
 
@@ -163,9 +164,9 @@ func (p Project) Env() Env {
 	return p.env
 }
 
-// Runtimes is the pins every pane gets, unless the pane overrides them.
-func (p Project) Runtimes() Runtimes {
-	return p.runtimes
+// Before is the commands run first in every pane.
+func (p Project) Before() []Command {
+	return slices.Clone(p.before)
 }
 
 // Windows are the windows the project's session opens, in order.

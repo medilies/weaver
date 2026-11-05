@@ -1,28 +1,11 @@
 package domain
 
-import (
-	"fmt"
-	"slices"
-)
-
-// RuntimeResolver finds where a pinned toolchain version is installed.
-// Infrastructure provides the implementation.
-type RuntimeResolver interface {
-	// Resolve returns the directory to put first on PATH for runtime, or
-	// an error wrapping ErrRuntimeNotInstalled.
-	Resolve(runtime Runtime) (string, error)
-}
-
-// RuntimeCatalog lists the toolchain versions installed on this machine.
-// Infrastructure provides the implementation.
-type RuntimeCatalog interface {
-	// Available lists the versions a project can pin, sorted.
-	Available() ([]Runtime, error)
-}
+import "slices"
 
 // SessionPlan is a project resolved for tmux: every directory absolute,
-// every pane's environment merged over its project's, and every pinned
-// version located. Starting a session follows it without decisions.
+// every pane's environment merged over its project's, and its commands to
+// run first after its project's and window's. Starting a session follows
+// it without decisions.
 type SessionPlan struct {
 	name    ProjectName
 	windows []WindowPlan
@@ -59,9 +42,9 @@ type PanePlan struct {
 	dir     string
 	split   Split
 	splits  bool
-	path    []string
 	env     []EnvVar
 	note    []string
+	before  []Command
 	startup Startup
 }
 
@@ -79,11 +62,6 @@ func (p PanePlan) Split() (Split, bool) {
 	return p.split, p.splits
 }
 
-// Path is the directories to put first on the pane's PATH, in order.
-func (p PanePlan) Path() []string {
-	return slices.Clone(p.path)
-}
-
 // Env is the pane's variables merged over its project's, sorted by name.
 func (p PanePlan) Env() []EnvVar {
 	return slices.Clone(p.env)
@@ -94,53 +72,42 @@ func (p PanePlan) Note() []string {
 	return slices.Clone(p.note)
 }
 
+// Before is the commands run in the pane's shell before its startup: the
+// project's, then the window's, then the pane's own.
+func (p PanePlan) Before() []Command {
+	return slices.Clone(p.before)
+}
+
 func (p PanePlan) Startup() Startup {
 	return p.startup
 }
 
-// Plan resolves the project for tmux. It locates every pinned version
-// through resolver first, so a missing one fails before anything starts.
-func (p Project) Plan(resolver RuntimeResolver) (SessionPlan, error) {
+// Plan resolves the project for tmux.
+func (p Project) Plan() SessionPlan {
 	windows := make([]WindowPlan, 0, len(p.windows))
 	for _, window := range p.windows {
-		planned, err := p.planWindow(window, resolver)
-		if err != nil {
-			return SessionPlan{}, err
-		}
-		windows = append(windows, planned)
+		windows = append(windows, p.planWindow(window))
 	}
-	return SessionPlan{name: p.name, windows: windows}, nil
+	return SessionPlan{name: p.name, windows: windows}
 }
 
-func (p Project) planWindow(window Window, resolver RuntimeResolver) (WindowPlan, error) {
+func (p Project) planWindow(window Window) WindowPlan {
 	panes := make([]PanePlan, 0, len(window.panes))
-	for i, pane := range window.panes {
-		planned, err := p.planPane(pane, resolver)
-		if err != nil {
-			return WindowPlan{}, fmt.Errorf("window %q: pane %s: %w", window.name.value, paneRef(i, pane), err)
-		}
-		panes = append(panes, planned)
+	for _, pane := range window.panes {
+		panes = append(panes, p.planPane(window, pane))
 	}
-	return WindowPlan{name: window.name, panes: panes}, nil
+	return WindowPlan{name: window.name, panes: panes}
 }
 
-func (p Project) planPane(pane Pane, resolver RuntimeResolver) (PanePlan, error) {
-	var path []string
-	for _, runtime := range p.runtimes.Overlay(pane.runtimes).List() {
-		dir, err := resolver.Resolve(runtime)
-		if err != nil {
-			return PanePlan{}, err
-		}
-		path = append(path, dir)
-	}
+func (p Project) planPane(window Window, pane Pane) PanePlan {
 	return PanePlan{
 		name:    pane.name,
 		dir:     p.root.Resolve(pane.dir),
 		split:   pane.split,
 		splits:  pane.splits,
-		path:    path,
 		env:     p.env.Overlay(pane.env).Vars(),
 		note:    slices.Clone(pane.note),
+		before:  slices.Concat(p.before, window.before, pane.before),
 		startup: pane.startup,
-	}, nil
+	}
 }

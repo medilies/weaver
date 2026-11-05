@@ -47,18 +47,10 @@ func (c capturedSessions) Capture(session string) ([]domain.Window, error) {
 	return windows, nil
 }
 
-// installedRuntimes is a fake domain.RuntimeCatalog.
-type installedRuntimes []domain.Runtime
-
-func (i installedRuntimes) Available() ([]domain.Runtime, error) {
-	return i, nil
-}
-
 type addSetup struct {
 	repo  inMemoryRepository
 	form  *fakeForm
 	found domain.Checkouts
-	php   domain.Runtime
 }
 
 func newAddSetup(t *testing.T) addSetup {
@@ -71,22 +63,17 @@ func newAddSetup(t *testing.T) addSetup {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	php, err := domain.NewRuntime("php", "8.4")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	return addSetup{
 		repo:  inMemoryRepository{projects: map[string]domain.Project{}},
 		form:  &fakeForm{project: shop(t)},
 		found: found,
-		php:   php,
 	}
 }
 
 func (s addSetup) add(t *testing.T, confirm app.Confirmer, request app.AddRequest) (domain.Project, error) {
 	t.Helper()
 	sessions := capturedSessions{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()}
-	return app.NewAddProject(s.repo, foundCheckouts{s.found}, installedRuntimes{s.php}, sessions, s.form, confirm).Handle(request)
+	return app.NewAddProject(s.repo, foundCheckouts{s.found}, sessions, s.form, confirm).Handle(request)
 }
 
 func TestAddProject(t *testing.T) {
@@ -127,16 +114,6 @@ func TestAddProject(t *testing.T) {
 		}
 		if list := s.form.draft.Checkouts.List(); len(list) != 1 || list[0].Dir() != "back" {
 			t.Fatalf("got %v, want the back repository", list)
-		}
-	})
-
-	t.Run("offers the installed versions", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got := s.form.draft.Runtimes; len(got) != 1 || got[0] != s.php {
-			t.Fatalf("got %v, want php 8.4", got)
 		}
 	})
 

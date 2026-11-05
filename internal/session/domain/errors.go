@@ -65,18 +65,6 @@ var (
 	// ErrInvalidEnvName is returned for an environment variable name that
 	// a shell can't export.
 	ErrInvalidEnvName = errors.New("invalid environment variable name")
-	// ErrPathInEnv is returned when env sets PATH, which runtimes manage.
-	ErrPathInEnv = errors.New("PATH can't be set in env: pin versions with runtimes instead")
-	// ErrUnknownRuntime is returned for a toolchain weaver can't pin.
-	ErrUnknownRuntime = errors.New("unknown runtime")
-	// ErrInvalidRuntimeVersion is returned for a version that isn't
-	// dot-separated numbers.
-	ErrInvalidRuntimeVersion = errors.New("invalid runtime version")
-	// ErrDuplicateRuntime is returned when a toolchain is pinned twice.
-	ErrDuplicateRuntime = errors.New("runtime pinned twice")
-	// ErrRuntimeNotInstalled is returned when a pinned version can't be
-	// found on this machine.
-	ErrRuntimeNotInstalled = errors.New("runtime not installed")
 	// ErrSessionNotRunning is returned when killing a session that isn't
 	// running.
 	ErrSessionNotRunning = errors.New("session not running")

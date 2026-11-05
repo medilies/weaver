@@ -22,8 +22,8 @@
     "env": {
       "$ref": "#/definitions/env"
     },
-    "runtimes": {
-      "$ref": "#/definitions/runtimes"
+    "before": {
+      "$ref": "#/definitions/before"
     },
     "windows": {
       "description": "Windows in order. Without any, the session opens one window named after the project.",
@@ -38,30 +38,18 @@
       "description": "Environment variables, set literally. A pane's override its project's.",
       "type": "object",
       "propertyNames": {
-        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-        "not": {
-          "const": "PATH"
-        }
+        "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
       },
       "additionalProperties": {
         "type": "string"
       }
     },
-    "runtimes": {
-      "description": "Toolchain versions put first on PATH. A pane's override its project's.",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "node": {
-          "description": "Node.js version installed by nvm, e.g. 20 for the newest 20.x.y.",
-          "type": "string",
-          "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
-        },
-        "php": {
-          "description": "PHP version installed side by side in /usr/bin, e.g. 8.4.",
-          "type": "string",
-          "pattern": "^[0-9]+(\\.[0-9]+){0,2}$"
-        }
+    "before": {
+      "description": "Commands typed and run in each pane before its own command, e.g. nvm use 20: the project's, then the window's, then the pane's. They are typed as soon as the pane opens, so one that reads the terminal (ssh, a password prompt) takes the lines typed after it.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
       }
     },
     "window": {
@@ -73,6 +61,9 @@
           "description": "Window name, unique in the project.",
           "type": "string",
           "minLength": 1
+        },
+        "before": {
+          "$ref": "#/definitions/before"
         },
         "panes": {
           "description": "Panes in creation order: the first fills the window, each later one splits an earlier one. Without any, one shell in root.",
@@ -102,6 +93,9 @@
         "split": {
           "$ref": "#/definitions/split"
         },
+        "before": {
+          "$ref": "#/definitions/before"
+        },
         "command": {
           "description": "Typed into the shell and run, so it stays in the shell history.",
           "type": "string",
@@ -121,9 +115,6 @@
         },
         "env": {
           "$ref": "#/definitions/env"
-        },
-        "runtimes": {
-          "$ref": "#/definitions/runtimes"
         }
       }
     },

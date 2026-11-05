@@ -27,38 +27,24 @@ type application struct {
 }
 
 // wire builds the use cases against this machine: configs under the user
-// config directory, the user's tmux server, PHP from /usr/bin and Node.js
-// from nvm.
+// config directory and the user's tmux server.
 func wire() (application, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return application{}, err
 	}
-	cacheDir, err := os.UserCacheDir()
-	if err != nil {
-		return application{}, err
-	}
-	nvmDir := os.Getenv("NVM_DIR")
-	if nvmDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return application{}, err
-		}
-		nvmDir = filepath.Join(home, ".nvm")
-	}
 
 	projects := infra.NewFileProjectRepository(filepath.Join(configDir, "weaver", "projects"))
 	tmux := infra.NewTmux(infra.TmuxOptions{Inside: os.Getenv("TMUX") != "", Size: infra.TerminalSize})
 	workspace := infra.NewGitWorkspace(os.Stderr)
-	runtimes := infra.NewInstalledRuntimes("/usr/bin", nvmDir, filepath.Join(cacheDir, "weaver", "php"))
 
 	forms := infra.NewHuhForms()
 
 	weaver := application{
-		addProject:   app.NewAddProject(projects, workspace, runtimes, tmux, forms, forms),
+		addProject:   app.NewAddProject(projects, workspace, tmux, forms, forms),
 		editProject:  app.NewEditProject(projects, infra.NewEditor(), forms),
 		sessions:     tmux,
-		openProject:  app.NewOpenProject(projects, tmux, workspace, runtimes),
+		openProject:  app.NewOpenProject(projects, tmux, workspace),
 		killProject:  app.NewKillProject(tmux),
 		listProjects: app.NewListProjects(projects, tmux),
 		documents:    projects,

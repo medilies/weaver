@@ -23,12 +23,11 @@ type AddRequest struct {
 }
 
 // AddProject registers a project the user describes in a form, started
-// from what weaver finds: the repositories under its root, the installed
-// toolchain versions, and the layout of a running session if asked.
+// from what weaver finds: the repositories under its root, and the layout
+// of a running session if asked.
 type AddProject struct {
 	projects domain.ProjectRepository
 	detector domain.CheckoutDetector
-	catalog  domain.RuntimeCatalog
 	capturer domain.SessionCapturer
 	form     ProjectForm
 	confirm  Confirmer
@@ -38,13 +37,12 @@ type AddProject struct {
 func NewAddProject(
 	projects domain.ProjectRepository,
 	detector domain.CheckoutDetector,
-	catalog domain.RuntimeCatalog,
 	capturer domain.SessionCapturer,
 	form ProjectForm,
 	confirm Confirmer,
 ) AddProject {
 	return AddProject{
-		projects: projects, detector: detector, catalog: catalog, capturer: capturer, form: form, confirm: confirm,
+		projects: projects, detector: detector, capturer: capturer, form: form, confirm: confirm,
 	}
 }
 
@@ -101,9 +99,6 @@ func (uc AddProject) draft(request AddRequest) (ProjectDraft, error) {
 		return ProjectDraft{}, err
 	}
 	if draft.Checkouts, err = uc.detector.Detect(projectRoot); err != nil {
-		return ProjectDraft{}, err
-	}
-	if draft.Runtimes, err = uc.catalog.Available(); err != nil {
 		return ProjectDraft{}, err
 	}
 	return draft, nil

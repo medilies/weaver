@@ -99,8 +99,8 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 	return app.NewBrowseProjects(
 		s.browser, confirm, s.repo, s.documents,
 		app.NewListProjects(s.repo, server),
-		app.NewOpenProject(s.repo, server, s.workspace, fakeRuntimes{}),
-		app.NewAddProject(s.repo, foundCheckouts{}, installedRuntimes{}, capturedSessions{}, s.form, confirm),
+		app.NewOpenProject(s.repo, server, s.workspace),
+		app.NewAddProject(s.repo, foundCheckouts{}, capturedSessions{}, s.form, confirm),
 		app.NewEditProject(s.documents, s.editor, confirm),
 		app.NewKillProject(server),
 	).Handle("/srv/new")

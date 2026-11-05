@@ -275,14 +275,14 @@ func (s Startup) Submits() bool {
 // Pane is one shell in a window. Build it fluently from NewPane; each
 // method returns a new Pane.
 type Pane struct {
-	name     PaneName
-	dir      PaneDir
-	split    Split
-	splits   bool
-	startup  Startup
-	note     []string
-	env      Env
-	runtimes Runtimes
+	name    PaneName
+	dir     PaneDir
+	split   Split
+	splits  bool
+	startup Startup
+	before  []Command
+	note    []string
+	env     Env
 }
 
 // NewPane is an unnamed shell in the project root.
@@ -322,6 +322,14 @@ func (p Pane) Prefilling(cmd Command) Pane {
 	return p
 }
 
+// RunningFirst runs cmds in the pane's shell, in order, before its own
+// command, after its project's and its window's, e.g. to pick a toolchain
+// version with nvm use.
+func (p Pane) RunningFirst(cmds ...Command) Pane {
+	p.before = slices.Clone(cmds)
+	return p
+}
+
 // WithNote prints lines in the pane before its shell starts.
 func (p Pane) WithNote(lines ...string) Pane {
 	p.note = slices.Clone(lines)
@@ -331,13 +339,6 @@ func (p Pane) WithNote(lines ...string) Pane {
 // WithEnv sets variables for the pane's shell, over its project's.
 func (p Pane) WithEnv(env Env) Pane {
 	p.env = env
-	return p
-}
-
-// WithRuntimes pins toolchain versions for the pane's shell, over its
-// project's.
-func (p Pane) WithRuntimes(runtimes Runtimes) Pane {
-	p.runtimes = runtimes
 	return p
 }
 
@@ -358,6 +359,12 @@ func (p Pane) Startup() Startup {
 	return p.startup
 }
 
+// Before is the pane's own commands run before its command, without its
+// project's and its window's.
+func (p Pane) Before() []Command {
+	return slices.Clone(p.before)
+}
+
 // Note is the lines printed before the pane's shell starts.
 func (p Pane) Note() []string {
 	return slices.Clone(p.note)
@@ -368,16 +375,12 @@ func (p Pane) Env() Env {
 	return p.env
 }
 
-// Runtimes is the pane's own pins, without its project's.
-func (p Pane) Runtimes() Runtimes {
-	return p.runtimes
-}
-
 // Window is a tmux window and its panes, in creation order: the first pane
 // fills the window and each later one splits an earlier one.
 type Window struct {
-	name  WindowName
-	panes []Pane
+	name   WindowName
+	panes  []Pane
+	before []Command
 }
 
 // NewWindow validates and constructs a Window. With no panes, it holds one
@@ -429,6 +432,13 @@ func paneRef(index int, pane Pane) string {
 	return strconv.Quote(pane.name.value)
 }
 
+// RunningFirst runs cmds in each of the window's panes, in order, after
+// its project's and before the pane's own.
+func (w Window) RunningFirst(cmds ...Command) Window {
+	w.before = slices.Clone(cmds)
+	return w
+}
+
 func (w Window) Name() WindowName {
 	return w.name
 }
@@ -436,4 +446,9 @@ func (w Window) Name() WindowName {
 // Panes are the window's panes in creation order.
 func (w Window) Panes() []Pane {
 	return slices.Clone(w.panes)
+}
+
+// Before is the window's own commands run first in each of its panes.
+func (w Window) Before() []Command {
+	return slices.Clone(w.before)
 }

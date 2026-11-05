@@ -5,18 +5,24 @@ repositories:
   front: git@bitbucket.org:acme/shop-front.git
 env:
   APP_ENV: local
+before:
+  - source ~/.shop_aliases
 windows:
   - name: shop
+    before:
+      - git fetch --quiet
     panes:
       - name: back
         dir: back
-        runtimes:
-          php: "8.4"
+        before:
+          - alias php=php8.4
       - name: front
         dir: front
         split:
           direction: right
           size: 30%
+        before:
+          - nvm use 20
         note:
           - ""
           - 'Usual commands:'
@@ -26,5 +32,3 @@ windows:
           - ""
         env:
           APP_ENV: dev
-        runtimes:
-          node: "20"

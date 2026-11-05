@@ -59,19 +59,9 @@ func (w *fakeWorkspace) Clone(_ domain.Checkout, dir string) error {
 	return nil
 }
 
-// fakeRuntimes is a fake domain.RuntimeResolver: "kind version" → dir.
-type fakeRuntimes map[string]string
-
-func (r fakeRuntimes) Resolve(runtime domain.Runtime) (string, error) {
-	if dir, ok := r[runtime.String()]; ok {
-		return dir, nil
-	}
-	return "", fmt.Errorf("%w: %s", domain.ErrRuntimeNotInstalled, runtime)
-}
-
 // shop is a project rooted at /srv/shop with a back and a front
 // repository, each opened in a pane of the first window, and a logs
-// window in a plain directory. The back pane pins PHP.
+// window in a plain directory.
 func shop(t *testing.T) domain.Project {
 	t.Helper()
 	must := func(err error) {
@@ -90,10 +80,6 @@ func shop(t *testing.T) domain.Project {
 	must(err)
 	checkouts, err := domain.NewCheckouts(backRepo, frontRepo)
 	must(err)
-	php, err := domain.NewRuntime("php", "8.4")
-	must(err)
-	pins, err := domain.NewRuntimes(php)
-	must(err)
 	backName, err := domain.NewPaneName("back")
 	must(err)
 	backDir, err := domain.NewPaneDir("back")
@@ -107,7 +93,7 @@ func shop(t *testing.T) domain.Project {
 	windowName, err := domain.NewWindowName("shop")
 	must(err)
 	window, err := domain.NewWindow(windowName,
-		domain.NewPane().Named(backName).In(backDir).WithRuntimes(pins),
+		domain.NewPane().Named(backName).In(backDir),
 		domain.NewPane().Named(frontName).In(frontDir).Splitting(right),
 	)
 	must(err)
@@ -123,10 +109,10 @@ func shop(t *testing.T) domain.Project {
 }
 
 // openShop runs OpenProject on the shop project with the given state.
-func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace, runtimes fakeRuntimes) error {
+func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace) error {
 	t.Helper()
 	repo := inMemoryRepository{projects: map[string]domain.Project{"shop": shop(t)}}
-	return app.NewOpenProject(repo, sessions, workspace, runtimes).Handle("shop")
+	return app.NewOpenProject(repo, sessions, workspace).Handle("shop")
 }
 
 // owned is a running session weaver started, which still has windows.
@@ -149,12 +135,10 @@ func everything() *fakeWorkspace {
 	}}
 }
 
-var php84 = fakeRuntimes{"php 8.4": "/cache/php/8.4"}
-
 func TestOpenProject(t *testing.T) {
 	t.Run("starts the session when it isn't running, then attaches", func(t *testing.T) {
 		sessions := &fakeSessions{}
-		if err := openShop(t, sessions, everything(), php84); err != nil {
+		if err := openShop(t, sessions, everything()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.started, []string{"shop"}) || !slices.Equal(sessions.attached, []string{"shop"}) {
@@ -164,7 +148,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("only attaches when weaver's session has every window", func(t *testing.T) {
 		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop", "logs")}}
-		if err := openShop(t, sessions, everything(), php84); err != nil {
+		if err := openShop(t, sessions, everything()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(sessions.started)+len(sessions.restored) != 0 || !slices.Equal(sessions.attached, []string{"shop"}) {
@@ -175,7 +159,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("re-creates the windows weaver's session lacks, then attaches", func(t *testing.T) {
 		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop")}}
-		if err := openShop(t, sessions, everything(), php84); err != nil {
+		if err := openShop(t, sessions, everything()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.restored, []string{"logs"}) || !slices.Equal(sessions.attached, []string{"shop"}) {
@@ -185,7 +169,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("leaves a session weaver didn't start as it is", func(t *testing.T) {
 		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}
-		if err := openShop(t, sessions, everything(), php84); err != nil {
+		if err := openShop(t, sessions, everything()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(sessions.restored) != 0 || !slices.Equal(sessions.attached, []string{"shop"}) {
@@ -197,7 +181,7 @@ func TestOpenProject(t *testing.T) {
 		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop")}}
 		workspace := everything()
 		delete(workspace.dirs, "/srv/shop/logs")
-		err := openShop(t, sessions, workspace, php84)
+		err := openShop(t, sessions, workspace)
 		if !errors.Is(err, app.ErrMissingDirectory) || len(sessions.restored)+len(sessions.attached) != 0 {
 			t.Fatalf("got %v, restored %q, attached %q; want ErrMissingDirectory and nothing done",
 				err, sessions.restored, sessions.attached)
@@ -206,7 +190,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("clones missing repositories before starting", func(t *testing.T) {
 		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/logs": true}}
-		if err := openShop(t, &fakeSessions{}, workspace, php84); err != nil {
+		if err := openShop(t, &fakeSessions{}, workspace); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if want := []string{"/srv/shop/back", "/srv/shop/front"}; !slices.Equal(workspace.cloned, want) {
@@ -216,7 +200,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("leaves existing repositories alone", func(t *testing.T) {
 		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/back": true, "/srv/shop/logs": true}}
-		if err := openShop(t, &fakeSessions{}, workspace, php84); err != nil {
+		if err := openShop(t, &fakeSessions{}, workspace); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if want := []string{"/srv/shop/front"}; !slices.Equal(workspace.cloned, want) {
@@ -224,22 +208,11 @@ func TestOpenProject(t *testing.T) {
 		}
 	})
 
-	t.Run("fails on a missing version before cloning or starting", func(t *testing.T) {
-		sessions, workspace := &fakeSessions{}, &fakeWorkspace{dirs: map[string]bool{}}
-		err := openShop(t, sessions, workspace, fakeRuntimes{})
-		if !errors.Is(err, domain.ErrRuntimeNotInstalled) {
-			t.Fatalf("got %v, want ErrRuntimeNotInstalled", err)
-		}
-		if len(workspace.cloned) != 0 || len(sessions.started) != 0 {
-			t.Fatalf("got %q cloned and %q started, want nothing changed", workspace.cloned, sessions.started)
-		}
-	})
-
 	t.Run("fails on a missing pane directory before starting", func(t *testing.T) {
 		sessions := &fakeSessions{}
 		workspace := everything()
 		delete(workspace.dirs, "/srv/shop/logs")
-		err := openShop(t, sessions, workspace, php84)
+		err := openShop(t, sessions, workspace)
 		if !errors.Is(err, app.ErrMissingDirectory) {
 			t.Fatalf("got %v, want ErrMissingDirectory", err)
 		}
@@ -250,7 +223,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		repo := inMemoryRepository{projects: map[string]domain.Project{}}
-		err := app.NewOpenProject(repo, &fakeSessions{}, everything(), php84).Handle("shop")
+		err := app.NewOpenProject(repo, &fakeSessions{}, everything()).Handle("shop")
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
@@ -300,12 +273,12 @@ func TestOpenProjectHandleDir(t *testing.T) {
 	}
 	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
-		return app.NewOpenProject(repository(projects...), sessions, everything(), php84).HandleDir(dir)
+		return app.NewOpenProject(repository(projects...), sessions, everything()).HandleDir(dir)
 	}
 	openPastBroken := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
 		repo := withBrokenConfig{repository(projects...)}
-		return app.NewOpenProject(repo, sessions, everything(), php84).HandleDir(dir)
+		return app.NewOpenProject(repo, sessions, everything()).HandleDir(dir)
 	}
 
 	t.Run("opens the project whose root contains the directory", func(t *testing.T) {

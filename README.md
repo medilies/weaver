@@ -55,13 +55,11 @@ what happened.
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it). When the session isn't running, weaver first:
 
-1. finds every pinned PHP and Node version, and stops if one isn't
-   installed;
-2. clones the project's repositories that are missing;
-3. checks every pane's directory exists;
-4. builds the session, sized like your terminal so percentage splits
+1. clones the project's repositories that are missing;
+2. checks every pane's directory exists;
+3. builds the session, sized like your terminal so percentage splits
    come out right, labels its panes in their top border, and types each
-   pane's command into its shell.
+   pane's `before` commands, then its command, into its shell.
 
 If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
 newer.
@@ -70,13 +68,6 @@ When weaver started the running session and you closed some of its
 windows, `weave <project>` puts them back where the config lists them
 before attaching. Windows you opened yourself stay as they are, and a
 session weaver didn't start is only attached.
-
-Runtimes are found where Ubuntu and nvm install them: `"php": "8.4"` is
-`/usr/bin/php8.4`, linked as `php` in `~/.cache/weaver/php/8.4`, and
-`"node": "20"` is the newest `$NVM_DIR/versions/node/v20.*`. Either
-directory goes first on the pane's PATH before its login shell starts;
-nvm, sourced from `.bashrc`, keeps a Node version that is already on
-PATH.
 
 ## Development
 
@@ -136,7 +127,10 @@ windows:
 ```
 
 A back end and a front end, each its own repository, on different
-toolchain versions:
+toolchain versions. weaver knows no toolchain: `before` types whatever
+commands set one up into the pane's shell, as you would. An alias only
+changes what you type: tools that run `php` themselves, such as
+`composer`, need a `php` first on `PATH` instead:
 
 ```yaml
 root: ~/dev/shop
@@ -148,11 +142,11 @@ windows:
     panes:
       - name: back
         dir: back
-        runtimes: { php: "8.4" }
+        before: ["alias php=php8.4"]
       - name: front
         dir: front
         split: { direction: right, size: 30% }
-        runtimes: { node: "20" }
+        before: ["nvm use 20"]
         note:
           - "Usual commands:"
           - "  npm i"
@@ -163,17 +157,19 @@ windows:
 | --- | --- |
 | `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. |
 | `repositories` | Directory (relative to `root`; `.` is `root`) → git remote. |
-| `env` | Variables for every pane. Values are literal. `PATH` is managed by `runtimes`. |
-| `runtimes` | Versions for every pane: `php` (e.g. `"8.4"`) and `node` (e.g. `"20"`). |
+| `env` | Variables for every pane. Values are literal. |
+| `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
+| `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
 | `windows[].panes` | Panes in creation order. None: one shell in `root`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes. |
 | `dir` | Where the pane's shell starts, relative to `root` (or absolute). |
 | `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the pane it splits; default the previous one). |
+| `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
 | `note` | Lines printed before the shell starts. |
-| `env`, `runtimes` (pane) | Override the project's, per key. |
+| `env` (pane) | Overrides the project's, per variable. |
 
 Unknown fields are errors: they are usually typos. Comments are kept by
 `weave edit`, but not when `weave add` replaces a config.
@@ -182,7 +178,7 @@ When weaver saves a config, it writes `weaver.schema.json` next to it
 and points the config at it with a first line of
 `# yaml-language-server: $schema=./weaver.schema.json`, so editors such
 as VS Code (with its YAML extension) complete fields and flag mistakes
-as you type. Quote versions, as the schema wants: `"8.4"`, not `8.4`.
+as you type.
 
 ## Architecture
 
@@ -201,11 +197,11 @@ graph TD
         AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]
-        M["Project, Window, Pane, Split, Env, Runtimes, Checkouts<br/>SessionPlan, Restoration"]
-        DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer, RuntimeResolver,<br/>RuntimeCatalog, Workspace, CheckoutDetector (ports)"]
+        M["Project, Window, Pane, Split, Command, Env, Checkouts<br/>SessionPlan, Restoration"]
+        DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer,<br/>Workspace, CheckoutDetector (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, InstalledRuntimes, Editor,<br/>HuhForms, TeaBrowser"]
+        A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
     end
 
     CLI --> UC

@@ -1,6 +1,6 @@
 // Package infra adapts the Session bounded context to the outside world:
-// project configs stored as YAML files, the user's tmux server,
-// git, and the toolchains installed on the machine.
+// project configs stored as YAML files, the user's tmux server, git,
+// the editor and the terminal forms.
 package infra
 
 import (

@@ -1,24 +1,11 @@
 package domain_test
 
 import (
-	"errors"
-	"fmt"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
-
-// installed is a fake domain.RuntimeResolver: "kind version" → directory.
-type installed map[string]string
-
-func (i installed) Resolve(runtime domain.Runtime) (string, error) {
-	if dir, ok := i[runtime.String()]; ok {
-		return dir, nil
-	}
-	return "", fmt.Errorf("%w: %s", domain.ErrRuntimeNotInstalled, runtime)
-}
 
 func TestProjectRootResolve(t *testing.T) {
 	root := projectRoot(t, "/srv/shop")
@@ -57,23 +44,18 @@ func TestProjectPlan(t *testing.T) {
 		In(paneDir(t, "front")).
 		Splitting(split(t, 0, domain.Right, "30%")).
 		WithEnv(env(t, map[string]string{"APP_ENV": "dev"})).
-		WithRuntimes(runtimes(t, "node", "20")).
+		RunningFirst(command(t, "nvm use 20")).
 		Running(command(t, "npm run dev")).
 		WithNote("Usual commands:", "  npm i")
 	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
 		WithEnv(env(t, map[string]string{"APP_ENV": "local", "TZ": "UTC"})).
-		WithRuntimes(runtimes(t, "php", "8.4", "node", "22")).
-		WithWindows(window(t, "shop", back, front))
+		RunningFirst(command(t, "source .env")).
+		WithWindows(window(t, "shop", back, front).RunningFirst(command(t, "git fetch")))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	resolver := installed{"php 8.4": "/cache/php/8.4", "node 20": "/nvm/v20/bin", "node 22": "/nvm/v22/bin"}
 
-	plan, err := project.Plan(resolver)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	panes := plan.Windows()[0].Panes()
+	panes := project.Plan().Windows()[0].Panes()
 	backPlan, frontPlan := panes[0], panes[1]
 
 	t.Run("makes pane directories absolute", func(t *testing.T) {
@@ -94,14 +76,15 @@ func TestProjectPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("puts the project's runtimes first on PATH", func(t *testing.T) {
-		if got, want := backPlan.Path(), []string{"/nvm/v22/bin", "/cache/php/8.4"}; !slices.Equal(got, want) {
+	t.Run("runs the project's commands, then the window's, first in every pane", func(t *testing.T) {
+		if got, want := commands(backPlan.Before()), []string{"source .env", "git fetch"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
-	t.Run("lets a pane pin another version than its project", func(t *testing.T) {
-		if got, want := frontPlan.Path(), []string{"/nvm/v20/bin", "/cache/php/8.4"}; !slices.Equal(got, want) {
+	t.Run("runs a pane's own commands after its project's and window's", func(t *testing.T) {
+		want := []string{"source .env", "git fetch", "nvm use 20"}
+		if got := commands(frontPlan.Before()); !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
@@ -125,11 +108,13 @@ func TestProjectPlan(t *testing.T) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
+}
 
-	t.Run("fails naming the window and pane when a version isn't installed", func(t *testing.T) {
-		_, err := project.Plan(installed{})
-		if !errors.Is(err, domain.ErrRuntimeNotInstalled) || !strings.Contains(err.Error(), `window "shop": pane "back"`) {
-			t.Fatalf("got %v, want ErrRuntimeNotInstalled naming the window and pane", err)
-		}
-	})
+// commands flattens commands to their text, in order.
+func commands(cmds []domain.Command) []string {
+	var out []string
+	for _, cmd := range cmds {
+		out = append(out, cmd.String())
+	}
+	return out
 }
