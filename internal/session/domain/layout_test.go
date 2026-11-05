@@ -141,6 +141,38 @@ func TestNewCommand(t *testing.T) {
 	}
 }
 
+func TestCommandProgram(t *testing.T) {
+	for raw, want := range map[string]string{
+		"npm run dev":              "npm",
+		"NODE_ENV=dev npm run dev": "npm",
+		"./bin/dev --watch":        "./bin/dev",
+	} {
+		t.Run("finds "+want+" in "+raw, func(t *testing.T) {
+			if got, ok := command(t, raw).Program(); !ok || got != want {
+				t.Fatalf("got %q (%v), want %q", got, ok, want)
+			}
+		})
+	}
+
+	for reason, raw := range map[string]string{
+		"a builtin":           "cd back",
+		"a keyword":           "while true; do date; done",
+		"an expansion":        "$EDITOR .",
+		"a home path":         "~/bin/dev",
+		"a subshell":          "(cd back && make)",
+		"only an assignment":  "DEBUG=1",
+		"a quoted executable": `"my tool" --flag`,
+		"an escaped value":    `FOO=a\ b npm start`,
+		"a limit builtin":     "ulimit -n 4096 && ./server",
+	} {
+		t.Run("leaves "+reason+" to the shell", func(t *testing.T) {
+			if got, ok := command(t, raw).Program(); ok {
+				t.Fatalf("got %q, want no program", got)
+			}
+		})
+	}
+}
+
 func TestPaneStartup(t *testing.T) {
 	t.Run("a new pane types nothing", func(t *testing.T) {
 		if _, ok := domain.NewPane().Startup().Command(); ok {

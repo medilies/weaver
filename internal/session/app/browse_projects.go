@@ -4,9 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
+
+// ErrMissingProgram is warned about when a pane's command starts a
+// program that can't be found.
+var ErrMissingProgram = errors.New("program not found")
 
 // ProjectOverview is a registered project as the browser shows it: its
 // config as written and, when the config is valid, the project, where it
@@ -23,6 +28,7 @@ type ProjectOverview struct {
 	session    domain.RunningSession
 	found      bool
 	missing    []domain.WindowName
+	warnings   []error
 }
 
 // Name is the project's name.
@@ -80,6 +86,16 @@ func (o ProjectOverview) Session() (domain.RunningSession, bool) {
 // session weaver didn't start, which opening leaves as it is.
 func (o ProjectOverview) MissingWindows() []domain.WindowName {
 	return slices.Clone(o.missing)
+}
+
+// Warnings are what would likely go wrong in the panes opening the
+// project creates: a directory missing that no clone creates, wrapping
+// ErrMissingDirectory, or a command whose program can't be found,
+// wrapping ErrMissingProgram. Opening a stopped project creates every
+// pane, a session weaver started the missing windows' panes, and one it
+// didn't start none.
+func (o ProjectOverview) Warnings() []error {
+	return slices.Clone(o.warnings)
 }
 
 // WindowCount is how many of the configured windows the running session
@@ -221,22 +237,99 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	if rootExists {
 		overview.tree, overview.inGit = uc.workspace.WorkingTree(project.Root().String())
 	}
-	if !status.Running() {
-		return overview
+	opening := project.Plan().Windows()
+	if status.Running() {
+		opening = uc.restoration(&overview)
 	}
+	overview.warnings, overview.problem = uc.warnings(overview, opening, !status.Running())
+	return overview
+}
+
+// restoration finds the running session of overview's project and the
+// windows it lacks, and returns the ones opening the project creates.
+func (uc BrowseProjects) restoration(overview *ProjectOverview) []domain.WindowPlan {
+	project := overview.project
+	var err error
 	// The session only adds to the summary: if tmux can't describe it,
 	// the browser shows the project as running, without the comparison.
 	overview.session, overview.found, err = uc.sessions.Find(project.Name())
 	if err != nil {
 		overview.found = false
-		return overview
+		return nil
 	}
-	if overview.found && overview.session.Owned() {
-		for _, placement := range project.Restoration(overview.session.Windows()) {
-			overview.missing = append(overview.missing, placement.Window().Name())
+	if !overview.found || !overview.session.Owned() {
+		return nil
+	}
+	var opening []domain.WindowPlan
+	for _, placement := range project.Restoration(overview.session.Windows()) {
+		overview.missing = append(overview.missing, placement.Window().Name())
+		opening = append(opening, placement.Window())
+	}
+	return opening
+}
+
+// warnings are what would likely go wrong in the panes of windows, once
+// overview's missing repositories are cloned when cloning, as starting a
+// session does (restoring windows doesn't clone). Directories under a missing
+// root aren't checked: the summary already says the root is gone. Nor are
+// the programs of panes whose before commands or PATH may change what
+// runs, as a version manager does.
+func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.WindowPlan, cloning bool) ([]error, error) {
+	project := overview.project
+	seen := map[string]bool{}
+	var warnings []error
+	for _, window := range windows {
+		for _, pane := range window.Panes() {
+			exists, err := uc.workspace.Exists(pane.Dir())
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				if !seen[pane.Dir()] && (!cloning || !overview.clones(pane.Dir())) &&
+					(overview.rootExists || !project.Root().Contains(pane.Dir())) {
+					warnings = append(warnings, fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingDirectory, pane.Dir()))
+				}
+				seen[pane.Dir()] = true
+				continue
+			}
+			program, ok := runs(pane)
+			if !ok {
+				continue
+			}
+			key := program
+			if strings.Contains(program, "/") {
+				key = pane.Dir() + "\x00" + program
+			}
+			if !seen[key] && !uc.workspace.Executable(program, pane.Dir()) {
+				warnings = append(warnings, fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingProgram, program))
+			}
+			seen[key] = true
 		}
 	}
-	return overview
+	return warnings, nil
+}
+
+// clones reports whether opening the project clones a repository dir is
+// in, which would create it.
+func (o ProjectOverview) clones(dir string) bool {
+	for _, status := range o.checkouts {
+		if !status.cloned && status.checkout.Contains(o.project.Root(), dir) {
+			return true
+		}
+	}
+	return false
+}
+
+// runs is the program pane's command starts, run or left at the prompt,
+// when weaver can tell what it is.
+func runs(pane domain.PanePlan) (string, bool) {
+	cmd, ok := pane.Startup().Command()
+	if !ok || len(pane.Before()) > 0 || slices.ContainsFunc(pane.Env(), func(v domain.EnvVar) bool {
+		return v.Name() == "PATH"
+	}) {
+		return "", false
+	}
+	return cmd.Program()
 }
 
 // act carries out choice and returns the project to select next and what

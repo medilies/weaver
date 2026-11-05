@@ -48,6 +48,17 @@ func (w GitWorkspace) Clone(checkout domain.Checkout, dir string) error {
 	return nil
 }
 
+// Executable implements domain.Workspace, looking programs up on weave's
+// own PATH, which usually is the one panes' shells start from. A program
+// found in a relative PATH entry, such as ".", counts as found.
+func (w GitWorkspace) Executable(program, dir string) bool {
+	if strings.Contains(program, "/") && !filepath.IsAbs(program) {
+		program = filepath.Join(dir, program)
+	}
+	_, err := exec.LookPath(program)
+	return err == nil || errors.Is(err, exec.ErrDot)
+}
+
 // workingTreeTimeout bounds reading a working tree, so a huge repository
 // doesn't hold up the browser: it then shows none.
 const workingTreeTimeout = time.Second

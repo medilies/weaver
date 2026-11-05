@@ -51,6 +51,12 @@ func (c Checkout) Path(root ProjectRoot) string {
 	return filepath.Join(root.path, c.dir)
 }
 
+// Contains reports whether dir is the checkout's directory under root, or
+// a directory inside it.
+func (c Checkout) Contains(root ProjectRoot, dir string) bool {
+	return ProjectRoot{path: c.Path(root)}.Contains(dir)
+}
+
 // Checkouts are a project's repositories, at most one per directory.
 type Checkouts struct {
 	list []Checkout

@@ -166,8 +166,8 @@ func (m browser) details() string {
 }
 
 // summary is where the project stands: its running session against its
-// config, its root and the working tree it is in, its repositories, and
-// what every pane starts with.
+// config, its root and the working tree it is in, its repositories, what
+// would likely go wrong opening it, and what every pane starts with.
 func summary(project app.ProjectOverview) string {
 	var lines []string
 	if session, ok := project.Session(); ok {
@@ -195,6 +195,9 @@ func summary(project app.ProjectOverview) string {
 	}
 	if len(checkouts) > 0 {
 		lines = append(lines, strings.Join(checkouts, " · "))
+	}
+	for _, warning := range project.Warnings() {
+		lines = append(lines, warningStyle.Render("⚠ "+warning.Error()))
 	}
 
 	var before []string

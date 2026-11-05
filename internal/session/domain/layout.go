@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -253,6 +254,38 @@ func NewCommand(raw string) (Command, error) {
 
 func (c Command) String() string {
 	return c.text
+}
+
+// assignment is a variable set for the command that follows it, as in
+// "NODE_ENV=dev npm run dev".
+var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
+
+// shellWords are builtins and keywords: what follows them isn't looked up
+// on PATH, or not as the first word.
+var shellWords = []string{
+	"!", ".", ":", "alias", "autoload", "bg", "builtin", "case", "cd", "command", "coproc",
+	"declare", "eval", "exec", "exit", "export", "fg", "for", "function", "hash", "history",
+	"if", "jobs", "let", "local", "noglob", "nocorrect", "popd", "pushd", "read", "readonly",
+	"return", "select", "set", "setopt", "shift", "source", "time", "trap", "type", "typeset",
+	"ulimit", "umask", "unset", "until", "wait", "while",
+}
+
+// Program is the program the command line starts, e.g. "npm" for
+// "NODE_ENV=dev npm run dev", or false when the shell decides what runs:
+// a builtin, a keyword, or a word it expands or quotes, even in a
+// variable's value. Aliases and shell functions can't be told apart from
+// programs.
+func (c Command) Program() (string, bool) {
+	for _, word := range strings.Fields(c.text) {
+		if strings.ContainsAny(word, "$`'\"\\(){}[]*?~;&|<>") || slices.Contains(shellWords, word) {
+			return "", false
+		}
+		if assignment.MatchString(word) {
+			continue
+		}
+		return word, true
+	}
+	return "", false
 }
 
 // Startup is what a pane does once its shell is up: nothing, run a

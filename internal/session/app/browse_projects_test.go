@@ -289,6 +289,173 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("warns about a pane directory that is missing", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.repo.projects["blog"] = serving(t, "docs", "")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if got := blog.Warnings(); len(got) != 1 || !errors.Is(got[0], app.ErrMissingDirectory) ||
+			!strings.Contains(got[0].Error(), "/srv/blog/docs") {
+			t.Fatalf("got %v, want /srv/blog/docs missing", got)
+		}
+	})
+
+	t.Run("doesn't warn about a directory opening clones", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		delete(s.sessions.running, "shop")
+		delete(s.workspace.dirs, "/srv/shop/front")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if shop, _ := s.browser.last().overview("shop"); len(shop.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", shop.Warnings())
+		}
+	})
+
+	t.Run("doesn't warn about directories under a missing root", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		delete(s.workspace.dirs, "/srv/blog")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) > 0 {
+			t.Fatalf("got %v, want the missing root alone", blog.Warnings())
+		}
+	})
+
+	t.Run("warns about a command whose program can't be found", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.repo.projects["blog"] = serving(t, "", "hugo server")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if got := blog.Warnings(); len(got) != 1 || !errors.Is(got[0], app.ErrMissingProgram) ||
+			!strings.Contains(got[0].Error(), "hugo") {
+			t.Fatalf("got %v, want hugo not found", got)
+		}
+	})
+
+	t.Run("doesn't warn about a program that can be run", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.repo.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", blog.Warnings())
+		}
+	})
+
+	t.Run("doesn't look for programs in panes whose before commands may provide them", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.repo.projects["blog"] = serving(t, "", "npm run dev", "nvm use")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", blog.Warnings())
+		}
+	})
+
+	t.Run("warns about the windows a session weaver started would get back", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = owned(t, "shop")
+		delete(s.workspace.dirs, "/srv/shop/logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if got := shop.Warnings(); len(got) != 1 || !strings.Contains(got[0].Error(), "/srv/shop/logs") {
+			t.Fatalf("got %v, want /srv/shop/logs missing", got)
+		}
+	})
+
+	t.Run("doesn't warn about the windows a running session has", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		delete(s.workspace.dirs, "/srv/shop/logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if shop, _ := s.browser.last().overview("shop"); len(shop.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", shop.Warnings())
+		}
+	})
+
+	t.Run("warns about a repository restoring a window doesn't clone", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = owned(t, "logs")
+		delete(s.workspace.dirs, "/srv/shop/back")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if got := shop.Warnings(); len(got) != 1 || !strings.Contains(got[0].Error(), "/srv/shop/back") {
+			t.Fatalf("got %v, want /srv/shop/back missing", got)
+		}
+	})
+
+	t.Run("doesn't look for programs in panes that set their PATH", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		env, err := domain.NewEnv(map[string]string{"PATH": "/opt/hugo/bin"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.repo.projects["blog"] = serving(t, "", "hugo server").WithEnv(env)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", blog.Warnings())
+		}
+	})
+
+	t.Run("warns once about a directory several panes share", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		dir, err := domain.NewPaneDir("docs")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var windows []domain.Window
+		for _, raw := range []string{"one", "two"} {
+			name, err := domain.NewWindowName(raw)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			window, err := domain.NewWindow(name, domain.NewPane().In(dir))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			windows = append(windows, window)
+		}
+		blog, err := project(t, "blog").WithWindows(windows...)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.repo.projects["blog"] = blog
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) != 1 {
+			t.Fatalf("got %v, want one warning", blog.Warnings())
+		}
+	})
+
+	t.Run("doesn't warn about a session weaver didn't start", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		delete(s.workspace.dirs, "/srv/shop/logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if shop, _ := s.browser.last().overview("shop"); len(shop.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", shop.Warnings())
+		}
+	})
+
 	t.Run("ends without error when the user quits", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		if err := s.browse(answer(true)); err != nil || len(s.browser.shown) != 1 {
@@ -439,6 +606,39 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("got %v, want the browser's error", err)
 		}
 	})
+}
+
+// serving is blog with one pane, in dir, running startup (none when
+// blank) after the before commands.
+func serving(t *testing.T, dir, startup string, before ...string) domain.Project {
+	t.Helper()
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("building the blog project: %v", err)
+		}
+	}
+	paneDir, err := domain.NewPaneDir(dir)
+	must(err)
+	pane := domain.NewPane().In(paneDir)
+	if startup != "" {
+		cmd, err := domain.NewCommand(startup)
+		must(err)
+		pane = pane.Running(cmd)
+	}
+	var cmds []domain.Command
+	for _, raw := range before {
+		cmd, err := domain.NewCommand(raw)
+		must(err)
+		cmds = append(cmds, cmd)
+	}
+	name, err := domain.NewWindowName("blog")
+	must(err)
+	window, err := domain.NewWindow(name, pane.RunningFirst(cmds...))
+	must(err)
+	blog, err := project(t, "blog").WithWindows(window)
+	must(err)
+	return blog
 }
 
 func isProjectNotFound(err error) bool {

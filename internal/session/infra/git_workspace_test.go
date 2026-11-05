@@ -57,6 +57,46 @@ func TestGitWorkspaceExists(t *testing.T) {
 	}
 }
 
+func TestGitWorkspaceExecutable(t *testing.T) {
+	workspace := infra.NewGitWorkspace(io.Discard)
+
+	t.Run("finds a program on PATH", func(t *testing.T) {
+		requireTool(t, "sh")
+		if !workspace.Executable("sh", t.TempDir()) {
+			t.Fatal("got sh not found, want it on PATH")
+		}
+	})
+
+	t.Run("doesn't find a program missing from PATH", func(t *testing.T) {
+		if workspace.Executable("weaver-no-such-program", t.TempDir()) {
+			t.Fatal("got a missing program found")
+		}
+	})
+
+	t.Run("finds a script by its path from the directory", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "bin", "dev"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !workspace.Executable("./bin/dev", dir) || workspace.Executable("./bin/dev", t.TempDir()) {
+			t.Fatal("want ./bin/dev found from its directory only")
+		}
+	})
+
+	t.Run("doesn't run a file that isn't executable", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "notes"), []byte("todo\n"), 0o644); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if workspace.Executable("./notes", dir) {
+			t.Fatal("got a plain file executable")
+		}
+	})
+}
+
 func TestGitWorkspaceClone(t *testing.T) {
 	remote := bareRepository(t)
 	workspace := infra.NewGitWorkspace(io.Discard)
