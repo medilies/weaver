@@ -189,7 +189,7 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 			pane = pane.In(dir)
 		}
 		if _, err := domain.NewPaneName(label); err != nil && len(order) > 1 {
-			label = "pane " + strconv.Itoa(i+1)
+			label = domain.DefaultPaneName(i).String()
 		}
 		if name, err := domain.NewPaneName(unique(label, taken)); err == nil {
 			pane = pane.Named(name)

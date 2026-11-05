@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -230,8 +229,8 @@ func askWindow(
 	}
 	built := make([]domain.Pane, 0, len(panes))
 	for i, pane := range panes {
-		if pane.name == "" && len(panes) > 1 {
-			pane.name = "pane " + strconv.Itoa(i+1) // borders need a label
+		if len(panes) > 1 {
+			pane.name = pane.label(i) // borders need a label
 		}
 		p, err := pane.pane(i)
 		if err != nil {
@@ -276,15 +275,19 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, v
 		huh.NewInput().Title("Pane name").
 			Description("Shown in the pane's top border; a window with several panes needs one per pane.").
 			Value(&a.name).Validate(func(s string) error {
-			if strings.TrimSpace(s) == "" {
-				return nil
+			label := domain.DefaultPaneName(index)
+			switch {
+			case strings.TrimSpace(s) != "":
+				name, err := domain.NewPaneName(s)
+				if err != nil {
+					return err
+				}
+				label = name
+			case index == 0:
+				return nil // a single pane needs no label
 			}
-			name, err := domain.NewPaneName(s)
-			if err != nil {
-				return err
-			}
-			for _, e := range earlier {
-				if strings.TrimSpace(e.name) == name.String() {
+			for i, e := range earlier {
+				if e.label(i) == label.String() {
 					return domain.ErrDuplicatePaneName
 				}
 			}
@@ -297,11 +300,7 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, v
 	if index > 0 {
 		targets := make([]huh.Option[int], 0, index)
 		for i, e := range earlier {
-			label := e.name
-			if label == "" {
-				label = "pane " + strconv.Itoa(i+1)
-			}
-			targets = append(targets, huh.NewOption(label, i))
+			targets = append(targets, huh.NewOption(e.label(i), i))
 		}
 		layout = append(layout,
 			huh.NewSelect[int]().Title("Split").Description("The pane this one is carved out of.").
@@ -341,6 +340,15 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, v
 		running.Title(title),
 		huh.NewGroup(extras...).Title(title),
 	}
+}
+
+// label is the name of the pane at index, or its default in a window with
+// several panes.
+func (a *paneAnswers) label(index int) string {
+	if name := strings.TrimSpace(a.name); name != "" {
+		return name
+	}
+	return domain.DefaultPaneName(index).String()
 }
 
 func (a *paneAnswers) pane(index int) (domain.Pane, error) {

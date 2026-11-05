@@ -24,6 +24,12 @@ func TestNewWindowName(t *testing.T) {
 	})
 }
 
+func TestDefaultPaneName(t *testing.T) {
+	if got := domain.DefaultPaneName(1).String(); got != "pane 2" {
+		t.Fatalf("got %q, want %q", got, "pane 2")
+	}
+}
+
 func TestNewPaneName(t *testing.T) {
 	t.Run("rejects blank names", func(t *testing.T) {
 		_, err := domain.NewPaneName("")

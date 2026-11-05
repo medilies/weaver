@@ -62,6 +62,12 @@ func NewPaneName(raw string) (PaneName, error) {
 	return PaneName{value: value}, nil
 }
 
+// DefaultPaneName is the label of the unnamed pane at index (from 0) of
+// a window with several panes, which need one each: "pane 1", "pane 2"…
+func DefaultPaneName(index int) PaneName {
+	return PaneName{value: "pane " + strconv.Itoa(index+1)}
+}
+
 func (n PaneName) String() string {
 	return n.value
 }
