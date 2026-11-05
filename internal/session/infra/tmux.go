@@ -48,7 +48,7 @@ func NewTmux(opts TmuxOptions) Tmux {
 	return Tmux{opts: opts}
 }
 
-// Find implements domain.SessionLauncher. A session is owned when it
+// Find implements domain.SessionFinder. A session is owned when it
 // carries its project's tag.
 func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
 	// A window's format sees its session's options too. "/" can't be in a

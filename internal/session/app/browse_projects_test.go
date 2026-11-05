@@ -67,6 +67,13 @@ func (s tmuxServer) Kill(name domain.ProjectName) error {
 	return nil
 }
 
+// unfindableSessions is a domain.SessionFinder that fails.
+type unfindableSessions struct{ err error }
+
+func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, bool, error) {
+	return domain.RunningSession{}, false, s.err
+}
+
 // browseSetup is blog, stopped, and shop, running in a session weaver
 // didn't start, with their configs stored as YAML.
 type browseSetup struct {
@@ -97,7 +104,7 @@ func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 func (s browseSetup) browse(confirm app.Confirmer) error {
 	server := tmuxServer{s.sessions}
 	return app.NewBrowseProjects(
-		s.browser, confirm, s.repo, s.documents, s.workspace,
+		s.browser, confirm, s.repo, s.documents, s.workspace, server,
 		app.NewListProjects(s.repo, server),
 		app.NewOpenProject(s.repo, server, s.workspace),
 		app.NewAddProject(s.repo, foundCheckouts{}, capturedSessions{}, s.form, confirm),
@@ -140,7 +147,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("shows why a readable config isn't valid, beside the config", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.repo, "shop"}, s.documents, s.workspace,
+		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.repo, "shop"}, s.documents, s.workspace, tmuxServer{s.sessions},
 			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if err != nil {
@@ -199,6 +206,86 @@ func TestBrowseProjects(t *testing.T) {
 		blog, _ := s.browser.last().overview("blog")
 		if _, ok := blog.WorkingTree(); ok {
 			t.Fatal("got a working tree for blog, want none")
+		}
+	})
+
+	t.Run("shows the windows a session weaver started lacks", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = owned(t, "shop")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		var got []string
+		for _, name := range shop.MissingWindows() {
+			got = append(got, name.String())
+		}
+		if want := []string{"logs"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("counts the configured windows a session weaver started still has", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = owned(t, "logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if present, configured := shop.WindowCount(); present != 1 || configured != 2 {
+			t.Fatalf("got %d/%d windows, want 1/2", present, configured)
+		}
+	})
+
+	t.Run("shows nothing missing from a session weaver started that has every window", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if missing := shop.MissingWindows(); len(missing) > 0 {
+			t.Fatalf("got %v missing, want none", missing)
+		}
+	})
+
+	t.Run("shows no windows missing from a session weaver didn't start", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = domain.NewRunningSession(false)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if session, ok := shop.Session(); !ok || session.Owned() || len(shop.MissingWindows()) > 0 {
+			t.Fatalf("got session %+v (%v) missing %v, want one weaver didn't start, missing nothing",
+				session, ok, shop.MissingWindows())
+		}
+	})
+
+	t.Run("shows no session for a stopped project", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if _, ok := blog.Session(); ok {
+			t.Fatal("got a session for blog, want none")
+		}
+	})
+
+	t.Run("keeps the summary when tmux can't describe a running session", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		err := app.NewBrowseProjects(s.browser, answer(true), s.repo, s.documents, s.workspace,
+			unfindableSessions{errors.New("tmux gone")},
+			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+		).Handle("/srv/new")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if _, ok := shop.Session(); ok || shop.Problem() != nil || !shop.RootExists() {
+			t.Fatalf("got session %v, problem %v, root existing %v; want no session and the summary intact",
+				ok, shop.Problem(), shop.RootExists())
 		}
 	})
 
@@ -345,7 +432,7 @@ func TestBrowseProjects(t *testing.T) {
 	t.Run("reports a browser that fails", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		failing := errors.New("no terminal")
-		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.repo, s.documents, s.workspace,
+		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.repo, s.documents, s.workspace, tmuxServer{s.sessions},
 			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if !errors.Is(err, failing) {

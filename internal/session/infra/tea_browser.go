@@ -52,6 +52,7 @@ var (
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	clonedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 )
 
 // browser is TeaBrowser's Bubble Tea model.
@@ -164,16 +165,21 @@ func (m browser) details() string {
 	return titleStyle.Render(config.File) + "\n\n" + header + "\n\n" + strings.TrimRight(string(config.Content), "\n")
 }
 
-// summary is where the project stands: its root and the working tree it
-// is in, its repositories, and what every pane starts with.
+// summary is where the project stands: its running session against its
+// config, its root and the working tree it is in, its repositories, and
+// what every pane starts with.
 func summary(project app.ProjectOverview) string {
+	var lines []string
+	if session, ok := project.Session(); ok {
+		lines = append(lines, sessionLine(project, session))
+	}
 	root := contractHome(project.Project().Root().String())
 	if !project.RootExists() {
 		root += " " + problemStyle.Render("✗ missing")
 	} else if tree, ok := project.WorkingTree(); ok {
 		root += "  " + workingTree(tree)
 	}
-	lines := []string{root}
+	lines = append(lines, root)
 
 	var checkouts []string
 	for _, status := range project.Checkouts() {
@@ -206,6 +212,31 @@ func summary(project app.ProjectOverview) string {
 		lines = append(lines, keysStyle.Render("env "+strings.Join(env, " · ")))
 	}
 	return strings.Join(lines, "\n")
+}
+
+// sessionLine is how the running session compares with the config, and
+// so what enter does: "● running · 2/3 windows · "logs" missing, enter
+// restores it".
+func sessionLine(project app.ProjectOverview, session domain.RunningSession) string {
+	line := runningMark + " running"
+	if !session.Owned() {
+		return line + keysStyle.Render(" · not started by weaver, enter attaches as it is")
+	}
+	present, configured := project.WindowCount()
+	line += fmt.Sprintf(" · %d/%d windows", present, configured)
+	missing := project.MissingWindows()
+	if len(missing) == 0 {
+		return line
+	}
+	names := make([]string, 0, len(missing))
+	for _, name := range missing {
+		names = append(names, fmt.Sprintf("%q", name.String()))
+	}
+	pronoun := "it"
+	if len(missing) > 1 {
+		pronoun = "them"
+	}
+	return line + " · " + warningStyle.Render(strings.Join(names, ", ")+" missing, enter restores "+pronoun)
 }
 
 // workingTree reads like a shell prompt's: "main* ↑2 ↓1", the star for

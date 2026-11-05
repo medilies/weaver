@@ -9,8 +9,8 @@ import (
 )
 
 // ProjectOverview is a registered project as the browser shows it: its
-// config as written and, when the config is valid, the project and where
-// it stands on disk.
+// config as written and, when the config is valid, the project, where it
+// stands on disk and how its running session differs from it.
 type ProjectOverview struct {
 	status     ProjectStatus
 	config     ConfigDocument
@@ -20,6 +20,9 @@ type ProjectOverview struct {
 	checkouts  []CheckoutStatus
 	tree       domain.WorkingTree
 	inGit      bool
+	session    domain.RunningSession
+	found      bool
+	missing    []domain.WindowName
 }
 
 // Name is the project's name.
@@ -67,6 +70,29 @@ func (o ProjectOverview) WorkingTree() (domain.WorkingTree, bool) {
 	return o.tree, o.inGit
 }
 
+// Session is the project's running session, or false when none runs.
+func (o ProjectOverview) Session() (domain.RunningSession, bool) {
+	return o.session, o.found
+}
+
+// MissingWindows are the configured windows the running session lacks,
+// in config order, which opening the project restores. Empty for a
+// session weaver didn't start, which opening leaves as it is.
+func (o ProjectOverview) MissingWindows() []domain.WindowName {
+	return slices.Clone(o.missing)
+}
+
+// WindowCount is how many of the configured windows the running session
+// has, and how many are configured; both zero unless weaver started the
+// session, since only then are its windows compared with the config.
+func (o ProjectOverview) WindowCount() (present, configured int) {
+	if !o.found || !o.session.Owned() {
+		return 0, 0
+	}
+	configured = len(o.project.Windows())
+	return configured - len(o.missing), configured
+}
+
 // CheckoutStatus is a project's repository and whether it is cloned.
 type CheckoutStatus struct {
 	checkout domain.Checkout
@@ -91,6 +117,7 @@ type BrowseProjects struct {
 	projects  domain.ProjectRepository
 	documents ProjectDocuments
 	workspace domain.Workspace
+	sessions  domain.SessionFinder
 	list      ListProjects
 	open      OpenProject
 	add       AddProject
@@ -106,6 +133,7 @@ func NewBrowseProjects(
 	projects domain.ProjectRepository,
 	documents ProjectDocuments,
 	workspace domain.Workspace,
+	sessions domain.SessionFinder,
 	list ListProjects,
 	open OpenProject,
 	add AddProject,
@@ -114,7 +142,7 @@ func NewBrowseProjects(
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
-		list: list, open: open, add: add, edit: edit, kill: kill,
+		sessions: sessions, list: list, open: open, add: add, edit: edit, kill: kill,
 	}
 }
 
@@ -147,8 +175,8 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 	}
 }
 
-// overviews are the registered projects, with their configs and where
-// they stand on disk.
+// overviews are the registered projects, with their configs, where they
+// stand on disk and how their running sessions differ from them.
 func (uc BrowseProjects) overviews() ([]ProjectOverview, error) {
 	statuses, err := uc.list.Handle()
 	if err != nil {
@@ -162,7 +190,8 @@ func (uc BrowseProjects) overviews() ([]ProjectOverview, error) {
 }
 
 // overview is the project status shows, its config and, when the config
-// is valid, where it stands on disk.
+// is valid, where it stands on disk and how its running session differs
+// from it.
 func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	overview := ProjectOverview{status: status}
 	overview.config, overview.problem = uc.documents.Document(status.Name())
@@ -191,6 +220,21 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	overview.project, overview.rootExists, overview.checkouts = project, rootExists, checkouts
 	if rootExists {
 		overview.tree, overview.inGit = uc.workspace.WorkingTree(project.Root().String())
+	}
+	if !status.Running() {
+		return overview
+	}
+	// The session only adds to the summary: if tmux can't describe it,
+	// the browser shows the project as running, without the comparison.
+	overview.session, overview.found, err = uc.sessions.Find(project.Name())
+	if err != nil {
+		overview.found = false
+		return overview
+	}
+	if overview.found && overview.session.Owned() {
+		for _, placement := range project.Restoration(overview.session.Windows()) {
+			overview.missing = append(overview.missing, placement.Window().Name())
+		}
 	}
 	return overview
 }

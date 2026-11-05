@@ -25,11 +25,17 @@ func (s RunningSession) Windows() []WindowName {
 	return slices.Clone(s.windows)
 }
 
+// SessionFinder looks up projects' running tmux sessions. Infrastructure
+// provides the implementation.
+type SessionFinder interface {
+	// Find reports the running session named after the project, if any.
+	Find(name ProjectName) (RunningSession, bool, error)
+}
+
 // SessionLauncher starts projects' tmux sessions and puts the user in
 // them. Infrastructure provides the implementation.
 type SessionLauncher interface {
-	// Find reports the running session named after the project, if any.
-	Find(name ProjectName) (RunningSession, bool, error)
+	SessionFinder
 	// Start creates a detached session from plan. If a step fails, none
 	// of the session is left running.
 	Start(plan SessionPlan) error
