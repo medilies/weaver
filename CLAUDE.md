@@ -17,7 +17,7 @@
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux and git tests skip when the tool is missing, except in CI, which installs tmux.
-- The huh forms and the browser aren't unit-tested; check them by running `weave add` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
+- The huh forms and the browser aren't unit-tested; check them by running `weave freeze` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
 
 ## Workflow
 

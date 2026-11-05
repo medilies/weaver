@@ -51,8 +51,11 @@ type SessionLister interface {
 // not. Infrastructure provides the implementation.
 type SessionCapturer interface {
 	// Capture returns the session's windows in order, their panes in an
-	// order that recreates them, with absolute directories.
+	// order that recreates them, with absolute directories and the
+	// commands running in them typed at their prompts, not run.
 	Capture(session string) ([]Window, error)
+	// Current is the session weaver runs in, or ErrNotInsideTmux.
+	Current() (string, error)
 }
 
 // SessionKiller stops projects' tmux sessions. Infrastructure provides the

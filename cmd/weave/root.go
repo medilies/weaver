@@ -37,7 +37,7 @@ config, to open, add, edit, kill or delete them.`,
 		},
 	}
 	root.AddCommand(
-		newAddCommand(weaver),
+		newFreezeCommand(weaver),
 		newEditCommand(weaver),
 		newKillCommand(weaver),
 		newListCommand(weaver),

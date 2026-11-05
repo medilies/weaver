@@ -21,9 +21,10 @@ type TmuxOptions struct {
 	Global []string
 	// Env is the environment tmux runs with; nil inherits weaver's.
 	Env []string
-	// Inside reports that weaver runs inside tmux ($TMUX is set), where
-	// attaching switches the current client to the session instead.
-	Inside bool
+	// Pane is the pane weaver runs in ($TMUX_PANE), empty outside tmux.
+	// Inside tmux, attaching switches the current client to the session
+	// instead.
+	Pane string
 	// Size reports the terminal's size in cells. A new session starts that
 	// big, so its percentage splits come out as they will be seen; without
 	// it, tmux's default size applies.
@@ -141,7 +142,10 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 
 // Capture implements domain.SessionCapturer. Panes are named after their
 // labels, else "pane N" in a window with several; a name already taken in
-// its window or session gets a number.
+// its window or session gets a number. The job in the foreground of a
+// pane's terminal, if any, is typed at its prompt but not run: ps rebuilds
+// it from its arguments, losing quotes, pipes and variables, so the user
+// checks it first. The pane weaver runs in gets none: its job is weaver.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} #{window_name}")
 	if err != nil {
@@ -185,9 +189,18 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 		if err != nil {
 			return nil, err
 		}
+		pid, err := t.run("display-message", "-p", "-t", target, "#{pane_pid}")
+		if err != nil {
+			return nil, err
+		}
 		pane := domain.NewPane()
 		if dir, err := domain.NewPaneDir(path); err == nil {
 			pane = pane.In(dir)
+		}
+		if target != t.opts.Pane {
+			if cmd, ok := foreground(pid); ok {
+				pane = pane.Prefilling(cmd)
+			}
 		}
 		if _, err := domain.NewPaneName(label); err != nil && len(order) > 1 {
 			label = domain.DefaultPaneName(i).String()
@@ -209,6 +222,33 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 		panes = append(panes, pane)
 	}
 	return panes, nil
+}
+
+// foreground is the command line of the job in the foreground of the
+// terminal of the pane whose process is pid: none when that process, its
+// shell, is idle at the prompt. It is read best effort, as the job may end
+// meanwhile.
+func foreground(pid string) (domain.Command, bool) {
+	group, err := exec.Command("ps", "-o", "tpgid=", "-p", pid).Output()
+	leader := strings.TrimSpace(string(group))
+	if err != nil || leader == pid || strings.HasPrefix(leader, "-") {
+		return domain.Command{}, false // -1: no terminal
+	}
+	// -ww: macOS's ps cuts the line at the terminal's width otherwise.
+	args, err := exec.Command("ps", "-ww", "-o", "args=", "-p", leader).Output()
+	if err != nil {
+		return domain.Command{}, false
+	}
+	cmd, err := domain.NewCommand(string(args))
+	return cmd, err == nil
+}
+
+// Current implements domain.SessionCapturer.
+func (t Tmux) Current() (string, error) {
+	if t.opts.Pane == "" {
+		return "", domain.ErrNotInsideTmux
+	}
+	return t.run("display-message", "-p", "-t", t.opts.Pane, "#{session_name}")
 }
 
 // unique is name, or name with the first free number added, and marks
@@ -250,7 +290,7 @@ func (t Tmux) Kill(name domain.ProjectName) error {
 // weaver with `tmux attach-session`, like the shell scripts it replaces.
 func (t Tmux) Attach(name domain.ProjectName) error {
 	target := "=" + name.String()
-	if t.opts.Inside {
+	if t.opts.Pane != "" {
 		_, err := t.run("switch-client", "-t", target)
 		return err
 	}

@@ -36,21 +36,33 @@ func (f foundCheckouts) Detect(domain.ProjectRoot) (domain.Checkouts, error) {
 	return f.checkouts, nil
 }
 
-// capturedSessions is a fake domain.SessionCapturer: session → windows.
-type capturedSessions map[string][]domain.Window
+// capturedSessions is a fake domain.SessionCapturer: running sessions'
+// windows, and the session weaver runs in, if any.
+type capturedSessions struct {
+	windows map[string][]domain.Window
+	current string
+}
 
 func (c capturedSessions) Capture(session string) ([]domain.Window, error) {
-	windows, ok := c[session]
+	windows, ok := c.windows[session]
 	if !ok {
 		return nil, fmt.Errorf("can't find session: %s", session)
 	}
 	return windows, nil
 }
 
+func (c capturedSessions) Current() (string, error) {
+	if c.current == "" {
+		return "", domain.ErrNotInsideTmux
+	}
+	return c.current, nil
+}
+
 type addSetup struct {
-	repo  inMemoryRepository
-	form  *fakeForm
-	found domain.Checkouts
+	repo    inMemoryRepository
+	form    *fakeForm
+	found   domain.Checkouts
+	current string // the session weaver runs in; none outside tmux
 }
 
 func newAddSetup(t *testing.T) addSetup {
@@ -72,7 +84,10 @@ func newAddSetup(t *testing.T) addSetup {
 
 func (s addSetup) add(t *testing.T, confirm app.Confirmer, request app.AddRequest) (domain.Project, error) {
 	t.Helper()
-	sessions := capturedSessions{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()}
+	sessions := capturedSessions{
+		windows: map[string][]domain.Window{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()},
+		current: s.current,
+	}
 	return app.NewAddProject(s.repo, foundCheckouts{s.found}, sessions, s.form, confirm).Handle(request)
 }
 
@@ -150,7 +165,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("starts from a running session's windows", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "store-dev"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(s.form.draft.Windows) != 2 || s.form.draft.Windows[1].Name().String() != "logs" {
@@ -160,7 +175,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("suggests the session's name, keeping the working directory as root", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "store-dev"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "store-dev" || s.form.draft.Root != "/srv/shop" {
@@ -168,9 +183,19 @@ func TestAddProject(t *testing.T) {
 		}
 	})
 
+	t.Run("prefers the given name to the session's", func(t *testing.T) {
+		s := newAddSetup(t)
+		if _, err := s.add(t, answer(true), app.AddRequest{Name: "store", WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.form.draft.Name != "store" {
+			t.Fatalf("got name %q, want store", s.form.draft.Name)
+		}
+	})
+
 	t.Run("suggests the root's name when the session's isn't a valid project name", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "my.session"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "my.session"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "shop" {
@@ -180,8 +205,30 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("reports a session it can't read, before the form", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "missing"}); err == nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "missing"}); err == nil {
 			t.Fatal("got no error, want the missing session reported")
+		}
+		if s.form.draft.Root != "" {
+			t.Fatal("the form ran, want it skipped")
+		}
+	})
+
+	t.Run("freezes the session it runs in", func(t *testing.T) {
+		s := newAddSetup(t)
+		s.current = "store-dev"
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.form.draft.Name != "store-dev" || len(s.form.draft.Windows) != 2 {
+			t.Fatalf("got name %q and %d windows, want store-dev's name and 2 windows", s.form.draft.Name, len(s.form.draft.Windows))
+		}
+	})
+
+	t.Run("can't freeze the current session outside tmux", func(t *testing.T) {
+		s := newAddSetup(t)
+		_, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession})
+		if !errors.Is(err, domain.ErrNotInsideTmux) {
+			t.Fatalf("got %v, want ErrNotInsideTmux", err)
 		}
 		if s.form.draft.Root != "" {
 			t.Fatal("the form ran, want it skipped")

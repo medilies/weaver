@@ -17,7 +17,7 @@ var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 // reservedNames are weave's own commands: `weave <name>` runs the
 // command, so a project named after one could never be opened.
-var reservedNames = []string{"add", "completion", "edit", "help", "kill", "list", "show"}
+var reservedNames = []string{"completion", "edit", "freeze", "help", "kill", "list", "show"}
 
 // ProjectName is a registered project's identifier: non-empty, trimmed,
 // and used both as a lookup key and as the tmux session name.

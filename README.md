@@ -17,15 +17,16 @@ go install github.com/medilies/weaver/cmd/weave@latest   # puts weave in ~/go/bi
 ## Usage
 
 ```sh
-weave add                # register the project in the current directory, through forms
-weave add --from scratch # same, starting from the windows and panes of the running session scratch
-weave bicyclette         # start or attach the bicyclette session, from anywhere
-weave .                  # same, for the project whose root holds the current directory
-weave                    # browse the projects, to open, add, edit, kill or delete them
-weave edit bicyclette    # edit its config in $VISUAL or $EDITOR; only a valid config is saved
-weave kill bicyclette    # stop the session and everything running in it
-weave list               # registered projects, and which sessions run
-weave show bicyclette    # print its config file
+weave freeze          # register the project in the current directory, through forms
+weave freeze scratch  # same, starting from the windows, panes and commands of the running session scratch
+weave freeze .        # same, from the session you're in
+weave bicyclette      # start or attach the bicyclette session, from anywhere
+weave .               # same, for the project whose root holds the current directory
+weave                 # browse the projects, to open, add, edit, kill or delete them
+weave edit bicyclette # edit its config in $VISUAL or $EDITOR; only a valid config is saved
+weave kill bicyclette # stop the session and everything running in it
+weave list            # registered projects, and which sessions run
+weave show bicyclette # print its config file
 ```
 
 To complete project names with Tab, load weave's completion in your
@@ -43,7 +44,7 @@ beside the selected one's config:
 | --- | --- |
 | ↑ ↓ or k j | select a project |
 | enter | open it, like `weave <project>` |
-| a | add the current directory, like `weave add` |
+| a | add the current directory, like `weave freeze` |
 | e | edit its config, like `weave edit <project>` |
 | x | stop its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
@@ -172,7 +173,7 @@ windows:
 | `env` (pane) | Overrides the project's, per variable. |
 
 Unknown fields are errors: they are usually typos. Comments are kept by
-`weave edit`, but not when `weave add` replaces a config.
+`weave edit`, but not when `weave freeze` replaces a config.
 
 When weaver saves a config, it writes `weaver.schema.json` next to it
 and points the config at it with a first line of

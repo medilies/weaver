@@ -68,6 +68,9 @@ var (
 	// ErrSessionNotRunning is returned when killing a session that isn't
 	// running.
 	ErrSessionNotRunning = errors.New("session not running")
+	// ErrNotInsideTmux is returned when asking for the session weaver runs
+	// in while it runs outside tmux.
+	ErrNotInsideTmux = errors.New("not inside tmux; name a session")
 	// ErrInvalidCheckoutDir is returned for a repository directory that
 	// isn't inside the project root.
 	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")

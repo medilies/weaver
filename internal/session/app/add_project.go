@@ -8,7 +8,7 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// AddRequest is how `weave add` was called.
+// AddRequest is how `weave freeze` was called.
 type AddRequest struct {
 	// Name is the project's name; by default the root's base name.
 	Name string
@@ -17,14 +17,19 @@ type AddRequest struct {
 	Root string
 	// WorkingDir is the directory weaver runs in.
 	WorkingDir string
-	// From is a running tmux session whose windows and panes the form
-	// starts from; it also suggests the name.
-	From string
+	// Session is a running tmux session, or CurrentSession, whose windows,
+	// panes and running commands the form starts from; it also suggests
+	// the name.
+	Session string
 }
+
+// CurrentSession, as AddRequest.Session, is the session weaver runs in.
+// tmux turns "." in session names into "_", so no session is named so.
+const CurrentSession = "."
 
 // AddProject registers a project the user describes in a form, started
 // from what weaver finds: the repositories under its root, and the layout
-// of a running session if asked.
+// and commands of a running session if asked.
 type AddProject struct {
 	projects domain.ProjectRepository
 	detector domain.CheckoutDetector
@@ -81,14 +86,20 @@ func (uc AddProject) draft(request AddRequest) (ProjectDraft, error) {
 		root = filepath.Join(request.WorkingDir, root)
 	}
 	draft := ProjectDraft{Name: request.Name, Root: filepath.Clean(root)}
-	if request.From != "" {
-		windows, err := uc.capturer.Capture(request.From)
+	if session := request.Session; session != "" {
+		if session == CurrentSession {
+			var err error
+			if session, err = uc.capturer.Current(); err != nil {
+				return ProjectDraft{}, err
+			}
+		}
+		windows, err := uc.capturer.Capture(session)
 		if err != nil {
 			return ProjectDraft{}, err
 		}
 		draft.Windows = windows
-		if _, err := domain.NewProjectName(request.From); err == nil && draft.Name == "" {
-			draft.Name = request.From
+		if _, err := domain.NewProjectName(session); err == nil && draft.Name == "" {
+			draft.Name = session
 		}
 	}
 	if draft.Name == "" {

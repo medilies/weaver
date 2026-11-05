@@ -85,6 +85,27 @@ func (s tmuxServer) waitFor(t *testing.T, pane, text string) string {
 	}
 }
 
+// busy waits until the first pane of session runs a command, as Capture
+// sees it from outside tmux, and returns its startup.
+func (s tmuxServer) busy(t *testing.T, session string) domain.Startup {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		windows, err := s.tmux().Capture(session)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		startup := windows[0].Panes()[0].Startup()
+		if _, ok := startup.Command(); ok {
+			return startup
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session %s never ran a command", session)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 // paneLabelled is the ID of the pane labelled label in session.
 func (s tmuxServer) paneLabelled(t *testing.T, session, label string) string {
 	t.Helper()
@@ -501,6 +522,45 @@ func TestTmuxCapture(t *testing.T) {
 		}
 	})
 
+	t.Run("types the command in a pane's foreground without running it", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "busy")
+		server.query(t, "send-keys", "-t", "busy:", "sleep 300", "Enter")
+
+		startup := server.busy(t, "busy")
+		if cmd, _ := startup.Command(); cmd.String() != "sleep 300" || startup.Submits() {
+			t.Fatalf("got command %q (run: %t), want sleep 300 only typed", cmd, startup.Submits())
+		}
+	})
+
+	t.Run("gives the pane weaver runs in no command", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "self")
+		pane := server.query(t, "display-message", "-p", "-t", "self:", "#{pane_id}")
+		server.query(t, "send-keys", "-t", pane, "sleep 300", "Enter")
+		server.busy(t, "self")
+		tmux := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Pane: pane})
+
+		windows, err := tmux.Capture("self")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cmd, ok := windows[0].Panes()[0].Startup().Command(); ok {
+			t.Fatalf("got command %q, want none: it would be weaver itself", cmd)
+		}
+	})
+
+	t.Run("gives a pane idle at its prompt no command", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "idle")
+		server.waitFor(t, "idle:", "$")
+
+		windows, err := server.tmux().Capture("idle")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cmd, ok := windows[0].Panes()[0].Startup().Command(); ok {
+			t.Fatalf("got command %q, want none", cmd)
+		}
+	})
+
 	t.Run("numbers window names taken already", func(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "twins", "-n", "bash")
 		server.query(t, "new-window", "-d", "-t", "twins:", "-n", "bash")
@@ -515,6 +575,34 @@ func TestTmuxCapture(t *testing.T) {
 		}
 		if want := []string{"bash", "bash 2"}; !slices.Equal(names, want) {
 			t.Fatalf("got %q, want %q", names, want)
+		}
+	})
+}
+
+func TestTmuxCurrent(t *testing.T) {
+	server := newTmuxServer(t)
+
+	t.Run("names the session of the pane weaver runs in", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "first")
+		server.query(t, "new-session", "-d", "-s", "second")
+		tmux := infra.NewTmux(infra.TmuxOptions{
+			Global: server.global,
+			Env:    server.env,
+			Pane:   server.query(t, "display-message", "-p", "-t", "first:", "#{pane_id}"),
+		})
+
+		got, err := tmux.Current()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "first" {
+			t.Fatalf("got %q, want first", got)
+		}
+	})
+
+	t.Run("reports running outside tmux", func(t *testing.T) {
+		if _, err := server.tmux().Current(); !errors.Is(err, domain.ErrNotInsideTmux) {
+			t.Fatalf("got %v, want ErrNotInsideTmux", err)
 		}
 	})
 }

@@ -250,7 +250,7 @@ func askWindow(
 }
 
 // capturedAnswers pre-fills a pane screen from a captured pane, with its
-// directory relative to the root when under it.
+// directory relative to the root when under it and the command it runs.
 func capturedAnswers(root domain.ProjectRoot, pane domain.Pane) *paneAnswers {
 	answers := &paneAnswers{name: pane.Name().String(), dir: pane.Dir().String(), direction: "right", run: true, fixed: true}
 	if root.Contains(answers.dir) {
@@ -258,6 +258,9 @@ func capturedAnswers(root domain.ProjectRoot, pane domain.Pane) *paneAnswers {
 	}
 	if split, ok := pane.Split(); ok {
 		answers.of, answers.direction, answers.size = split.Of(), split.Direction().String(), split.Size().String()
+	}
+	if cmd, ok := pane.Startup().Command(); ok {
+		answers.command, answers.run = cmd.String(), pane.Startup().Submits()
 	}
 	return answers
 }

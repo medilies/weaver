@@ -22,7 +22,7 @@ type application struct {
 	listProjects   app.ListProjects
 	// documents reads configs as stored, for `show`.
 	documents app.ProjectDocuments
-	// sessions lists running tmux sessions, to complete `add --from`.
+	// sessions lists running tmux sessions, to complete `freeze`.
 	sessions domain.SessionLister
 }
 
@@ -35,7 +35,13 @@ func wire() (application, error) {
 	}
 
 	projects := infra.NewFileProjectRepository(filepath.Join(configDir, "weaver", "projects"))
-	tmux := infra.NewTmux(infra.TmuxOptions{Inside: os.Getenv("TMUX") != "", Size: infra.TerminalSize})
+	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
+	// counts with $TMUX, which names the server it belongs to.
+	var pane string
+	if os.Getenv("TMUX") != "" {
+		pane = os.Getenv("TMUX_PANE")
+	}
+	tmux := infra.NewTmux(infra.TmuxOptions{Pane: pane, Size: infra.TerminalSize})
 	workspace := infra.NewGitWorkspace(os.Stderr)
 
 	forms := infra.NewHuhForms()
