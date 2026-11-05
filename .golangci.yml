@@ -13,29 +13,18 @@ linters:
         domain:
           files:
             - "**/internal/session/domain/*.go"
-          deny:
-            - pkg: github.com/spf13/cobra
-              desc: domain must stay framework-free
-            - pkg: charm.land
-              desc: terminal forms belong in infra
-            - pkg: github.com/medilies/weaver/internal/session/app
-              desc: domain must not depend inward on the application layer
-            - pkg: github.com/medilies/weaver/internal/session/infra
-              desc: domain must not depend on infrastructure
-            - pkg: github.com/medilies/weaver/cmd/weave
-              desc: domain must not depend on the cmd layer
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/medilies/weaver/internal/session/domain # its own external tests
         app:
           files:
             - "**/internal/session/app/*.go"
-          deny:
-            - pkg: github.com/spf13/cobra
-              desc: application must stay framework-free
-            - pkg: charm.land
-              desc: terminal forms belong in infra
-            - pkg: github.com/medilies/weaver/internal/session/infra
-              desc: application must depend on domain ports, not infrastructure directly
-            - pkg: github.com/medilies/weaver/cmd/weave
-              desc: application must not depend on the cmd layer
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/medilies/weaver/internal/session/domain
+            - github.com/medilies/weaver/internal/session/app # its own external tests
 
 formatters:
   enable:

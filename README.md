@@ -177,9 +177,9 @@ as you type. Quote versions, as the schema wants: `"8.4"`, not `8.4`.
 
 ## Architecture
 
-The `Session` bounded context is organized by layer. `domain` and `app`
-never import Cobra, the terminal UI library or `infra`, which depguard
-rules in `.golangci.yml` enforce. Use cases depend on ports; `infra`
+The `Session` bounded context is organized by layer. `domain` imports
+only the standard library, and `app` only that and `domain`, which
+depguard allow-lists in `.golangci.yml` enforce. Use cases depend on ports; `infra`
 implements them and `cmd/weave` wires everything together.
 
 ```mermaid
