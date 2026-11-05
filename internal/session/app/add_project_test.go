@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -33,6 +34,17 @@ type foundCheckouts struct{ checkouts domain.Checkouts }
 
 func (f foundCheckouts) Detect(domain.ProjectRoot) (domain.Checkouts, error) {
 	return f.checkouts, nil
+}
+
+// capturedSessions is a fake domain.SessionCapturer: session → windows.
+type capturedSessions map[string][]domain.Window
+
+func (c capturedSessions) Capture(session string) ([]domain.Window, error) {
+	windows, ok := c[session]
+	if !ok {
+		return nil, fmt.Errorf("can't find session: %s", session)
+	}
+	return windows, nil
 }
 
 // installedRuntimes is a fake domain.RuntimeCatalog.
@@ -71,14 +83,16 @@ func newAddSetup(t *testing.T) addSetup {
 	}
 }
 
-func (s addSetup) add(confirm app.Confirmer, request app.AddRequest) (domain.Project, error) {
-	return app.NewAddProject(s.repo, foundCheckouts{s.found}, installedRuntimes{s.php}, s.form, confirm).Handle(request)
+func (s addSetup) add(t *testing.T, confirm app.Confirmer, request app.AddRequest) (domain.Project, error) {
+	t.Helper()
+	sessions := capturedSessions{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()}
+	return app.NewAddProject(s.repo, foundCheckouts{s.found}, installedRuntimes{s.php}, sessions, s.form, confirm).Handle(request)
 }
 
 func TestAddProject(t *testing.T) {
 	t.Run("starts from the working directory when no root is given", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Root != "/srv/shop" || s.form.draft.Name != "shop" {
@@ -88,7 +102,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("resolves a relative root against the working directory", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(answer(true), app.AddRequest{Root: "../blog", WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{Root: "../blog", WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Root != "/srv/blog" || s.form.draft.Name != "blog" {
@@ -98,7 +112,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("suggests the name given", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(answer(true), app.AddRequest{Name: "store", WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{Name: "store", WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "store" {
@@ -108,7 +122,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("offers the repositories found under the root", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if list := s.form.draft.Checkouts.List(); len(list) != 1 || list[0].Dir() != "back" {
@@ -118,7 +132,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("offers the installed versions", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got := s.form.draft.Runtimes; len(got) != 1 || got[0] != s.php {
@@ -128,7 +142,7 @@ func TestAddProject(t *testing.T) {
 
 	t.Run("saves the project the user described", func(t *testing.T) {
 		s := newAddSetup(t)
-		if _, err := s.add(answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, saved := s.repo.projects["shop"]; !saved {
@@ -140,7 +154,7 @@ func TestAddProject(t *testing.T) {
 		s := newAddSetup(t)
 		existing := rootedAt(t, "shop", "/srv/old-shop")
 		s.repo.projects["shop"] = existing
-		_, err := s.add(answer(false), app.AddRequest{WorkingDir: "/srv/shop"})
+		_, err := s.add(t, answer(false), app.AddRequest{WorkingDir: "/srv/shop"})
 		if !errors.Is(err, app.ErrAborted) || s.repo.projects["shop"].Root() != existing.Root() {
 			t.Fatalf("got %v, root %s; want ErrAborted and the old project kept", err, s.repo.projects["shop"].Root())
 		}
@@ -149,7 +163,7 @@ func TestAddProject(t *testing.T) {
 	t.Run("replaces a registered project when the user agrees", func(t *testing.T) {
 		s := newAddSetup(t)
 		s.repo.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
-		if _, err := s.add(answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got := s.repo.projects["shop"].Root().String(); got != "/srv/shop" {
@@ -157,10 +171,50 @@ func TestAddProject(t *testing.T) {
 		}
 	})
 
+	t.Run("starts from a running session's windows", func(t *testing.T) {
+		s := newAddSetup(t)
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "store-dev"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(s.form.draft.Windows) != 2 || s.form.draft.Windows[1].Name().String() != "logs" {
+			t.Fatalf("got %d windows, want the session's shop and logs", len(s.form.draft.Windows))
+		}
+	})
+
+	t.Run("suggests the session's name, keeping the working directory as root", func(t *testing.T) {
+		s := newAddSetup(t)
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "store-dev"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.form.draft.Name != "store-dev" || s.form.draft.Root != "/srv/shop" {
+			t.Fatalf("got name %q and root %q, want store-dev and /srv/shop", s.form.draft.Name, s.form.draft.Root)
+		}
+	})
+
+	t.Run("suggests the root's name when the session's isn't a valid project name", func(t *testing.T) {
+		s := newAddSetup(t)
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "my.session"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.form.draft.Name != "shop" {
+			t.Fatalf("got name %q, want shop", s.form.draft.Name)
+		}
+	})
+
+	t.Run("reports a session it can't read, before the form", func(t *testing.T) {
+		s := newAddSetup(t)
+		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", From: "missing"}); err == nil {
+			t.Fatal("got no error, want the missing session reported")
+		}
+		if s.form.draft.Root != "" {
+			t.Fatal("the form ran, want it skipped")
+		}
+	})
+
 	t.Run("saves nothing when the user cancels the form", func(t *testing.T) {
 		s := newAddSetup(t)
 		s.form.err = app.ErrAborted
-		_, err := s.add(answer(true), app.AddRequest{WorkingDir: "/srv/shop"})
+		_, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"})
 		if !errors.Is(err, app.ErrAborted) || len(s.repo.projects) != 0 {
 			t.Fatalf("got %v with %d projects saved, want ErrAborted and nothing saved", err, len(s.repo.projects))
 		}

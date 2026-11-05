@@ -19,6 +19,7 @@ type ProjectDraft struct {
 	Root      string
 	Checkouts domain.Checkouts // found under Root, offered for cloning
 	Runtimes  []domain.Runtime // installed versions, offered as pins
+	Windows   []domain.Window  // a running session's, to start from; none to start blank
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.

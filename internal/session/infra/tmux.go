@@ -138,6 +138,92 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 	return nil
 }
 
+// Capture implements domain.SessionCapturer. Panes are named after their
+// labels, else "pane N" in a window with several; a name already taken in
+// its window or session gets a number.
+func (t Tmux) Capture(session string) ([]domain.Window, error) {
+	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} #{window_name}")
+	if err != nil {
+		return nil, err
+	}
+	taken := make(map[string]bool)
+	var windows []domain.Window
+	for line := range strings.Lines(out) {
+		layout, rawName, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		cell, err := parseLayout(layout)
+		if err != nil {
+			return nil, err
+		}
+		panes, err := t.capturePanes(creationOrder(cell))
+		if err != nil {
+			return nil, err
+		}
+		name, err := domain.NewWindowName(unique(rawName, taken))
+		if err != nil {
+			name, _ = domain.NewWindowName(unique("window "+strconv.Itoa(len(windows)+1), taken))
+		}
+		window, err := domain.NewWindow(name, panes...)
+		if err != nil {
+			return nil, fmt.Errorf("window %q: %w", name, err)
+		}
+		windows = append(windows, window)
+	}
+	return windows, nil
+}
+
+func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
+	taken := make(map[string]bool)
+	panes := make([]domain.Pane, 0, len(order))
+	for i, p := range order {
+		target := "%" + strconv.Itoa(p.pane)
+		path, err := t.run("display-message", "-p", "-t", target, "#{pane_current_path}")
+		if err != nil {
+			return nil, err
+		}
+		label, err := t.run("display-message", "-p", "-t", target, "#{@label}")
+		if err != nil {
+			return nil, err
+		}
+		pane := domain.NewPane()
+		if dir, err := domain.NewPaneDir(path); err == nil {
+			pane = pane.In(dir)
+		}
+		if _, err := domain.NewPaneName(label); err != nil && len(order) > 1 {
+			label = "pane " + strconv.Itoa(i+1)
+		}
+		if name, err := domain.NewPaneName(unique(label, taken)); err == nil {
+			pane = pane.Named(name)
+		}
+		if p.splits {
+			size, err := domain.Percent(p.percent)
+			if err != nil {
+				return nil, err
+			}
+			split, err := domain.NewSplit(p.of, p.direction, size)
+			if err != nil {
+				return nil, err
+			}
+			pane = pane.Splitting(split)
+		}
+		panes = append(panes, pane)
+	}
+	return panes, nil
+}
+
+// unique is name, or name with the first free number added, and marks
+// the result taken. An empty name stays empty.
+func unique(name string, taken map[string]bool) string {
+	if name == "" {
+		return ""
+	}
+	candidate := name
+	for n := 2; taken[candidate]; n++ {
+		candidate = name + " " + strconv.Itoa(n)
+	}
+	taken[candidate] = true
+	return candidate
+}
+
 // Running implements domain.SessionLister.
 func (t Tmux) Running() ([]string, error) {
 	out, err := t.run("list-sessions", "-F", "#{session_name}")

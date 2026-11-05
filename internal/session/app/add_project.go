@@ -17,15 +17,19 @@ type AddRequest struct {
 	Root string
 	// WorkingDir is the directory weaver runs in.
 	WorkingDir string
+	// From is a running tmux session whose windows and panes the form
+	// starts from; it also suggests the name.
+	From string
 }
 
 // AddProject registers a project the user describes in a form, started
-// from what weaver finds: the repositories under its root and the
-// installed toolchain versions.
+// from what weaver finds: the repositories under its root, the installed
+// toolchain versions, and the layout of a running session if asked.
 type AddProject struct {
 	projects domain.ProjectRepository
 	detector domain.CheckoutDetector
 	catalog  domain.RuntimeCatalog
+	capturer domain.SessionCapturer
 	form     ProjectForm
 	confirm  Confirmer
 }
@@ -35,10 +39,13 @@ func NewAddProject(
 	projects domain.ProjectRepository,
 	detector domain.CheckoutDetector,
 	catalog domain.RuntimeCatalog,
+	capturer domain.SessionCapturer,
 	form ProjectForm,
 	confirm Confirmer,
 ) AddProject {
-	return AddProject{projects: projects, detector: detector, catalog: catalog, form: form, confirm: confirm}
+	return AddProject{
+		projects: projects, detector: detector, catalog: catalog, capturer: capturer, form: form, confirm: confirm,
+	}
 }
 
 // Handle runs the form and saves the project, asking before replacing a
@@ -76,6 +83,16 @@ func (uc AddProject) draft(request AddRequest) (ProjectDraft, error) {
 		root = filepath.Join(request.WorkingDir, root)
 	}
 	draft := ProjectDraft{Name: request.Name, Root: filepath.Clean(root)}
+	if request.From != "" {
+		windows, err := uc.capturer.Capture(request.From)
+		if err != nil {
+			return ProjectDraft{}, err
+		}
+		draft.Windows = windows
+		if _, err := domain.NewProjectName(request.From); err == nil && draft.Name == "" {
+			draft.Name = request.From
+		}
+	}
 	if draft.Name == "" {
 		draft.Name = filepath.Base(draft.Root)
 	}

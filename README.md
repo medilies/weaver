@@ -9,6 +9,7 @@ bespoke script per project.
 ```sh
 go install ./cmd/weaver   # puts weaver in ~/go/bin
 weaver add                # register the project in the current directory, through forms
+weaver add --from scratch # same, starting from the windows and panes of the running session scratch
 weaver bicyclette         # start or attach the bicyclette session, from anywhere
 weaver                    # same, for the project whose root holds the current directory
 weaver kill bicyclette    # stop the session and everything running in it

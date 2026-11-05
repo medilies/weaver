@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/medilies/weaver/internal/session/app"
+	"github.com/medilies/weaver/internal/session/domain"
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
@@ -18,6 +19,8 @@ type application struct {
 	killProject  app.KillProject
 	listProjects app.ListProjects
 	loadProject  app.LoadProject
+	// sessions lists running tmux sessions, to complete `add --from`.
+	sessions domain.SessionLister
 }
 
 // wire builds the use cases against this machine: configs under the user
@@ -49,7 +52,8 @@ func wire() (application, error) {
 	forms := infra.NewHuhForms()
 
 	return application{
-		addProject:   app.NewAddProject(projects, workspace, runtimes, forms, forms),
+		addProject:   app.NewAddProject(projects, workspace, runtimes, tmux, forms, forms),
+		sessions:     tmux,
 		openProject:  app.NewOpenProject(projects, tmux, workspace, runtimes),
 		killProject:  app.NewKillProject(tmux),
 		listProjects: app.NewListProjects(projects, tmux),

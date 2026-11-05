@@ -460,3 +460,87 @@ func (s tmuxServer) running(t *testing.T, name domain.ProjectName) bool {
 	}
 	return running
 }
+
+// layoutOf describes windows as "window: pane@dir | pane@dir right of #1 40%".
+func layoutOf(windows []domain.Window, root string) []string {
+	var out []string
+	for _, w := range windows {
+		var panes []string
+		for _, p := range w.Panes() {
+			text := p.Name().String() + "@" + strings.TrimPrefix(strings.TrimPrefix(p.Dir().String(), root), "/")
+			if s, ok := p.Split(); ok {
+				text += fmt.Sprintf(" %s of #%d %s", s.Direction(), s.Of()+1, s.Size())
+			}
+			panes = append(panes, text)
+		}
+		out = append(out, w.Name().String()+": "+strings.Join(panes, " | "))
+	}
+	return out
+}
+
+func TestTmuxCapture(t *testing.T) {
+	server := newTmuxServer(t)
+	root := t.TempDir()
+	for _, dir := range []string{"api", "app"} {
+		mkdir(t, filepath.Join(root, dir))
+	}
+
+	t.Run("reads back the layout weaver started", func(t *testing.T) {
+		if err := server.tmux().Start(planOf(t, "capture", fmt.Sprintf(`{"root": %q, "windows": [
+			{"name": "api", "panes": [
+				{"name": "api shell", "dir": "api"},
+				{"name": "task dev", "dir": "api", "split": {"direction": "right", "size": "40%%"}},
+				{"name": "psql", "split": {"direction": "below", "size": "30%%"}}
+			]},
+			{"name": "app", "panes": [
+				{"name": "side", "dir": "app"},
+				{"name": "main", "split": {"of": "side", "direction": "right", "size": "70%%"}},
+				{"name": "under side", "split": {"of": "side", "direction": "below", "size": "20%%"}}
+			]}
+		]}`, root), nil)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		windows, err := server.tmux().Capture("capture")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := []string{
+			"api: api shell@api | task dev@api right of #1 40% | psql@ below of #2 30%",
+			"app: side@app | main@ right of #1 70% | under side@ below of #1 20%",
+		}
+		if got := layoutOf(windows, root); !slices.Equal(got, want) {
+			t.Fatalf("got  %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("reads a session weaver didn't start", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "raw", "-x", "200", "-y", "50", "-c", root)
+		server.query(t, "split-window", "-h", "-l", "25%", "-t", "raw:", "-c", filepath.Join(root, "app"))
+
+		windows, err := server.tmux().Capture("raw")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := layoutOf(windows, root)[0], "pane 1@ | pane 2@app right of #1 25%"; !strings.HasSuffix(got, want) {
+			t.Fatalf("got %q, want it to end with %q", got, want)
+		}
+	})
+
+	t.Run("numbers window names taken already", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "twins", "-n", "bash")
+		server.query(t, "new-window", "-d", "-t", "twins:", "-n", "bash")
+
+		windows, err := server.tmux().Capture("twins")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var names []string
+		for _, w := range windows {
+			names = append(names, w.Name().String())
+		}
+		if want := []string{"bash", "bash 2"}; !slices.Equal(names, want) {
+			t.Fatalf("got %q, want %q", names, want)
+		}
+	})
+}

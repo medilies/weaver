@@ -3,6 +3,7 @@ package infra
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -32,7 +33,8 @@ func (HuhForms) Confirm(question string) (bool, error) {
 }
 
 // Fill implements app.ProjectForm: a screen for the project, then, for
-// each window, one for its name and one per pane.
+// each window, one for its name and one per pane. Windows captured from a
+// running session come first, pre-filled.
 func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	versions := versionsByKind(draft.Runtimes)
 	answers := projectAnswers{name: draft.Name, root: draft.Root}
@@ -48,19 +50,30 @@ func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	}
 
 	var windows []domain.Window
+	for _, captured := range draft.Windows {
+		window, kept, err := askWindow(project, windows, versions, &captured)
+		if err != nil {
+			return domain.Project{}, err
+		}
+		if kept {
+			windows = append(windows, window)
+		}
+	}
 	for {
-		window, err := askWindow(project.Name(), windows, versions)
+		if len(windows) > 0 {
+			more, err := f.Confirm("Add another window?")
+			if err != nil {
+				return domain.Project{}, err
+			}
+			if !more {
+				return project.WithWindows(windows...)
+			}
+		}
+		window, _, err := askWindow(project, windows, versions, nil)
 		if err != nil {
 			return domain.Project{}, err
 		}
 		windows = append(windows, window)
-		more, err := f.Confirm("Add another window?")
-		if err != nil {
-			return domain.Project{}, err
-		}
-		if !more {
-			return project.WithWindows(windows...)
-		}
 	}
 }
 
@@ -151,13 +164,23 @@ func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) 
 	return domain.NewProject(name, root).WithCheckouts(kept).WithEnv(env).WithRuntimes(runtimes), nil
 }
 
-// askWindow asks for a window's name, then for its panes one by one.
-func askWindow(project domain.ProjectName, earlier []domain.Window, versions map[domain.RuntimeKind][]string) (domain.Window, error) {
-	raw := ""
-	if len(earlier) == 0 {
-		raw = project.String()
+// askWindow asks for a window's name, then for its panes one by one. A
+// captured window starts pre-filled, may be dropped (it reports whether it
+// was kept), and keeps its panes' layout.
+func askWindow(
+	project domain.Project,
+	earlier []domain.Window,
+	versions map[domain.RuntimeKind][]string,
+	captured *domain.Window,
+) (domain.Window, bool, error) {
+	raw, keep := "", true
+	switch {
+	case captured != nil:
+		raw = captured.Name().String()
+	case len(earlier) == 0:
+		raw = project.Name().String()
 	}
-	if err := show(huh.NewGroup(huh.NewInput().Title("Window name").Value(&raw).Validate(func(s string) error {
+	fields := []huh.Field{huh.NewInput().Title("Window name").Value(&raw).Validate(func(s string) error {
 		name, err := domain.NewWindowName(s)
 		if err != nil {
 			return err
@@ -168,19 +191,37 @@ func askWindow(project domain.ProjectName, earlier []domain.Window, versions map
 			}
 		}
 		return nil
-	})).Title(fmt.Sprintf("Window %d", len(earlier)+1))); err != nil {
-		return domain.Window{}, err
+	})}
+	if captured != nil {
+		fields = append(fields, huh.NewConfirm().Title("Keep this window?").
+			Description(fmt.Sprintf("It has %d pane(s) in the running session.", len(captured.Panes()))).
+			Affirmative("Keep it").Negative("Drop it").Value(&keep))
+	}
+	if err := show(huh.NewGroup(fields...).Title(fmt.Sprintf("Window %d", len(earlier)+1))); err != nil {
+		return domain.Window{}, false, err
+	}
+	if !keep {
+		return domain.Window{}, false, nil
 	}
 	name, err := domain.NewWindowName(raw)
 	if err != nil {
-		return domain.Window{}, err
+		return domain.Window{}, false, err
 	}
 
 	var panes []*paneAnswers
-	for {
+	if captured != nil {
+		for _, pane := range captured.Panes() {
+			answers := capturedAnswers(project.Root(), pane)
+			if err := show(answers.groups(name, panes, versions)...); err != nil {
+				return domain.Window{}, false, err
+			}
+			panes = append(panes, answers)
+		}
+	}
+	for captured == nil {
 		pane := &paneAnswers{of: len(panes) - 1, direction: "right", run: true}
 		if err := show(pane.groups(name, panes, versions)...); err != nil {
-			return domain.Window{}, err
+			return domain.Window{}, false, err
 		}
 		panes = append(panes, pane)
 		if !pane.another {
@@ -194,11 +235,25 @@ func askWindow(project domain.ProjectName, earlier []domain.Window, versions map
 		}
 		p, err := pane.pane(i)
 		if err != nil {
-			return domain.Window{}, fmt.Errorf("pane %d: %w", i+1, err)
+			return domain.Window{}, false, fmt.Errorf("pane %d: %w", i+1, err)
 		}
 		built = append(built, p)
 	}
-	return domain.NewWindow(name, built...)
+	window, err := domain.NewWindow(name, built...)
+	return window, err == nil, err
+}
+
+// capturedAnswers pre-fills a pane screen from a captured pane, with its
+// directory relative to the root when under it.
+func capturedAnswers(root domain.ProjectRoot, pane domain.Pane) *paneAnswers {
+	answers := &paneAnswers{name: pane.Name().String(), dir: pane.Dir().String(), direction: "right", run: true, fixed: true}
+	if root.Contains(answers.dir) {
+		answers.dir, _ = filepath.Rel(root.String(), answers.dir)
+	}
+	if split, ok := pane.Split(); ok {
+		answers.of, answers.direction, answers.size = split.Of(), split.Direction().String(), split.Size().String()
+	}
+	return answers
 }
 
 // paneAnswers are a pane screen's fields.
@@ -212,6 +267,7 @@ type paneAnswers struct {
 	php, node       string // "" for the project's
 	env             string
 	another         bool // add another pane to the window
+	fixed           bool // captured: the window's panes are known
 }
 
 func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, versions map[domain.RuntimeKind][]string) []*huh.Group {
@@ -273,11 +329,11 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers, v
 	extras := []huh.Field{huh.NewText().Title("Note").
 		Description("Lines printed in the pane before its shell starts.").Value(&a.note)}
 	extras = append(extras, versionFields("for this pane", "Same as the project", versions, &a.php, &a.node)...)
-	extras = append(extras,
-		envField("Environment for this pane", &a.env),
-		huh.NewConfirm().Title(fmt.Sprintf("Add another pane to %s?", window)).
-			Affirmative("Yes").Negative("No").Value(&a.another),
-	)
+	extras = append(extras, envField("Environment for this pane", &a.env))
+	if !a.fixed {
+		extras = append(extras, huh.NewConfirm().Title(fmt.Sprintf("Add another pane to %s?", window)).
+			Affirmative("Yes").Negative("No").Value(&a.another))
+	}
 
 	title := fmt.Sprintf("%s, pane %d", window, index+1)
 	return []*huh.Group{

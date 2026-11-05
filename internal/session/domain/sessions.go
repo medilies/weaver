@@ -47,6 +47,14 @@ type SessionLister interface {
 	Running() ([]string, error)
 }
 
+// SessionCapturer reads the layout of a running tmux session, weaver's or
+// not. Infrastructure provides the implementation.
+type SessionCapturer interface {
+	// Capture returns the session's windows in order, their panes in an
+	// order that recreates them, with absolute directories.
+	Capture(session string) ([]Window, error)
+}
+
 // SessionKiller stops projects' tmux sessions. Infrastructure provides the
 // implementation.
 type SessionKiller interface {
