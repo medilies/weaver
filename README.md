@@ -1,8 +1,8 @@
 # weaver
 
 Weaver drives tmux sessions, windows and panes from a per-project JSON
-config, so starting a dev environment is one command, `weave`, instead
-of a bespoke script per project.
+or YAML config, so starting a dev environment is one command, `weave`,
+instead of a bespoke script per project.
 
 ## Usage
 
@@ -149,7 +149,7 @@ editors such as VS Code complete fields and flag mistakes as you type.
 A YAML config has the same fields, and allows comments. `weave add`
 writes JSON; write YAML by hand, and `weave edit` keeps it YAML. The
 first line points YAML editors (e.g. VS Code's YAML extension) at the
-schema:
+schema, which wants versions quoted, as in JSON:
 
 ```yaml
 # yaml-language-server: $schema=./weaver.schema.json
@@ -162,11 +162,11 @@ windows:
     panes:
       - name: back
         dir: back
-        runtimes: { php: 8.4 }   # read as written: 8.10 stays 8.10
+        runtimes: { php: "8.4" }
       - name: front
         dir: front
         split: { direction: right, size: 30% }
-        runtimes: { node: 20 }
+        runtimes: { node: "20" }
 ```
 
 A project has one config file: with both `shop.json` and `shop.yml`,

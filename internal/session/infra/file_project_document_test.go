@@ -124,7 +124,7 @@ func TestFileProjectRepositoryYAMLDocuments(t *testing.T) {
 		}
 	})
 
-	t.Run("checks an edited YAML config as YAML", func(t *testing.T) {
+	t.Run("rejects unknown keys in an edited YAML config", func(t *testing.T) {
 		repo, _, name := setup(t)
 		err := repo.ReplaceDocument(name, []byte("root: /srv/shop\nrot: typo\n"))
 		if !errors.Is(err, domain.ErrInvalidConfig) {
