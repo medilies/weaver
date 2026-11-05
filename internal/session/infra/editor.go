@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/medilies/weaver/internal/session/domain"
+	"github.com/medilies/weaver/internal/session/app"
 )
 
 // Editor opens configs in the user's editor: $VISUAL, else $EDITOR, else
@@ -18,20 +18,20 @@ func NewEditor() Editor {
 	return Editor{}
 }
 
-// Edit implements app.ConfigEditor. The editor works on a copy, in a
-// temporary directory that also holds the JSON Schema the config points
-// to.
-func (Editor) Edit(name domain.ProjectName, document []byte) ([]byte, error) {
+// Edit implements app.ConfigEditor. The editor works on a copy named like
+// the stored config, so it opens in the config's format, in a temporary
+// directory that also holds the JSON Schema the config points to.
+func (Editor) Edit(document app.ConfigDocument) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "weaver-edit-")
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	path := filepath.Join(dir, name.String()+".json")
+	path := filepath.Join(dir, filepath.Base(document.File))
 	if err := os.WriteFile(filepath.Join(dir, schemaFileName), schema, 0o600); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(path, document, 0o600); err != nil {
+	if err := os.WriteFile(path, document.Content, 0o600); err != nil {
 		return nil, err
 	}
 

@@ -45,7 +45,7 @@ func wire() (application, error) {
 		nvmDir = filepath.Join(home, ".nvm")
 	}
 
-	projects := infra.NewJSONProjectRepository(filepath.Join(configDir, "weaver", "projects"))
+	projects := infra.NewFileProjectRepository(filepath.Join(configDir, "weaver", "projects"))
 	tmux := infra.NewTmux(infra.TmuxOptions{Inside: os.Getenv("TMUX") != "", Size: infra.TerminalSize})
 	workspace := infra.NewGitWorkspace(os.Stderr)
 	runtimes := infra.NewInstalledRuntimes("/usr/bin", nvmDir, filepath.Join(cacheDir, "weaver", "php"))

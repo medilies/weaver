@@ -9,36 +9,38 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// storedDocuments is an in-memory app.ProjectDocuments where "invalid"
-// is the only invalid document.
+// storedDocuments is an in-memory app.ProjectDocuments, as YAML files,
+// where "invalid" is the only invalid document.
 type storedDocuments map[string]string
 
-func (d storedDocuments) Document(name domain.ProjectName) ([]byte, error) {
-	document, ok := d[name.String()]
+func (d storedDocuments) Document(name domain.ProjectName) (app.ConfigDocument, error) {
+	content, ok := d[name.String()]
 	if !ok {
-		return nil, domain.NewProjectNotFound(name)
+		return app.ConfigDocument{}, domain.NewProjectNotFound(name)
 	}
-	return []byte(document), nil
+	return app.ConfigDocument{File: name.String() + ".yml", Content: []byte(content)}, nil
 }
 
-func (d storedDocuments) ReplaceDocument(name domain.ProjectName, document []byte) error {
-	if string(document) == "invalid" {
+func (d storedDocuments) ReplaceDocument(name domain.ProjectName, content []byte) error {
+	if string(content) == "invalid" {
 		return domain.ErrInvalidConfig
 	}
-	d[name.String()] = string(document)
+	d[name.String()] = string(content)
 	return nil
 }
 
 // scriptedEditor is an app.ConfigEditor saving the next scripted text on
-// each edit, and recording what each edit opened.
+// each edit, and recording the file and content each edit opened.
 type scriptedEditor struct {
 	saves  []string
+	files  []string
 	opened []string
 	err    error
 }
 
-func (e *scriptedEditor) Edit(_ domain.ProjectName, document []byte) ([]byte, error) {
-	e.opened = append(e.opened, string(document))
+func (e *scriptedEditor) Edit(document app.ConfigDocument) ([]byte, error) {
+	e.files = append(e.files, document.File)
+	e.opened = append(e.opened, string(document.Content))
 	if e.err != nil {
 		return nil, e.err
 	}
@@ -88,6 +90,16 @@ func TestEditProject(t *testing.T) {
 		}
 		if want := []string{"old", "invalid"}; !slices.Equal(editor.opened, want) {
 			t.Fatalf("the editor opened %q, want %q", editor.opened, want)
+		}
+	})
+
+	t.Run("opens the stored config's file each time, keeping its format", func(t *testing.T) {
+		editor := &scriptedEditor{saves: []string{"invalid", "fixed"}}
+		if _, err := edit(storedDocuments{"shop": "old"}, editor, &countingConfirmer{answer: true}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"shop.yml", "shop.yml"}; !slices.Equal(editor.files, want) {
+			t.Fatalf("the editor opened %q, want %q", editor.files, want)
 		}
 	})
 

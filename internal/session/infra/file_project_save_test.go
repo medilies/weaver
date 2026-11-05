@@ -27,7 +27,7 @@ const gridDoc = `{"root": "/srv/grid", "windows": [{"name": "main", "panes": [
 func save(t *testing.T, project domain.Project) (string, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects")
-	if err := infra.NewJSONProjectRepository(dir).Save(project); err != nil {
+	if err := infra.NewFileProjectRepository(dir).Save(project); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	doc, err := os.ReadFile(filepath.Join(dir, project.Name().String()+".json"))
@@ -46,7 +46,7 @@ func mustLoad(t *testing.T, name, doc string) domain.Project {
 	return project
 }
 
-func TestJSONProjectRepositorySave(t *testing.T) {
+func TestFileProjectRepositorySave(t *testing.T) {
 	t.Setenv("HOME", "/home/someone")
 
 	for _, fixture := range []string{"bicyclette", "shop"} {
@@ -95,6 +95,21 @@ func TestJSONProjectRepositorySave(t *testing.T) {
 		}
 	})
 
+	t.Run("replaces a project registered in YAML with its JSON config", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/old\n"), 0o600); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+		repo := infra.NewFileProjectRepository(dir)
+		saved := mustLoad(t, "shop", `{"root": "/srv/shop"}`)
+		if err := repo.Save(saved); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, err := repo.FindByName(saved.Name()); err != nil || got.Root().String() != "/srv/shop" {
+			t.Fatalf("got %v (%v), want the saved project alone", got.Describe(), err)
+		}
+	})
+
 	t.Run("saves the JSON Schema next to the configs", func(t *testing.T) {
 		dir, _ := save(t, mustLoad(t, "grid", gridDoc))
 		if _, err := os.Stat(filepath.Join(dir, "weaver.schema.json")); err != nil {
@@ -104,7 +119,7 @@ func TestJSONProjectRepositorySave(t *testing.T) {
 
 	t.Run("lists the saved project, not the schema", func(t *testing.T) {
 		dir, _ := save(t, mustLoad(t, "grid", gridDoc))
-		names, err := infra.NewJSONProjectRepository(dir).Names()
+		names, err := infra.NewFileProjectRepository(dir).Names()
 		if err != nil || len(names) != 1 || names[0].String() != "grid" {
 			t.Fatalf("got %v (%v), want grid only", names, err)
 		}

@@ -10,16 +10,16 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-func TestJSONProjectRepositoryDocuments(t *testing.T) {
+func TestFileProjectRepositoryDocuments(t *testing.T) {
 	const stored = "{\n  \"root\": \"/srv/shop\"\n}\n"
-	setup := func(t *testing.T) (infra.JSONProjectRepository, string, domain.ProjectName) {
+	setup := func(t *testing.T) (infra.FileProjectRepository, string, domain.ProjectName) {
 		t.Helper()
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "shop.json"), []byte(stored), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
 		name, _ := domain.NewProjectName("shop")
-		return infra.NewJSONProjectRepository(dir), dir, name
+		return infra.NewFileProjectRepository(dir), dir, name
 	}
 	read := func(t *testing.T, path string) string {
 		t.Helper()
@@ -30,10 +30,11 @@ func TestJSONProjectRepositoryDocuments(t *testing.T) {
 		return string(content)
 	}
 
-	t.Run("reads a config as stored", func(t *testing.T) {
+	t.Run("reads a config as stored, with its file name", func(t *testing.T) {
 		repo, _, name := setup(t)
-		if got, err := repo.Document(name); err != nil || string(got) != stored {
-			t.Fatalf("got %q (%v), want %q", got, err, stored)
+		got, err := repo.Document(name)
+		if err != nil || got.File != "shop.json" || string(got.Content) != stored {
+			t.Fatalf("got %q %q (%v), want shop.json %q", got.File, got.Content, err, stored)
 		}
 	})
 
@@ -83,6 +84,50 @@ func TestJSONProjectRepositoryDocuments(t *testing.T) {
 			t.Fatalf("writing fixture: %v", err)
 		}
 		if _, err := repo.FindByName(name); !errors.Is(err, domain.ErrInvalidConfig) {
+			t.Fatalf("got %v, want ErrInvalidConfig", err)
+		}
+	})
+}
+
+func TestFileProjectRepositoryYAMLDocuments(t *testing.T) {
+	const stored = "root: /srv/shop\n"
+	setup := func(t *testing.T) (infra.FileProjectRepository, string, domain.ProjectName) {
+		t.Helper()
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte(stored), 0o600); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+		name, _ := domain.NewProjectName("shop")
+		return infra.NewFileProjectRepository(dir), dir, name
+	}
+
+	t.Run("reads a YAML config with its file name", func(t *testing.T) {
+		repo, _, name := setup(t)
+		got, err := repo.Document(name)
+		if err != nil || got.File != "shop.yml" || string(got.Content) != stored {
+			t.Fatalf("got %q %q (%v), want shop.yml %q", got.File, got.Content, err, stored)
+		}
+	})
+
+	t.Run("stores an edited YAML config in its YAML file", func(t *testing.T) {
+		repo, dir, name := setup(t)
+		edited := "# yaml-language-server: $schema=./weaver.schema.json\nroot: /srv/shop\nenv: {A: 1}\n"
+		if err := repo.ReplaceDocument(name, []byte(edited)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, "shop.yml"))
+		if err != nil || string(got) != edited {
+			t.Fatalf("got %q (%v), want the edit as written", got, err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "shop.json")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("got a shop.json (%v), want the config kept in YAML", err)
+		}
+	})
+
+	t.Run("checks an edited YAML config as YAML", func(t *testing.T) {
+		repo, _, name := setup(t)
+		err := repo.ReplaceDocument(name, []byte("root: /srv/shop\nrot: typo\n"))
+		if !errors.Is(err, domain.ErrInvalidConfig) {
 			t.Fatalf("got %v, want ErrInvalidConfig", err)
 		}
 	})

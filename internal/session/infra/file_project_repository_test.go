@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -12,19 +13,26 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-// load writes doc as the config of project name in a fresh directory and
-// reads it back through the repository.
+// load writes doc as the JSON config of project name in a fresh directory
+// and reads it back through the repository.
 func load(t *testing.T, name, doc string) (domain.Project, error) {
 	t.Helper()
+	return loadFile(t, name+".json", doc)
+}
+
+// loadFile writes doc as the config file named file, e.g. "shop.yml", in a
+// fresh directory and reads its project back through the repository.
+func loadFile(t *testing.T, file, doc string) (domain.Project, error) {
+	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, name+".json"), []byte(doc), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, file), []byte(doc), 0o600); err != nil {
 		t.Fatalf("writing fixture: %v", err)
 	}
-	projectName, err := domain.NewProjectName(name)
+	projectName, err := domain.NewProjectName(strings.TrimSuffix(file, filepath.Ext(file)))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	return infra.NewJSONProjectRepository(dir).FindByName(projectName)
+	return infra.NewFileProjectRepository(dir).FindByName(projectName)
 }
 
 // loadFixture reads testdata/<name>.json, which must be valid.
@@ -57,7 +65,7 @@ func paneNamed(t *testing.T, project domain.Project, window, pane string) domain
 	return domain.Pane{}
 }
 
-func TestJSONProjectRepositoryFindByName(t *testing.T) {
+func TestFileProjectRepositoryFindByName(t *testing.T) {
 	t.Run("loads a config that only sets the root", func(t *testing.T) {
 		project, err := load(t, "weaver", `{"root": "/home/ilies/dev/weaver"}`)
 		if err != nil {
@@ -88,14 +96,14 @@ func TestJSONProjectRepositoryFindByName(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		_, err = infra.NewJSONProjectRepository(t.TempDir()).FindByName(name)
+		_, err = infra.NewFileProjectRepository(t.TempDir()).FindByName(name)
 		if _, ok := errors.AsType[domain.ProjectNotFound](err); !ok {
 			t.Fatalf("got %v, want ProjectNotFound", err)
 		}
 	})
 }
 
-func TestJSONProjectRepositoryReadsLayouts(t *testing.T) {
+func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
 	bicyclette := loadFixture(t, "bicyclette")
 
 	t.Run("reads windows in order", func(t *testing.T) {
@@ -162,7 +170,7 @@ func TestJSONProjectRepositoryReadsLayouts(t *testing.T) {
 	})
 }
 
-func TestJSONProjectRepositoryReadsEnvironments(t *testing.T) {
+func TestFileProjectRepositoryReadsEnvironments(t *testing.T) {
 	shop := loadFixture(t, "shop")
 
 	t.Run("reads repositories by directory", func(t *testing.T) {
@@ -206,7 +214,7 @@ func TestJSONProjectRepositoryReadsEnvironments(t *testing.T) {
 	})
 }
 
-func TestJSONProjectRepositoryResolvesSplitTargetsByName(t *testing.T) {
+func TestFileProjectRepositoryResolvesSplitTargetsByName(t *testing.T) {
 	project, err := load(t, "grid", `{"root": "/srv/grid", "windows": [{"name": "main", "panes": [
 		{"name": "left"},
 		{"name": "right", "split": {"direction": "right"}},
@@ -222,7 +230,7 @@ func TestJSONProjectRepositoryResolvesSplitTargetsByName(t *testing.T) {
 	}
 }
 
-func TestJSONProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
+func TestFileProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
 	t.Run("rejects unknown fields, usually typos", func(t *testing.T) {
 		_, err := load(t, "typo", `{"root": "/srv/typo", "windos": []}`)
 		if err == nil || !strings.Contains(err.Error(), `unknown field "windos"`) {
@@ -285,7 +293,7 @@ func TestJSONProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
 	})
 }
 
-func TestJSONProjectRepositoryNames(t *testing.T) {
+func TestFileProjectRepositoryNames(t *testing.T) {
 	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
 		dir := t.TempDir()
 		for _, file := range []string{"shop.json", "bicyclette.json", "weaver.schema.json", "notes.txt", "show.json"} {
@@ -297,7 +305,7 @@ func TestJSONProjectRepositoryNames(t *testing.T) {
 			t.Fatalf("creating fixture: %v", err)
 		}
 
-		names, err := infra.NewJSONProjectRepository(dir).Names()
+		names, err := infra.NewFileProjectRepository(dir).Names()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -310,10 +318,94 @@ func TestJSONProjectRepositoryNames(t *testing.T) {
 		}
 	})
 
+	t.Run("lists YAML configs too, each project once, sorted by name", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, file := range []string{"shop.json", "shop.yml", "blog.yaml", "a-b.json", "a.yml"} {
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(`{}`), 0o600); err != nil {
+				t.Fatalf("writing fixture: %v", err)
+			}
+		}
+		names, err := infra.NewFileProjectRepository(dir).Names()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got []string
+		for _, name := range names {
+			got = append(got, name.String())
+		}
+		if want := []string{"a", "a-b", "blog", "shop"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
 	t.Run("has no projects when the directory is missing", func(t *testing.T) {
-		names, err := infra.NewJSONProjectRepository(filepath.Join(t.TempDir(), "missing")).Names()
+		names, err := infra.NewFileProjectRepository(filepath.Join(t.TempDir(), "missing")).Names()
 		if err != nil || len(names) != 0 {
 			t.Fatalf("got %v (%v), want no projects", names, err)
+		}
+	})
+}
+
+func TestFileProjectRepositoryReadsYAML(t *testing.T) {
+	for _, fixture := range []string{"bicyclette", "shop"} {
+		for _, ext := range []string{".yml", ".yaml"} {
+			t.Run("reads "+fixture+ext+" like its JSON twin", func(t *testing.T) {
+				doc, err := os.ReadFile(filepath.Join("testdata", fixture+".yml"))
+				if err != nil {
+					t.Fatalf("reading fixture: %v", err)
+				}
+				got, err := loadFile(t, fixture+ext, string(doc))
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if want := loadFixture(t, fixture); !reflect.DeepEqual(got, want) {
+					t.Fatalf("got:\n%+v\nwant:\n%+v", got, want)
+				}
+			})
+		}
+	}
+
+	t.Run("reads versions as written, so 8.10 stays 8.10", func(t *testing.T) {
+		project, err := loadFile(t, "pins.yml", "root: /srv/pins\nruntimes: {php: 8.10}\n")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := project.Runtimes().List()[0].Version(); got != "8.10" {
+			t.Fatalf("got %q, want %q", got, "8.10")
+		}
+	})
+
+	t.Run("rejects unknown keys, usually typos", func(t *testing.T) {
+		_, err := loadFile(t, "typo.yml", "root: /srv/typo\nwindow: []\n")
+		if !errors.Is(err, domain.ErrInvalidConfig) {
+			t.Fatalf("got %v, want ErrInvalidConfig", err)
+		}
+	})
+
+	t.Run("rejects a second document", func(t *testing.T) {
+		_, err := loadFile(t, "twice.yml", "root: /srv/a\n---\nroot: /srv/b\n")
+		if !errors.Is(err, infra.ErrTrailingData) {
+			t.Fatalf("got %v, want ErrTrailingData", err)
+		}
+	})
+
+	t.Run("reports the missing root of an empty config", func(t *testing.T) {
+		_, err := loadFile(t, "empty.yml", "# nothing yet\n")
+		if !errors.Is(err, domain.ErrEmptyProjectRoot) {
+			t.Fatalf("got %v, want ErrEmptyProjectRoot", err)
+		}
+	})
+
+	t.Run("refuses to pick between a project's config files", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, file := range []string{"shop.json", "shop.yml"} {
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(`{"root": "/srv/shop"}`), 0o600); err != nil {
+				t.Fatalf("writing fixture: %v", err)
+			}
+		}
+		name, _ := domain.NewProjectName("shop")
+		if _, err := infra.NewFileProjectRepository(dir).FindByName(name); !errors.Is(err, infra.ErrSeveralConfigs) {
+			t.Fatalf("got %v, want ErrSeveralConfigs", err)
 		}
 	})
 }

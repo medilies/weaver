@@ -70,7 +70,8 @@ sockets; they never touch your sessions.
 
 ## Project config
 
-A project is a JSON file at `~/.config/weaver/projects/<name>.json`
+A project is one config file at `~/.config/weaver/projects/<name>.json`,
+or `<name>.yml` / `<name>.yaml` to write it in YAML
 (`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
 the project's name and its tmux session's name: letters, digits, `-` and
 `_`, and not one of weave's commands.
@@ -143,6 +144,34 @@ When weaver saves a config, it writes `weaver.schema.json` next to it
 and points the config at it with `"$schema": "./weaver.schema.json"`, so
 editors such as VS Code complete fields and flag mistakes as you type.
 
+### YAML
+
+A YAML config has the same fields, and allows comments. `weave add`
+writes JSON; write YAML by hand, and `weave edit` keeps it YAML. The
+first line points YAML editors (e.g. VS Code's YAML extension) at the
+schema:
+
+```yaml
+# yaml-language-server: $schema=./weaver.schema.json
+root: ~/dev/shop
+repositories:
+  back: git@bitbucket.org:acme/shop-back.git
+  front: git@bitbucket.org:acme/shop-front.git
+windows:
+  - name: shop
+    panes:
+      - name: back
+        dir: back
+        runtimes: { php: 8.4 }   # read as written: 8.10 stays 8.10
+      - name: front
+        dir: front
+        split: { direction: right, size: 30% }
+        runtimes: { node: 20 }
+```
+
+A project has one config file: with both `shop.json` and `shop.yml`,
+weave stops and asks you to keep one.
+
 ## Architecture
 
 The `Session` bounded context is organized by layer. `domain` and `app`
@@ -164,7 +193,7 @@ graph TD
         DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer, RuntimeResolver,<br/>RuntimeCatalog, Workspace, CheckoutDetector (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["JSONProjectRepository + schema, Tmux,<br/>GitWorkspace, InstalledRuntimes, Editor, HuhForms"]
+        A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, InstalledRuntimes, Editor, HuhForms"]
     end
 
     CLI --> UC

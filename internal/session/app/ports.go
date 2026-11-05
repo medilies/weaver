@@ -34,18 +34,27 @@ type Confirmer interface {
 	Confirm(question string) (bool, error)
 }
 
+// ConfigDocument is a project's config as the user writes it: the file it
+// is stored in, e.g. "shop.yml", whose extension says its format, and
+// what that file holds.
+type ConfigDocument struct {
+	File    string
+	Content []byte
+}
+
 // ConfigEditor lets the user edit a project's config document.
 type ConfigEditor interface {
-	// Edit opens document in the user's editor and returns it as saved.
-	Edit(name domain.ProjectName, document []byte) ([]byte, error)
+	// Edit opens document in the user's editor and returns its content
+	// as saved.
+	Edit(document ConfigDocument) ([]byte, error)
 }
 
 // ProjectDocuments are projects' configs as the user writes them.
 type ProjectDocuments interface {
 	// Document is the project's config as stored, or ProjectNotFound.
-	Document(name domain.ProjectName) ([]byte, error)
-	// ReplaceDocument stores document as the project's config if it is
-	// valid; otherwise the stored config stays and the error wraps
-	// domain.ErrInvalidConfig.
-	ReplaceDocument(name domain.ProjectName, document []byte) error
+	Document(name domain.ProjectName) (ConfigDocument, error)
+	// ReplaceDocument stores content as the project's config, in the
+	// stored config's file and format, if it is valid; otherwise the
+	// stored config stays and the error wraps domain.ErrInvalidConfig.
+	ReplaceDocument(name domain.ProjectName, content []byte) error
 }

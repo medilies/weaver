@@ -35,11 +35,11 @@ func (uc EditProject) Handle(rawName string) (bool, error) {
 	}
 	document := stored
 	for {
-		edited, err := uc.editor.Edit(name, document)
+		edited, err := uc.editor.Edit(document)
 		if err != nil {
 			return false, err
 		}
-		if bytes.Equal(edited, stored) {
+		if bytes.Equal(edited, stored.Content) {
 			return false, nil
 		}
 		err = uc.documents.ReplaceDocument(name, edited)
@@ -53,6 +53,6 @@ func (uc EditProject) Handle(rawName string) (bool, error) {
 		if !again {
 			return false, fmt.Errorf("changes discarded: %w", err)
 		}
-		document = edited
+		document.Content = edited
 	}
 }

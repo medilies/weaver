@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
@@ -25,41 +27,52 @@ var (
 )
 
 // projectFile is the on-disk shape of a project config, e.g.
-// ~/.config/weaver/projects/<name>.json; the README documents it.
+// ~/.config/weaver/projects/<name>.json, or .yml with the same keys; the
+// README documents it.
 type projectFile struct {
-	Schema       string            `json:"$schema,omitempty"`
-	Root         string            `json:"root"`
-	Repositories map[string]string `json:"repositories,omitempty"`
-	Env          map[string]string `json:"env,omitempty"`
-	Runtimes     map[string]string `json:"runtimes,omitempty"`
-	Windows      []windowFile      `json:"windows,omitempty"`
+	Schema       string            `json:"$schema,omitempty" yaml:"$schema"`
+	Root         string            `json:"root" yaml:"root"`
+	Repositories map[string]string `json:"repositories,omitempty" yaml:"repositories"`
+	Env          map[string]string `json:"env,omitempty" yaml:"env"`
+	Runtimes     map[string]string `json:"runtimes,omitempty" yaml:"runtimes"`
+	Windows      []windowFile      `json:"windows,omitempty" yaml:"windows"`
 }
 
 type windowFile struct {
-	Name  string     `json:"name"`
-	Panes []paneFile `json:"panes,omitempty"`
+	Name  string     `json:"name" yaml:"name"`
+	Panes []paneFile `json:"panes,omitempty" yaml:"panes"`
 }
 
 type paneFile struct {
-	Name     string            `json:"name,omitempty"`
-	Dir      string            `json:"dir,omitempty"`
-	Split    *splitFile        `json:"split,omitempty"`
-	Command  string            `json:"command,omitempty"`
-	Prefill  string            `json:"prefill,omitempty"`
-	Note     []string          `json:"note,omitempty"`
-	Env      map[string]string `json:"env,omitempty"`
-	Runtimes map[string]string `json:"runtimes,omitempty"`
+	Name     string            `json:"name,omitempty" yaml:"name"`
+	Dir      string            `json:"dir,omitempty" yaml:"dir"`
+	Split    *splitFile        `json:"split,omitempty" yaml:"split"`
+	Command  string            `json:"command,omitempty" yaml:"command"`
+	Prefill  string            `json:"prefill,omitempty" yaml:"prefill"`
+	Note     []string          `json:"note,omitempty" yaml:"note"`
+	Env      map[string]string `json:"env,omitempty" yaml:"env"`
+	Runtimes map[string]string `json:"runtimes,omitempty" yaml:"runtimes"`
 }
 
 type splitFile struct {
-	Of        string `json:"of,omitempty"`
-	Direction string `json:"direction"`
-	Size      string `json:"size,omitempty"`
+	Of        string `json:"of,omitempty" yaml:"of"`
+	Direction string `json:"direction" yaml:"direction"`
+	Size      string `json:"size,omitempty" yaml:"size"`
 }
 
-// decodeProject strictly parses a config: unknown fields (usually typos)
-// and anything after the object are errors, not silently ignored.
-func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) {
+// decodeProject strictly parses the config read from file: as YAML when
+// its extension says so, else as JSON.
+func decodeProject(file string, name domain.ProjectName, raw []byte) (domain.Project, error) {
+	switch filepath.Ext(file) {
+	case ".yml", ".yaml":
+		return decodeYAMLProject(name, raw)
+	}
+	return decodeJSONProject(name, raw)
+}
+
+// decodeJSONProject strictly parses a JSON config: unknown fields (usually
+// typos) and anything after the object are errors, not silently ignored.
+func decodeJSONProject(name domain.ProjectName, raw []byte) (domain.Project, error) {
 	var file projectFile
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -67,6 +80,23 @@ func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) 
 		return domain.Project{}, err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		return domain.Project{}, ErrTrailingData
+	}
+	return file.toProject(name)
+}
+
+// decodeYAMLProject strictly parses a YAML config, like a JSON one: unknown
+// fields and a second document are errors. Values are read as written, so
+// "php: 8.10" pins 8.10, not the number 8.1.
+func decodeYAMLProject(name domain.ProjectName, raw []byte) (domain.Project, error) {
+	var file projectFile
+	decoder := yaml.NewDecoder(bytes.NewReader(raw))
+	decoder.KnownFields(true)
+	// An empty document leaves the root empty, which toProject reports.
+	if err := decoder.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
+		return domain.Project{}, err
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return domain.Project{}, ErrTrailingData
 	}
 	return file.toProject(name)
