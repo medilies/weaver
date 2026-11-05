@@ -38,7 +38,10 @@ source <(weave completion bash)
 ```
 
 `weave` alone lists the projects, a ● marking those whose session runs,
-beside the selected one's config:
+beside the selected one's config, under a summary: its root, with the
+branch it is on (`main* ↑2`: changes not committed, two commits not
+pushed) or a warning when it is gone, which repositories are cloned, and
+the `before` commands and variables every pane starts with:
 
 | Key | Does |
 | --- | --- |

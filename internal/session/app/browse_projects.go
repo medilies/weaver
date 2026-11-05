@@ -3,15 +3,23 @@ package app
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// ProjectOverview is a registered project as the browser shows it.
+// ProjectOverview is a registered project as the browser shows it: its
+// config as written and, when the config is valid, the project and where
+// it stands on disk.
 type ProjectOverview struct {
-	status  ProjectStatus
-	config  ConfigDocument
-	problem error
+	status     ProjectStatus
+	config     ConfigDocument
+	problem    error
+	project    domain.Project
+	rootExists bool
+	checkouts  []CheckoutStatus
+	tree       domain.WorkingTree
+	inGit      bool
 }
 
 // Name is the project's name.
@@ -24,14 +32,54 @@ func (o ProjectOverview) Running() bool {
 	return o.status.Running()
 }
 
-// Config is the project's config as written.
+// Config is the project's config as written; empty when it can't be
+// read.
 func (o ProjectOverview) Config() ConfigDocument {
 	return o.config
 }
 
-// Problem is why the project's config can't be read, if it can't.
+// Problem is why the project's config can't be read or isn't valid, if
+// so; the rest of the overview is then empty, except Config when it
+// could be read.
 func (o ProjectOverview) Problem() error {
 	return o.problem
+}
+
+// Project is the project the config describes.
+func (o ProjectOverview) Project() domain.Project {
+	return o.project
+}
+
+// RootExists reports whether the project's root is a directory.
+func (o ProjectOverview) RootExists() bool {
+	return o.rootExists
+}
+
+// Checkouts are the project's repositories, in clone order, and whether
+// each is cloned.
+func (o ProjectOverview) Checkouts() []CheckoutStatus {
+	return slices.Clone(o.checkouts)
+}
+
+// WorkingTree is where the git repository the root is in stands, or
+// false when it isn't in one.
+func (o ProjectOverview) WorkingTree() (domain.WorkingTree, bool) {
+	return o.tree, o.inGit
+}
+
+// CheckoutStatus is a project's repository and whether it is cloned.
+type CheckoutStatus struct {
+	checkout domain.Checkout
+	cloned   bool
+}
+
+func (s CheckoutStatus) Checkout() domain.Checkout {
+	return s.checkout
+}
+
+// Cloned reports whether the repository's directory exists.
+func (s CheckoutStatus) Cloned() bool {
+	return s.cloned
 }
 
 // BrowseProjects lets the user act on the registered projects from a
@@ -42,6 +90,7 @@ type BrowseProjects struct {
 	confirm   Confirmer
 	projects  domain.ProjectRepository
 	documents ProjectDocuments
+	workspace domain.Workspace
 	list      ListProjects
 	open      OpenProject
 	add       AddProject
@@ -56,6 +105,7 @@ func NewBrowseProjects(
 	confirm Confirmer,
 	projects domain.ProjectRepository,
 	documents ProjectDocuments,
+	workspace domain.Workspace,
 	list ListProjects,
 	open OpenProject,
 	add AddProject,
@@ -63,7 +113,7 @@ func NewBrowseProjects(
 	kill KillProject,
 ) BrowseProjects {
 	return BrowseProjects{
-		browser: browser, confirm: confirm, projects: projects, documents: documents,
+		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
 		list: list, open: open, add: add, edit: edit, kill: kill,
 	}
 }
@@ -97,7 +147,8 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 	}
 }
 
-// overviews are the registered projects, with their configs.
+// overviews are the registered projects, with their configs and where
+// they stand on disk.
 func (uc BrowseProjects) overviews() ([]ProjectOverview, error) {
 	statuses, err := uc.list.Handle()
 	if err != nil {
@@ -105,10 +156,43 @@ func (uc BrowseProjects) overviews() ([]ProjectOverview, error) {
 	}
 	overviews := make([]ProjectOverview, 0, len(statuses))
 	for _, status := range statuses {
-		config, err := uc.documents.Document(status.Name())
-		overviews = append(overviews, ProjectOverview{status: status, config: config, problem: err})
+		overviews = append(overviews, uc.overview(status))
 	}
 	return overviews, nil
+}
+
+// overview is the project status shows, its config and, when the config
+// is valid, where it stands on disk.
+func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
+	overview := ProjectOverview{status: status}
+	overview.config, overview.problem = uc.documents.Document(status.Name())
+	if overview.problem != nil {
+		return overview
+	}
+	project, err := uc.projects.FindByName(status.Name())
+	if err != nil {
+		overview.problem = err
+		return overview
+	}
+	rootExists, err := uc.workspace.Exists(project.Root().String())
+	if err != nil {
+		overview.problem = err
+		return overview
+	}
+	var checkouts []CheckoutStatus
+	for _, checkout := range project.Checkouts().List() {
+		cloned, err := uc.workspace.Exists(checkout.Path(project.Root()))
+		if err != nil {
+			overview.problem = err
+			return overview
+		}
+		checkouts = append(checkouts, CheckoutStatus{checkout: checkout, cloned: cloned})
+	}
+	overview.project, overview.rootExists, overview.checkouts = project, rootExists, checkouts
+	if rootExists {
+		overview.tree, overview.inGit = uc.workspace.WorkingTree(project.Root().String())
+	}
+	return overview
 }
 
 // act carries out choice and returns the project to select next and what

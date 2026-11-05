@@ -17,7 +17,7 @@ isn't running. Inside tmux, it switches to the session instead.
 weave . opens the project whose root contains the current directory.
 
 Without a project, weave lists the projects and the selected one's
-config, to open, add, edit, kill or delete them.`,
+summary and config, to open, add, edit, kill or delete them.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		SilenceUsage:      true,

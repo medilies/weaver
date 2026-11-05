@@ -1,13 +1,16 @@
 package infra
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
@@ -43,6 +46,48 @@ func (w GitWorkspace) Clone(checkout domain.Checkout, dir string) error {
 		return fmt.Errorf("git clone %s: %w", checkout.Remote(), err)
 	}
 	return nil
+}
+
+// workingTreeTimeout bounds reading a working tree, so a huge repository
+// doesn't hold up the browser: it then shows none.
+const workingTreeTimeout = time.Second
+
+// WorkingTree implements domain.Workspace, from git's machine-readable
+// status. It doesn't take the index lock, so it never makes a git command
+// the user runs meanwhile fail.
+func (w GitWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), workingTreeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", dir,
+		"status", "--porcelain=v2", "--branch").Output()
+	if err != nil {
+		return domain.WorkingTree{}, false
+	}
+	tree := domain.DetachedHead()
+	dirty := false
+	var ahead, behind int
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\n"), "\n") {
+		header, ok := strings.CutPrefix(line, "# ")
+		if !ok {
+			dirty = dirty || line != ""
+			continue
+		}
+		key, value, _ := strings.Cut(header, " ")
+		switch key {
+		case "branch.head":
+			if value != "(detached)" {
+				tree = domain.OnBranch(value)
+			}
+		case "branch.ab": // "+<ahead> -<behind>"
+			a, b, _ := strings.Cut(value, " ")
+			ahead, _ = strconv.Atoi(strings.TrimPrefix(a, "+"))
+			behind, _ = strconv.Atoi(strings.TrimPrefix(b, "-"))
+		}
+	}
+	if dirty {
+		tree = tree.WithChanges()
+	}
+	return tree.Diverged(ahead, behind), true
 }
 
 // Detect implements domain.CheckoutDetector. A directory counts only when

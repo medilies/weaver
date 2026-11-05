@@ -97,7 +97,7 @@ func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 func (s browseSetup) browse(confirm app.Confirmer) error {
 	server := tmuxServer{s.sessions}
 	return app.NewBrowseProjects(
-		s.browser, confirm, s.repo, s.documents,
+		s.browser, confirm, s.repo, s.documents, s.workspace,
 		app.NewListProjects(s.repo, server),
 		app.NewOpenProject(s.repo, server, s.workspace),
 		app.NewAddProject(s.repo, foundCheckouts{}, capturedSessions{}, s.form, confirm),
@@ -135,6 +135,70 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if blog, _ := s.browser.last().overview("blog"); !isProjectNotFound(blog.Problem()) {
 			t.Fatalf("got problem %v, want ErrProjectNotFound", blog.Problem())
+		}
+	})
+
+	t.Run("shows why a readable config isn't valid, beside the config", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.repo, "shop"}, s.documents, s.workspace,
+			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+		).Handle("/srv/new")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if !errors.Is(shop.Problem(), domain.ErrInvalidConfig) || shop.Config().File != "shop.yml" {
+			t.Fatalf("got problem %v and file %q, want ErrInvalidConfig beside shop.yml", shop.Problem(), shop.Config().File)
+		}
+	})
+
+	t.Run("shows whether each of a project's repositories is cloned", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		delete(s.workspace.dirs, "/srv/shop/front")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		var got []string
+		for _, status := range shop.Checkouts() {
+			got = append(got, fmt.Sprintf("%s %v", status.Checkout().Dir(), status.Cloned()))
+		}
+		if want := []string{"back true", "front false"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("shows when a project's root is gone", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		delete(s.workspace.dirs, "/srv/blog")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); blog.RootExists() {
+			t.Fatal("got blog's root existing, want it gone")
+		}
+	})
+
+	t.Run("shows the working tree a project's root is in", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.workspace.trees = map[string]domain.WorkingTree{"/srv/shop": domain.OnBranch("main").WithChanges()}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if tree, ok := shop.WorkingTree(); !ok || tree.Branch() != "main" || !tree.Dirty() {
+			t.Fatalf("got %+v (%v), want main with changes", tree, ok)
+		}
+	})
+
+	t.Run("shows no working tree for a root outside git", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if _, ok := blog.WorkingTree(); ok {
+			t.Fatal("got a working tree for blog, want none")
 		}
 	})
 
@@ -281,7 +345,7 @@ func TestBrowseProjects(t *testing.T) {
 	t.Run("reports a browser that fails", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		failing := errors.New("no terminal")
-		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.repo, s.documents,
+		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.repo, s.documents, s.workspace,
 			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if !errors.Is(err, failing) {
@@ -299,4 +363,18 @@ type failingBrowser struct{ err error }
 
 func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string) (app.Choice, error) {
 	return app.Choice{}, b.err
+}
+
+// invalidConfig is a repository whose config for the project named
+// invalid can't be loaded.
+type invalidConfig struct {
+	inMemoryRepository
+	invalid string
+}
+
+func (r invalidConfig) FindByName(name domain.ProjectName) (domain.Project, error) {
+	if name.String() == r.invalid {
+		return domain.Project{}, fmt.Errorf("%s: %w", name, domain.ErrInvalidConfig)
+	}
+	return r.inMemoryRepository.FindByName(name)
 }

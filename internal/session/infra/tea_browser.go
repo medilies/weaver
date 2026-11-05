@@ -12,7 +12,7 @@ import (
 )
 
 // TeaBrowser shows the registered projects full screen: their names on
-// the left, the selected one's config on the right, and what the last
+// the left, the selected one's summary and config on the right, and what the last
 // action did below. It only shows and picks: the use case acts.
 type TeaBrowser struct{}
 
@@ -51,6 +51,7 @@ var (
 	titleStyle   = lipgloss.NewStyle().Bold(true)
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	clonedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 )
 
 // browser is TeaBrowser's Bubble Tea model.
@@ -145,16 +146,83 @@ func (m browser) list(height int) string {
 	return strings.Join(lines, "\n")
 }
 
-// details are the selected project's config as written, or why it can't
-// be read.
+// details are the selected project's summary and config as written, or
+// why it can't be read.
 func (m browser) details() string {
 	if len(m.projects) == 0 {
 		return "No projects yet: press a to add the current directory."
 	}
 	project := m.projects[m.cursor]
-	if err := project.Problem(); err != nil {
-		return titleStyle.Render(project.Name().String()) + "\n\n" + problemStyle.Render(err.Error())
-	}
 	config := project.Config()
-	return titleStyle.Render(config.File) + "\n\n" + strings.TrimRight(string(config.Content), "\n")
+	if config.File == "" && project.Problem() != nil {
+		return titleStyle.Render(project.Name().String()) + "\n\n" + problemStyle.Render(project.Problem().Error())
+	}
+	header := summary(project)
+	if err := project.Problem(); err != nil {
+		header = problemStyle.Render(err.Error())
+	}
+	return titleStyle.Render(config.File) + "\n\n" + header + "\n\n" + strings.TrimRight(string(config.Content), "\n")
+}
+
+// summary is where the project stands: its root and the working tree it
+// is in, its repositories, and what every pane starts with.
+func summary(project app.ProjectOverview) string {
+	root := contractHome(project.Project().Root().String())
+	if !project.RootExists() {
+		root += " " + problemStyle.Render("✗ missing")
+	} else if tree, ok := project.WorkingTree(); ok {
+		root += "  " + workingTree(tree)
+	}
+	lines := []string{root}
+
+	var checkouts []string
+	for _, status := range project.Checkouts() {
+		dir := status.Checkout().Dir()
+		if dir == "." {
+			dir = "root"
+		}
+		if status.Cloned() {
+			checkouts = append(checkouts, dir+" "+clonedStyle.Render("✓ cloned"))
+		} else {
+			checkouts = append(checkouts, dir+" "+problemStyle.Render("✗ missing"))
+		}
+	}
+	if len(checkouts) > 0 {
+		lines = append(lines, strings.Join(checkouts, " · "))
+	}
+
+	var before []string
+	for _, cmd := range project.Project().Before() {
+		before = append(before, cmd.String())
+	}
+	if len(before) > 0 {
+		lines = append(lines, keysStyle.Render("before "+strings.Join(before, " · ")))
+	}
+	var env []string
+	for _, v := range project.Project().Env().Vars() {
+		env = append(env, v.Name()+"="+v.Value())
+	}
+	if len(env) > 0 {
+		lines = append(lines, keysStyle.Render("env "+strings.Join(env, " · ")))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// workingTree reads like a shell prompt's: "main* ↑2 ↓1", the star for
+// changes not committed.
+func workingTree(tree domain.WorkingTree) string {
+	text := tree.Branch()
+	if tree.Detached() {
+		text = "(detached)"
+	}
+	if tree.Dirty() {
+		text += "*"
+	}
+	if tree.Ahead() > 0 {
+		text += fmt.Sprintf(" ↑%d", tree.Ahead())
+	}
+	if tree.Behind() > 0 {
+		text += fmt.Sprintf(" ↓%d", tree.Behind())
+	}
+	return text
 }

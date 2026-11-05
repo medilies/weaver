@@ -161,3 +161,79 @@ func TestGitWorkspaceDetect(t *testing.T) {
 		}
 	})
 }
+
+func TestGitWorkspaceWorkingTree(t *testing.T) {
+	remote := bareRepository(t)
+	workspace := infra.NewGitWorkspace(io.Discard)
+	t.Setenv("GIT_AUTHOR_NAME", "test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+
+	// clone is a clone of remote on branch feature, pushed with one
+	// commit then one commit ahead of it.
+	clone := filepath.Join(t.TempDir(), "shop")
+	for _, args := range [][]string{
+		{"clone", "-q", remote, clone},
+		{"-C", clone, "checkout", "-q", "-b", "feature"},
+		{"-C", clone, "commit", "-q", "--allow-empty", "-m", "first"},
+		{"-C", clone, "push", "-q", "-u", "origin", "feature"},
+		{"-C", clone, "commit", "-q", "--allow-empty", "-m", "second"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+
+	t.Run("reads the branch and how far it is ahead", func(t *testing.T) {
+		tree, ok := workspace.WorkingTree(clone)
+		if !ok || tree.Branch() != "feature" || tree.Ahead() != 1 || tree.Behind() != 0 || tree.Dirty() {
+			t.Fatalf("got %+v (%v), want clean feature one ahead", tree, ok)
+		}
+	})
+
+	t.Run("sees an untracked file as a change", func(t *testing.T) {
+		if err := os.WriteFile(filepath.Join(clone, "notes"), nil, 0o600); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+		t.Cleanup(func() { _ = os.Remove(filepath.Join(clone, "notes")) })
+		if tree, ok := workspace.WorkingTree(clone); !ok || !tree.Dirty() {
+			t.Fatalf("got %+v (%v), want changes", tree, ok)
+		}
+	})
+
+	t.Run("reads how far it is behind", func(t *testing.T) {
+		behind := filepath.Join(t.TempDir(), "behind")
+		for _, args := range [][]string{
+			{"clone", "-q", "--branch", "feature", remote, behind},
+			{"-C", behind, "commit", "-q", "--allow-empty", "-m", "pushed"},
+			{"-C", behind, "push", "-q"},
+			{"-C", behind, "reset", "-q", "--hard", "HEAD~1"},
+		} {
+			if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+				t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+			}
+		}
+		if tree, ok := workspace.WorkingTree(behind); !ok || tree.Behind() != 1 || tree.Ahead() != 0 {
+			t.Fatalf("got %+v (%v), want one behind", tree, ok)
+		}
+	})
+
+	t.Run("reads a detached head", func(t *testing.T) {
+		detached := filepath.Join(t.TempDir(), "detached")
+		for _, args := range [][]string{{"clone", "-q", clone, detached}, {"-C", detached, "checkout", "-q", "--detach"}} {
+			if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+				t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+			}
+		}
+		if tree, ok := workspace.WorkingTree(detached); !ok || !tree.Detached() {
+			t.Fatalf("got %+v (%v), want a detached head", tree, ok)
+		}
+	})
+
+	t.Run("finds none outside a repository", func(t *testing.T) {
+		if _, ok := workspace.WorkingTree(t.TempDir()); ok {
+			t.Fatal("got a working tree, want none")
+		}
+	})
+}

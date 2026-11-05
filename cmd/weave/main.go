@@ -55,7 +55,7 @@ func wire() (application, error) {
 		listProjects: app.NewListProjects(projects, tmux),
 		documents:    projects,
 	}
-	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), forms, projects, projects,
+	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), forms, projects, projects, workspace,
 		weaver.listProjects, weaver.openProject, weaver.addProject, weaver.editProject, weaver.killProject)
 	return weaver, nil
 }
