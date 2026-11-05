@@ -16,6 +16,8 @@ linters:
           deny:
             - pkg: github.com/spf13/cobra
               desc: domain must stay framework-free
+            - pkg: charm.land
+              desc: terminal forms belong in infra
             - pkg: github.com/medilies/weaver/internal/session/app
               desc: domain must not depend inward on the application layer
             - pkg: github.com/medilies/weaver/internal/session/infra
@@ -28,6 +30,8 @@ linters:
           deny:
             - pkg: github.com/spf13/cobra
               desc: application must stay framework-free
+            - pkg: charm.land
+              desc: terminal forms belong in infra
             - pkg: github.com/medilies/weaver/internal/session/infra
               desc: application must depend on domain ports, not infrastructure directly
             - pkg: github.com/medilies/weaver/cmd/weaver

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,6 +86,78 @@ func TestGitWorkspaceClone(t *testing.T) {
 		err = workspace.Clone(checkout, filepath.Join(t.TempDir(), "back"))
 		if err == nil || !strings.Contains(err.Error(), missing) {
 			t.Fatalf("got %v, want an error naming %s", err, missing)
+		}
+	})
+}
+
+// gitInit makes dir a repository, cloned from origin unless it is empty.
+func gitInit(t *testing.T, dir, origin string) {
+	t.Helper()
+	for _, args := range [][]string{{"init", "-q", dir}, {"-C", dir, "remote", "add", "origin", origin}} {
+		if origin == "" && args[0] == "-C" {
+			continue
+		}
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+}
+
+func TestGitWorkspaceDetect(t *testing.T) {
+	bareRepository(t) // isolates git from the user's config
+	workspace := infra.NewGitWorkspace(io.Discard)
+
+	detect := func(t *testing.T, root string) []string {
+		t.Helper()
+		projectRoot, err := domain.NewProjectRoot(root)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		checkouts, err := workspace.Detect(projectRoot)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var found []string
+		for _, c := range checkouts.List() {
+			found = append(found, c.Dir()+" "+c.Remote())
+		}
+		return found
+	}
+
+	t.Run("finds a repository at the root, not its subdirectories", func(t *testing.T) {
+		root := t.TempDir()
+		gitInit(t, root, "git@host:app.git")
+		mkdir(t, filepath.Join(root, "api"))
+
+		if got, want := detect(t, root), []string{". git@host:app.git"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("finds repositories in the root's directories", func(t *testing.T) {
+		root := t.TempDir()
+		gitInit(t, filepath.Join(root, "back"), "git@host:back.git")
+		gitInit(t, filepath.Join(root, "front"), "git@host:front.git")
+		mkdir(t, filepath.Join(root, "notes"))
+
+		want := []string{"back git@host:back.git", "front git@host:front.git"}
+		if got := detect(t, root); !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("skips repositories without an origin to clone from", func(t *testing.T) {
+		root := t.TempDir()
+		gitInit(t, filepath.Join(root, "scratch"), "")
+
+		if got := detect(t, root); len(got) != 0 {
+			t.Fatalf("got %q, want none", got)
+		}
+	})
+
+	t.Run("finds nothing under a root that doesn't exist yet", func(t *testing.T) {
+		if got := detect(t, filepath.Join(t.TempDir(), "missing")); len(got) != 0 {
+			t.Fatalf("got %q, want none", got)
 		}
 	})
 }

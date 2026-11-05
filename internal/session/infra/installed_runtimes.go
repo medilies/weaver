@@ -151,3 +151,37 @@ func link(target, path string) error {
 	}
 	return os.Rename(tmp, path)
 }
+
+// Available implements domain.RuntimeCatalog: PHP as installed (8.4),
+// Node.js by major (20), which keeps a pin valid when nvm upgrades it.
+func (r InstalledRuntimes) Available() ([]domain.Runtime, error) {
+	var available []domain.Runtime
+	nodes, err := installedVersions(filepath.Join(r.nvmDir, "versions", "node"), nvmVersion)
+	if err != nil {
+		return nil, err
+	}
+	var majors []string
+	for _, version := range nodes {
+		major, _, _ := strings.Cut(version, ".")
+		if !slices.Contains(majors, major) {
+			majors = append(majors, major)
+		}
+	}
+	phps, err := installedVersions(r.phpDir, phpBinary)
+	if err != nil {
+		return nil, err
+	}
+	for _, pins := range []struct {
+		kind     domain.RuntimeKind
+		versions []string
+	}{{domain.Node, majors}, {domain.PHP, phps}} {
+		for _, version := range pins.versions {
+			runtime, err := domain.NewRuntime(string(pins.kind), version)
+			if err != nil {
+				return nil, err
+			}
+			available = append(available, runtime)
+		}
+	}
+	return available, nil
+}

@@ -13,6 +13,7 @@ import (
 
 // application is the use cases the commands run.
 type application struct {
+	addProject   app.AddProject
 	openProject  app.OpenProject
 	killProject  app.KillProject
 	listProjects app.ListProjects
@@ -45,7 +46,10 @@ func wire() (application, error) {
 	workspace := infra.NewGitWorkspace(os.Stderr)
 	runtimes := infra.NewInstalledRuntimes("/usr/bin", nvmDir, filepath.Join(cacheDir, "weaver", "php"))
 
+	forms := infra.NewHuhForms()
+
 	return application{
+		addProject:   app.NewAddProject(projects, workspace, runtimes, forms, forms),
 		openProject:  app.NewOpenProject(projects, tmux, workspace, runtimes),
 		killProject:  app.NewKillProject(tmux),
 		listProjects: app.NewListProjects(projects, tmux),

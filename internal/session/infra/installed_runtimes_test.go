@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -107,4 +108,27 @@ func TestInstalledRuntimesResolvesNode(t *testing.T) {
 			t.Fatalf("got %v, want ErrRuntimeNotInstalled", err)
 		}
 	})
+}
+
+func TestInstalledRuntimesAvailable(t *testing.T) {
+	bin, nvm := t.TempDir(), t.TempDir()
+	for _, name := range []string{"php8.4", "php8.2", "php-config8.5"} {
+		touch(t, filepath.Join(bin, name))
+	}
+	for _, version := range []string{"v20.1.0", "v20.20.2", "v22.18.0"} {
+		touch(t, filepath.Join(nvm, "versions", "node", version, "bin", "node"))
+	}
+
+	available, err := infra.NewInstalledRuntimes(bin, nvm, t.TempDir()).Available()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []string
+	for _, runtime := range available {
+		got = append(got, runtime.String())
+	}
+	if want := []string{"node 20", "node 22", "php 8.2", "php 8.4"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
 }

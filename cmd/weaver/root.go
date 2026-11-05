@@ -30,6 +30,11 @@ current directory.`,
 			return weaver.openProject.HandleDir(dir)
 		},
 	}
-	root.AddCommand(newKillCommand(weaver), newListCommand(weaver), newShowCommand(weaver))
+	root.AddCommand(
+		newAddCommand(weaver),
+		newKillCommand(weaver),
+		newListCommand(weaver),
+		newShowCommand(weaver),
+	)
 	return root
 }

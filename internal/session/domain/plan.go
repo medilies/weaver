@@ -13,6 +13,13 @@ type RuntimeResolver interface {
 	Resolve(runtime Runtime) (string, error)
 }
 
+// RuntimeCatalog lists the toolchain versions installed on this machine.
+// Infrastructure provides the implementation.
+type RuntimeCatalog interface {
+	// Available lists the versions a project can pin, sorted.
+	Available() ([]Runtime, error)
+}
+
 // SessionPlan is a project resolved for tmux: every directory absolute,
 // every pane's environment merged over its project's, and every pinned
 // version located. Starting a session follows it without decisions.
