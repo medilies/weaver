@@ -7,7 +7,7 @@ of a bespoke script per project.
 ## Usage
 
 ```sh
-go install ./cmd/weave   # puts weave in ~/go/bin (delete an older ~/go/bin/weaver)
+go install ./cmd/weave   # puts weave in ~/go/bin
 weave add                # register the project in the current directory, through forms
 weave add --from scratch # same, starting from the windows and panes of the running session scratch
 weave bicyclette         # start or attach the bicyclette session, from anywhere
@@ -26,6 +26,9 @@ To complete project names with Tab, load weave's completion in your
 ```sh
 source <(weave completion bash)
 ```
+
+The command used to be called `weaver`: delete `~/go/bin/weaver`, and
+in `~/.bashrc`, change `weaver completion` to `weave completion`.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it). When the session isn't running, weaver first:

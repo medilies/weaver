@@ -2,10 +2,23 @@ package main
 
 import (
 	"errors"
+	"io"
 	"testing"
 
+	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
 )
+
+// `weave .` opens the project holding the current directory: "." is no
+// project's name.
+func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
+	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, nil, nil)})
+	root.SetArgs([]string{"."})
+	root.SetErr(io.Discard)
+	if err := root.Execute(); !errors.Is(err, domain.ErrNoProjectAt) {
+		t.Fatalf("got %v, want ErrNoProjectAt from looking up the current directory", err)
+	}
+}
 
 // `weave <name>` runs the command called name, if there is one, so no
 // project may take a command's name.
