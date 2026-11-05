@@ -64,7 +64,7 @@ func (uc OpenProject) HandleDir(dir string) error {
 	}
 	switch len(found) {
 	case 0:
-		return fmt.Errorf("%w: %s (weaver list shows the registered projects)", domain.ErrNoProjectAt, dir)
+		return fmt.Errorf("%w: %s (weave list shows the registered projects)", domain.ErrNoProjectAt, dir)
 	case 1:
 		return uc.open(found[0])
 	}

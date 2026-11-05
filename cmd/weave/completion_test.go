@@ -62,7 +62,7 @@ func complete(t *testing.T, args ...string) []string {
 }
 
 func TestProjectNameCompletion(t *testing.T) {
-	t.Run("weaver suggests projects, noting running ones, besides commands", func(t *testing.T) {
+	t.Run("weave suggests projects, noting running ones, besides commands", func(t *testing.T) {
 		got := complete(t, "")
 		for _, want := range []string{"bicyclette", "shop\trunning", "list\tList registered projects and whether their session runs"} {
 			if !slices.Contains(got, want) {

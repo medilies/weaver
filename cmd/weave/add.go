@@ -15,7 +15,7 @@ func newAddCommand(weaver application) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add [name]",
 		Short: "Register a project through interactive forms",
-		Long: `weaver add asks for a project's root (the current directory unless
+		Long: `weave add asks for a project's root (the current directory unless
 --root says otherwise), the repositories to clone when missing, the PHP
 and Node versions, and its windows and panes, then saves it.
 
@@ -39,7 +39,7 @@ them: lay them out by hand, then let weaver record them.`,
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Saved %s. Open it with: weaver %s\n", project.Name(), project.Name())
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "Saved %s. Open it with: weave %s\n", project.Name(), project.Name())
 			return err
 		},
 	}

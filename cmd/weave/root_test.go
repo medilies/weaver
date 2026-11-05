@@ -7,7 +7,7 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// `weaver <name>` runs the command called name, if there is one, so no
+// `weave <name>` runs the command called name, if there is one, so no
 // project may take a command's name.
 func TestEveryCommandNameIsAReservedProjectName(t *testing.T) {
 	root := newRootCommand(application{})

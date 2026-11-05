@@ -13,7 +13,7 @@ func newEditCommand(weaver application) *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit <project>",
 		Short: "Edit a project's config in your editor, keeping only a valid one",
-		Long: `weaver edit opens a copy of the project's config in $VISUAL, else
+		Long: `weave edit opens a copy of the project's config in $VISUAL, else
 $EDITOR, else vi (with VS Code, use VISUAL="code --wait"). The config is
 replaced only once the copy is valid: on a mistake, weaver offers to open
 the editor again on what you wrote.`,

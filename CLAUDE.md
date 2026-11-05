@@ -2,14 +2,14 @@
 
 ## Design
 
-- SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weaver` Cobra layer. `domain` and `app` never import Cobra, `charm.land` or `infra`; enforced by the `depguard` rules in `.golangci.yml`.
+- SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weave` Cobra layer. `domain` and `app` never import Cobra, `charm.land` or `infra`; enforced by the `depguard` rules in `.golangci.yml`.
 - Ports about domain concepts (projects, tmux sessions, runtimes, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents) live in `app`. `infra` holds every adapter: JSON configs and their schema, tmux, git, installed runtimes, the editor and the huh forms. Keep logic out of the forms: they only collect answers checked by domain constructors.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
 
 ## Environment
 
-- No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weaver`.
+- No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weave`.
 - Go version is `1.26` everywhere. `go.mod`'s `go` directive is the source of truth; CI reads it via `go-version-file`. Change it in one place.
 - No database: project configs are plain JSON files under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRepository` port and the `infra.JSONProjectRepository` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
 - Pinned PHP versions are linked under `os.UserCacheDir()/weaver/php`; Node versions come from nvm's install directory.
@@ -18,7 +18,7 @@
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux and git tests skip when the tool is missing, except in CI, which installs tmux.
-- The huh forms aren't unit-tested; check them by running `weaver add` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
+- The huh forms aren't unit-tested; check them by running `weave add` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
 
 ## Workflow
 
@@ -30,6 +30,6 @@
 ## Commands
 
 - `go build ./...` — build everything
-- `go run ./cmd/weaver <args>` — run without building
+- `go run ./cmd/weave <args>` — run without building
 - `go test ./...` — run tests
 - `golangci-lint run ./...` — format check, static analysis, layer boundaries

@@ -1,32 +1,33 @@
 # weaver
 
 Weaver drives tmux sessions, windows and panes from a per-project JSON
-config, so starting a dev environment is one command instead of a
-bespoke script per project.
+config, so starting a dev environment is one command, `weave`, instead
+of a bespoke script per project.
 
 ## Usage
 
 ```sh
-go install ./cmd/weaver   # puts weaver in ~/go/bin
-weaver add                # register the project in the current directory, through forms
-weaver add --from scratch # same, starting from the windows and panes of the running session scratch
-weaver bicyclette         # start or attach the bicyclette session, from anywhere
-weaver                    # same, for the project whose root holds the current directory
-weaver edit bicyclette    # edit its config in $VISUAL or $EDITOR; only a valid config is saved
-weaver kill bicyclette    # stop the session and everything running in it
-weaver list               # registered projects, and which sessions run
-weaver show bicyclette    # print a registered project
+go install ./cmd/weave   # puts weave in ~/go/bin (delete an older ~/go/bin/weaver)
+weave add                # register the project in the current directory, through forms
+weave add --from scratch # same, starting from the windows and panes of the running session scratch
+weave bicyclette         # start or attach the bicyclette session, from anywhere
+weave .                  # same, for the project whose root holds the current directory
+weave                    # same as weave .
+weave edit bicyclette    # edit its config in $VISUAL or $EDITOR; only a valid config is saved
+weave kill bicyclette    # stop the session and everything running in it
+weave list               # registered projects, and which sessions run
+weave show bicyclette    # print a registered project
 ```
 
-To complete project names with Tab, load weaver's completion in your
+To complete project names with Tab, load weave's completion in your
 `~/.bashrc` (zsh, fish and PowerShell work too, see
-`weaver completion --help`):
+`weave completion --help`):
 
 ```sh
-source <(weaver completion bash)
+source <(weave completion bash)
 ```
 
-`weaver <project>` attaches to the project's tmux session (inside tmux,
+`weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it). When the session isn't running, weaver first:
 
 1. finds every pinned PHP and Node version, and stops if one isn't
@@ -41,7 +42,7 @@ If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
 newer.
 
 When weaver started the running session and you closed some of its
-windows, `weaver <project>` puts them back where the config lists them
+windows, `weave <project>` puts them back where the config lists them
 before attaching. Windows you opened yourself stay as they are, and a
 session weaver didn't start is only attached.
 
@@ -56,7 +57,7 @@ PATH.
 
 ```sh
 go build ./...               # build everything
-go run ./cmd/weaver show X   # run without building
+go run ./cmd/weave show X    # run without building
 go test ./...                # run tests (the tmux and git adapters need tmux and git)
 golangci-lint run ./...      # format check, static analysis, layer boundaries
 ```
@@ -69,7 +70,7 @@ sockets; they never touch your sessions.
 A project is a JSON file at `~/.config/weaver/projects/<name>.json`
 (`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
 the project's name and its tmux session's name: letters, digits, `-` and
-`_`, and not one of weaver's commands.
+`_`, and not one of weave's commands.
 
 The smallest config opens one window with one shell in the root:
 
@@ -144,12 +145,12 @@ editors such as VS Code complete fields and flag mistakes as you type.
 The `Session` bounded context is organized by layer. `domain` and `app`
 never import Cobra, the terminal UI library or `infra`, which depguard
 rules in `.golangci.yml` enforce. Use cases depend on ports; `infra`
-implements them and `cmd/weaver` wires everything together.
+implements them and `cmd/weave` wires everything together.
 
 ```mermaid
 graph TD
-    subgraph cmd["cmd/weaver (Cobra CLI)"]
-        CLI["weaver, add, edit, kill, list, show"]
+    subgraph cmd["cmd/weave (Cobra CLI)"]
+        CLI["weave, add, edit, kill, list, show"]
     end
     subgraph app["internal/session/app"]
         UC["OpenProject, AddProject, EditProject,<br/>KillProject, ListProjects, LoadProject"]

@@ -15,7 +15,7 @@ import (
 // names and expands "#", and a leading "-" reads as a flag.
 var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
-// reservedNames are weaver's own commands: `weaver <name>` runs the
+// reservedNames are weave's own commands: `weave <name>` runs the
 // command, so a project named after one could never be opened.
 var reservedNames = []string{"add", "completion", "edit", "help", "kill", "list", "show"}
 
@@ -173,7 +173,7 @@ func (p Project) Windows() []Window {
 	return slices.Clone(p.windows)
 }
 
-// Describe renders a short human-readable summary, e.g. for `weaver show`.
+// Describe renders a short human-readable summary, e.g. for `weave show`.
 func (p Project) Describe() string {
 	return p.name.String() + " (" + p.root.String() + ")"
 }

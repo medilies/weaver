@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "weaver project",
-  "description": "A project's tmux session, opened with `weaver <project>`. See https://github.com/medilies/weaver#project-config",
+  "description": "A project's tmux session, opened with `weave <project>`. See https://github.com/medilies/weaver#project-config",
   "type": "object",
   "additionalProperties": false,
   "required": ["root"],

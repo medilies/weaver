@@ -103,7 +103,7 @@ type projectAnswers struct {
 func (a *projectAnswers) groups(found domain.Checkouts, versions map[domain.RuntimeKind][]string) []*huh.Group {
 	groups := []*huh.Group{huh.NewGroup(
 		huh.NewInput().Title("Project name").
-			Description("Used as `weaver <name>` and as the tmux session name.").
+			Description("Used as `weave <name>` and as the tmux session name.").
 			Value(&a.name).Validate(func(s string) error { _, err := domain.NewProjectName(s); return err }),
 		huh.NewInput().Title("Root").
 			Description("The project's directory.").

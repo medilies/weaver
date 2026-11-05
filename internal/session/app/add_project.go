@@ -8,7 +8,7 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// AddRequest is how `weaver add` was called.
+// AddRequest is how `weave add` was called.
 type AddRequest struct {
 	// Name is the project's name; by default the root's base name.
 	Name string

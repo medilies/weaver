@@ -1,4 +1,4 @@
-// Command weaver drives tmux sessions, windows and panes from a
+// Command weave drives tmux sessions, windows and panes from a
 // per-project JSON config.
 package main
 

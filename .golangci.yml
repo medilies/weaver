@@ -22,7 +22,7 @@ linters:
               desc: domain must not depend inward on the application layer
             - pkg: github.com/medilies/weaver/internal/session/infra
               desc: domain must not depend on infrastructure
-            - pkg: github.com/medilies/weaver/cmd/weaver
+            - pkg: github.com/medilies/weaver/cmd/weave
               desc: domain must not depend on the cmd layer
         app:
           files:
@@ -34,7 +34,7 @@ linters:
               desc: terminal forms belong in infra
             - pkg: github.com/medilies/weaver/internal/session/infra
               desc: application must depend on domain ports, not infrastructure directly
-            - pkg: github.com/medilies/weaver/cmd/weaver
+            - pkg: github.com/medilies/weaver/cmd/weave
               desc: application must not depend on the cmd layer
 
 formatters:
