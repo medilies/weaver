@@ -4,10 +4,19 @@ Weaver drives tmux sessions, windows and panes from a per-project YAML
 config, so starting a dev environment is one command, `weave`,
 instead of a bespoke script per project.
 
+## Install
+
+Download a binary for Linux or macOS from the
+[releases](https://github.com/medilies/weaver/releases), or build it with
+Go 1.26 or newer:
+
+```sh
+go install github.com/medilies/weaver/cmd/weave@latest   # puts weave in ~/go/bin
+```
+
 ## Usage
 
 ```sh
-go install ./cmd/weave   # puts weave in ~/go/bin
 weave add                # register the project in the current directory, through forms
 weave add --from scratch # same, starting from the windows and panes of the running session scratch
 weave bicyclette         # start or attach the bicyclette session, from anywhere
