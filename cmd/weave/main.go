@@ -20,7 +20,8 @@ type application struct {
 	openProject    app.OpenProject
 	killProject    app.KillProject
 	listProjects   app.ListProjects
-	loadProject    app.LoadProject
+	// documents reads configs as stored, for `show`.
+	documents app.ProjectDocuments
 	// sessions lists running tmux sessions, to complete `add --from`.
 	sessions domain.SessionLister
 }
@@ -60,7 +61,7 @@ func wire() (application, error) {
 		openProject:  app.NewOpenProject(projects, tmux, workspace, runtimes),
 		killProject:  app.NewKillProject(tmux),
 		listProjects: app.NewListProjects(projects, tmux),
-		loadProject:  app.NewLoadProject(projects),
+		documents:    projects,
 	}
 	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), forms, projects, projects,
 		weaver.listProjects, weaver.openProject, weaver.addProject, weaver.editProject, weaver.killProject)

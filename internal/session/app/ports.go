@@ -1,3 +1,5 @@
+// Package app holds the Session bounded context's use cases. It depends
+// only on the domain package, never on infrastructure or the CLI.
 package app
 
 import (
@@ -53,7 +55,7 @@ type ProjectDocuments interface {
 	// Document is the project's config as stored, or ProjectNotFound.
 	Document(name domain.ProjectName) (ConfigDocument, error)
 	// ReplaceDocument stores content as the project's config, in the
-	// stored config's file and format, if it is valid; otherwise the
+	// stored config's file, if it is valid; otherwise the
 	// stored config stays and the error wraps domain.ErrInvalidConfig.
 	ReplaceDocument(name domain.ProjectName, content []byte) error
 }

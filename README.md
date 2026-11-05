@@ -16,7 +16,7 @@ weave                    # browse the projects, to open, add, edit, kill or dele
 weave edit bicyclette    # edit its config in $VISUAL or $EDITOR; only a valid config is saved
 weave kill bicyclette    # stop the session and everything running in it
 weave list               # registered projects, and which sessions run
-weave show bicyclette    # print a registered project
+weave show bicyclette    # print its config file
 ```
 
 To complete project names with Tab, load weave's completion in your

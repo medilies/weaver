@@ -64,8 +64,8 @@ func TestFileProjectRepositoryFindByName(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		want := "weaver (/home/ilies/dev/weaver)"
-		if got := project.Describe(); got != want {
+		want := "/home/ilies/dev/weaver"
+		if got := project.Root().String(); got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})

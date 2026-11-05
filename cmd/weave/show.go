@@ -1,23 +1,27 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
+
+	"github.com/medilies/weaver/internal/session/domain"
 )
 
 func newShowCommand(weaver application) *cobra.Command {
 	return &cobra.Command{
 		Use:               "show <project>",
-		Short:             "Show a registered project's config",
+		Short:             "Print a registered project's config file",
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			project, err := weaver.loadProject.Handle(args[0])
+			name, err := domain.NewProjectName(args[0])
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), project.Describe())
+			document, err := weaver.documents.Document(name)
+			if err != nil {
+				return err
+			}
+			_, err = cmd.OutOrStdout().Write(document.Content)
 			return err
 		},
 	}

@@ -172,8 +172,3 @@ func (p Project) Runtimes() Runtimes {
 func (p Project) Windows() []Window {
 	return slices.Clone(p.windows)
 }
-
-// Describe renders a short human-readable summary, e.g. for `weave show`.
-func (p Project) Describe() string {
-	return p.name.String() + " (" + p.root.String() + ")"
-}

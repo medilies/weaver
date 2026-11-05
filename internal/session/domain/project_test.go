@@ -117,21 +117,3 @@ func TestProjectWindows(t *testing.T) {
 		}
 	})
 }
-
-func TestProjectDescribe(t *testing.T) {
-	name, err := domain.NewProjectName("weaver")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	root, err := domain.NewProjectRoot("/home/ilies/dev/weaver")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	project := domain.NewProject(name, root)
-
-	want := "weaver (/home/ilies/dev/weaver)"
-	if got := project.Describe(); got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-}

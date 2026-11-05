@@ -122,7 +122,7 @@ windows:
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got, err := repo.FindByName(saved.Name()); err != nil || got.Root().String() != "/srv/shop" {
-			t.Fatalf("got %v (%v), want the saved project", got.Describe(), err)
+			t.Fatalf("got %v (%v), want the saved project", got.Root(), err)
 		}
 	})
 
