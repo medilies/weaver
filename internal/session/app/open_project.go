@@ -7,7 +7,8 @@ import (
 )
 
 // OpenProject puts the user in a project's tmux session, starting it
-// first when it isn't running.
+// first when it isn't running, or re-creating the windows it lacks when
+// weaver started it.
 type OpenProject struct {
 	projects  domain.ProjectRepository
 	sessions  domain.SessionLauncher
@@ -72,14 +73,18 @@ func (uc OpenProject) HandleDir(dir string) error {
 }
 
 func (uc OpenProject) open(project domain.Project) error {
-	running, err := uc.sessions.IsRunning(project.Name())
+	session, running, err := uc.sessions.Find(project.Name())
 	if err != nil {
 		return err
 	}
-	if !running {
-		if err := uc.start(project); err != nil {
-			return err
-		}
+	switch {
+	case !running:
+		err = uc.start(project)
+	case session.Owned():
+		err = uc.restore(project, session)
+	}
+	if err != nil {
+		return err
 	}
 	return uc.sessions.Attach(project.Name())
 }
@@ -101,6 +106,22 @@ func (uc OpenProject) start(project domain.Project) error {
 	return uc.sessions.Start(plan)
 }
 
+// restore re-creates the project windows missing from a session weaver
+// started, usually because they were closed. Sessions started otherwise
+// are left as they are: their windows aren't weaver's to complete.
+func (uc OpenProject) restore(project domain.Project, session domain.RunningSession) error {
+	placements, err := project.Restoration(session.Windows(), uc.runtimes)
+	if err != nil || len(placements) == 0 {
+		return err
+	}
+	for _, placement := range placements {
+		if err := uc.checkWindowDirs(placement.Window()); err != nil {
+			return err
+		}
+	}
+	return uc.sessions.Restore(project.Name(), placements)
+}
+
 func (uc OpenProject) cloneMissing(project domain.Project) error {
 	for _, checkout := range project.Checkouts().List() {
 		dir := checkout.Path(project.Root())
@@ -120,14 +141,21 @@ func (uc OpenProject) cloneMissing(project domain.Project) error {
 
 func (uc OpenProject) checkDirs(plan domain.SessionPlan) error {
 	for _, window := range plan.Windows() {
-		for _, pane := range window.Panes() {
-			exists, err := uc.workspace.Exists(pane.Dir())
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return fmt.Errorf("%s: %w: %s", where(window, pane), domain.ErrMissingDirectory, pane.Dir())
-			}
+		if err := uc.checkWindowDirs(window); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (uc OpenProject) checkWindowDirs(window domain.WindowPlan) error {
+	for _, pane := range window.Panes() {
+		exists, err := uc.workspace.Exists(pane.Dir())
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("%s: %w: %s", where(window, pane), domain.ErrMissingDirectory, pane.Dir())
 		}
 	}
 	return nil

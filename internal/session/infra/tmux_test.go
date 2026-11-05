@@ -281,8 +281,8 @@ func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
 		t.Fatal("got no error, want a split to run out of space")
 	}
 
-	if running, err := server.tmux().IsRunning(name); err != nil || running {
-		t.Fatalf("got running=%v (%v), want the half-built session gone", running, err)
+	if server.running(t, name) {
+		t.Fatal("got the session running, want the half-built session gone")
 	}
 }
 
@@ -304,8 +304,8 @@ func TestTmuxKill(t *testing.T) {
 		if err := server.tmux().Kill(name); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if running, err := server.tmux().IsRunning(name); err != nil || running {
-			t.Fatalf("got running=%v (%v), want the session gone", running, err)
+		if server.running(t, name) {
+			t.Fatal("got the session running, want it gone")
 		}
 	})
 }
@@ -337,30 +337,126 @@ func TestTmuxRunning(t *testing.T) {
 	})
 }
 
-func TestTmuxIsRunning(t *testing.T) {
+func TestTmuxFind(t *testing.T) {
 	server := newTmuxServer(t)
 	shop, _ := domain.NewProjectName("shop")
 
 	t.Run("reports no session when no server runs", func(t *testing.T) {
-		if running, err := server.tmux().IsRunning(shop); err != nil || running {
-			t.Fatalf("got running=%v (%v), want not running", running, err)
+		if server.running(t, shop) {
+			t.Fatal("got shop running, want no session")
 		}
 	})
 
-	if err := server.tmux().Start(planOf(t, "shop-api", fmt.Sprintf(`{"root": %q}`, t.TempDir()), nil)); err != nil {
+	if err := server.tmux().Start(planOf(t, "shop-api", fmt.Sprintf(`{"root": %q, "windows": [{"name": "api"}, {"name": "app"}]}`, t.TempDir()), nil)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	shopAPI, _ := domain.NewProjectName("shop-api")
 
-	t.Run("reports a session it started", func(t *testing.T) {
-		name, _ := domain.NewProjectName("shop-api")
-		if running, err := server.tmux().IsRunning(name); err != nil || !running {
-			t.Fatalf("got running=%v (%v), want running", running, err)
+	t.Run("reports a session it started as owned", func(t *testing.T) {
+		if session, running, err := server.tmux().Find(shopAPI); err != nil || !running || !session.Owned() {
+			t.Fatalf("got running=%v owned=%v (%v), want an owned session", running, session.Owned(), err)
+		}
+	})
+
+	t.Run("reports the project windows the session has", func(t *testing.T) {
+		server.query(t, "rename-window", "-t", "shop-api:app", "renamed by hand")
+		session, _, err := server.tmux().Find(shopAPI)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got []string
+		for _, w := range session.Windows() {
+			got = append(got, w.String())
+		}
+		if want := []string{"api", "app"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("matches session names exactly, not by prefix", func(t *testing.T) {
-		if running, err := server.tmux().IsRunning(shop); err != nil || running {
-			t.Fatalf("got running=%v (%v), want shop not running", running, err)
+		if server.running(t, shop) {
+			t.Fatal("got shop running, want only shop-api")
 		}
 	})
+
+	t.Run("reports a session started otherwise as not owned", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "plain")
+		plain, _ := domain.NewProjectName("plain")
+		if session, running, err := server.tmux().Find(plain); err != nil || !running || session.Owned() {
+			t.Fatalf("got running=%v owned=%v (%v), want a running session not owned", running, session.Owned(), err)
+		}
+	})
+}
+
+func TestTmuxRestore(t *testing.T) {
+	doc := fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "a"},
+		{"name": "b", "panes": [
+			{"name": "left"},
+			{"name": "right", "split": {"direction": "right"}, "command": "echo restored-$((40+2))"}
+		]},
+		{"name": "c"}
+	]}`, t.TempDir())
+
+	// restore starts the project, adds a window by hand, closes windows,
+	// lets weaver restore them, and returns the window names.
+	restore := func(t *testing.T, closed ...string) (tmuxServer, string) {
+		t.Helper()
+		server := newTmuxServer(t)
+		project, err := load(t, "restore", doc)
+		if err != nil {
+			t.Fatalf("loading: %v", err)
+		}
+		plan, err := project.Plan(stubRuntimes{})
+		if err != nil {
+			t.Fatalf("planning: %v", err)
+		}
+		if err := server.tmux().Start(plan); err != nil {
+			t.Fatalf("starting: %v", err)
+		}
+		server.query(t, "new-window", "-d", "-t", "restore:", "-n", "manual")
+		for _, window := range closed {
+			server.query(t, "kill-window", "-t", "restore:"+window)
+		}
+
+		session, _, err := server.tmux().Find(project.Name())
+		if err != nil {
+			t.Fatalf("finding: %v", err)
+		}
+		placements, err := project.Restoration(session.Windows(), stubRuntimes{})
+		if err != nil {
+			t.Fatalf("planning the restoration: %v", err)
+		}
+		if err := server.tmux().Restore(project.Name(), placements); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return server, server.query(t, "list-windows", "-t", "=restore", "-F", "#{window_name}")
+	}
+
+	t.Run("puts closed windows back in place", func(t *testing.T) {
+		if _, got := restore(t, "a", "b"); got != "a\nb\nc\nmanual" {
+			t.Fatalf("got windows %q, want a, b, c, manual", got)
+		}
+	})
+
+	t.Run("appends them when none of the project's is left", func(t *testing.T) {
+		if _, got := restore(t, "a", "b", "c"); got != "manual\na\nb\nc" {
+			t.Fatalf("got windows %q, want manual, a, b, c", got)
+		}
+	})
+
+	t.Run("lays out and starts a restored window's panes", func(t *testing.T) {
+		server, _ := restore(t, "b")
+		server.waitFor(t, server.paneLabelled(t, "restore", "right"), "restored-42")
+	})
+}
+
+// running reports whether a session named after the project runs.
+func (s tmuxServer) running(t *testing.T, name domain.ProjectName) bool {
+	t.Helper()
+	_, running, err := s.tmux().Find(name)
+	if err != nil {
+		t.Fatalf("finding %s: %v", name, err)
+	}
+	return running
 }

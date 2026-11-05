@@ -13,13 +13,22 @@ import (
 // fakeSessions is an in-memory domain.SessionLauncher recording what it
 // was asked to do.
 type fakeSessions struct {
-	running  map[string]bool
+	running  map[string]domain.RunningSession
 	started  []string
+	restored []string
 	attached []string
 }
 
-func (s *fakeSessions) IsRunning(name domain.ProjectName) (bool, error) {
-	return s.running[name.String()], nil
+func (s *fakeSessions) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
+	session, ok := s.running[name.String()]
+	return session, ok, nil
+}
+
+func (s *fakeSessions) Restore(_ domain.ProjectName, placements []domain.WindowPlacement) error {
+	for _, placement := range placements {
+		s.restored = append(s.restored, placement.Window().Name().String())
+	}
+	return nil
 }
 
 func (s *fakeSessions) Start(plan domain.SessionPlan) error {
@@ -119,6 +128,20 @@ func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace, ru
 	return app.NewOpenProject(repo, sessions, workspace, runtimes).Handle("shop")
 }
 
+// owned is a running session weaver started, which still has windows.
+func owned(t *testing.T, windows ...string) domain.RunningSession {
+	t.Helper()
+	names := make([]domain.WindowName, 0, len(windows))
+	for _, raw := range windows {
+		name, err := domain.NewWindowName(raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		names = append(names, name)
+	}
+	return domain.NewRunningSession(true, names...)
+}
+
 func everything() *fakeWorkspace {
 	return &fakeWorkspace{dirs: map[string]bool{
 		"/srv/shop": true, "/srv/shop/back": true, "/srv/shop/front": true, "/srv/shop/logs": true, "/srv/blog": true,
@@ -138,13 +161,45 @@ func TestOpenProject(t *testing.T) {
 		}
 	})
 
-	t.Run("only attaches when the session is running", func(t *testing.T) {
-		sessions := &fakeSessions{running: map[string]bool{"shop": true}}
+	t.Run("only attaches when weaver's session has every window", func(t *testing.T) {
+		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop", "logs")}}
 		if err := openShop(t, sessions, everything(), php84); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(sessions.started) != 0 || !slices.Equal(sessions.attached, []string{"shop"}) {
-			t.Fatalf("got started %q, attached %q; want shop attached only", sessions.started, sessions.attached)
+		if len(sessions.started)+len(sessions.restored) != 0 || !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got started %q, restored %q, attached %q; want shop attached only",
+				sessions.started, sessions.restored, sessions.attached)
+		}
+	})
+
+	t.Run("re-creates the windows weaver's session lacks, then attaches", func(t *testing.T) {
+		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop")}}
+		if err := openShop(t, sessions, everything(), php84); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.restored, []string{"logs"}) || !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got restored %q, attached %q; want logs restored, then shop attached", sessions.restored, sessions.attached)
+		}
+	})
+
+	t.Run("leaves a session weaver didn't start as it is", func(t *testing.T) {
+		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}
+		if err := openShop(t, sessions, everything(), php84); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(sessions.restored) != 0 || !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got restored %q, attached %q; want shop attached only", sessions.restored, sessions.attached)
+		}
+	})
+
+	t.Run("fails on a missing directory before restoring a window", func(t *testing.T) {
+		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop")}}
+		workspace := everything()
+		delete(workspace.dirs, "/srv/shop/logs")
+		err := openShop(t, sessions, workspace, php84)
+		if !errors.Is(err, domain.ErrMissingDirectory) || len(sessions.restored)+len(sessions.attached) != 0 {
+			t.Fatalf("got %v, restored %q, attached %q; want ErrMissingDirectory and nothing done",
+				err, sessions.restored, sessions.attached)
 		}
 	})
 

@@ -37,6 +37,11 @@ it switches to it). When the session isn't running, weaver first:
 If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
 newer.
 
+When weaver started the running session and you closed some of its
+windows, `weaver <project>` puts them back where the config lists them
+before attaching. Windows you opened yourself stay as they are, and a
+session weaver didn't start is only attached.
+
 Runtimes are found where Ubuntu and nvm install them: `"php": "8.4"` is
 `/usr/bin/php8.4`, linked as `php` in `~/.cache/weaver/php/8.4`, and
 `"node": "20"` is the newest `$NVM_DIR/versions/node/v20.*`. Either

@@ -34,6 +34,10 @@ type TmuxOptions struct {
 // after projects and targeted with "=name", which matches exactly; panes
 // and windows are targeted by the IDs tmux prints when creating them, so
 // user options such as base-index never matter.
+//
+// weaver tags the sessions it starts with the @weaver_project option and
+// their windows with @weaver_window, so it recognises them later, even
+// once renamed.
 type Tmux struct {
 	opts TmuxOptions
 }
@@ -43,13 +47,28 @@ func NewTmux(opts TmuxOptions) Tmux {
 	return Tmux{opts: opts}
 }
 
-// IsRunning implements domain.SessionLauncher.
-func (t Tmux) IsRunning(name domain.ProjectName) (bool, error) {
-	_, err := t.run("has-session", "-t", "="+name.String())
+// Find implements domain.SessionLauncher. A session is owned when it
+// carries its project's tag.
+func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
+	// A window's format sees its session's options too. "/" can't be in a
+	// project name, so it ends the session's tag.
+	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{@weaver_project}/#{@weaver_window}")
 	if _, exited := errors.AsType[*exec.ExitError](err); exited {
-		return false, nil // no such session, or no server at all
+		return domain.RunningSession{}, false, nil // no such session, or no server at all
 	}
-	return err == nil, err
+	if err != nil {
+		return domain.RunningSession{}, false, err
+	}
+	owned := false
+	var windows []domain.WindowName
+	for line := range strings.Lines(out) {
+		project, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), "/")
+		owned = owned || project == name.String()
+		if window, err := domain.NewWindowName(tag); err == nil {
+			windows = append(windows, window)
+		}
+	}
+	return domain.NewRunningSession(owned, windows...), true, nil
 }
 
 // Start implements domain.SessionLauncher.
@@ -60,8 +79,11 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 		var err error
 		if i == 0 {
 			session, windowID, paneID, err = t.newSession(plan.Name(), window)
+			if err == nil {
+				_, err = t.run("set-option", "-t", session, "@weaver_project", plan.Name().String())
+			}
 		} else {
-			windowID, paneID, err = t.newWindow(previous, window)
+			windowID, paneID, err = t.newWindow([]string{"-a", "-t", previous}, window)
 		}
 		if err == nil {
 			err = t.fill(windowID, paneID, window)
@@ -73,6 +95,45 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 			return err
 		}
 		previous = windowID
+	}
+	return nil
+}
+
+// Restore implements domain.SessionLauncher. A window whose anchor is
+// gone too goes at the end.
+func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlacement) error {
+	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{window_id} #{@weaver_window}")
+	if err != nil {
+		return err
+	}
+	ids := make(map[string]string)
+	var last string
+	for line := range strings.Lines(out) {
+		id, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if tag != "" {
+			ids[tag] = id
+		}
+		last = id
+	}
+	for _, placement := range placements {
+		window := placement.Window()
+		target := []string{"-a", "-t", last}
+		if after, ok := placement.After(); ok && ids[after.String()] != "" {
+			target = []string{"-a", "-t", ids[after.String()]}
+		} else if before, ok := placement.Before(); ok && ids[before.String()] != "" {
+			target = []string{"-b", "-t", ids[before.String()]}
+		}
+		windowID, paneID, err := t.newWindow(target, window)
+		if err == nil {
+			err = t.fill(windowID, paneID, window)
+		}
+		if err != nil {
+			return err
+		}
+		ids[window.Name().String()] = windowID
+		if target[0] == "-a" && target[2] == last {
+			last = windowID
+		}
 	}
 	return nil
 }
@@ -138,14 +199,15 @@ func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (ses
 	return ids[0], ids[1], ids[2], nil
 }
 
-func (t Tmux) newWindow(after string, window domain.WindowPlan) (windowID, paneID string, err error) {
+// newWindow creates a window placed by target: "-a" (after) or "-b"
+// (before), "-t", and a window.
+func (t Tmux) newWindow(target []string, window domain.WindowPlan) (windowID, paneID string, err error) {
 	pane := window.Panes()[0]
-	args := []string{
-		"new-window", "-d", "-a", "-t", after,
+	args := append(append([]string{"new-window", "-d"}, target...),
 		"-n", formatArgument(window.Name().String()),
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{window_id} #{pane_id}",
-	}
+	)
 	ids, err := t.runIDs(2, append(args, shellCommand(pane)...)...)
 	if err != nil {
 		return "", "", err
@@ -153,9 +215,12 @@ func (t Tmux) newWindow(after string, window domain.WindowPlan) (windowID, paneI
 	return ids[0], ids[1], nil
 }
 
-// fill splits the window's first pane into the others, labels them in
-// their borders, then types their commands.
+// fill tags the window as the project's, splits its first pane into the
+// others, labels them in their borders, then types their commands.
 func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan) error {
+	if _, err := t.run("set-option", "-w", "-t", windowID, "@weaver_window", argument(window.Name().String())); err != nil {
+		return err
+	}
 	panes := window.Panes()
 	ids := []string{firstPaneID}
 	for _, pane := range panes[1:] {
