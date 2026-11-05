@@ -142,27 +142,32 @@ editors such as VS Code complete fields and flag mistakes as you type.
 ## Architecture
 
 The `Session` bounded context is organized by layer. `domain` and `app`
-never import Cobra or `infra` — enforced by a `depguard` rule in
-`.golangci.yml`.
+never import Cobra, the terminal UI library or `infra`, which depguard
+rules in `.golangci.yml` enforce. Use cases depend on ports; `infra`
+implements them and `cmd/weaver` wires everything together.
 
 ```mermaid
 graph TD
     subgraph cmd["cmd/weaver (Cobra CLI)"]
-        CLI["weaver show"]
+        CLI["weaver, add, edit, kill, list, show"]
     end
     subgraph app["internal/session/app"]
-        LP["LoadProject use case"]
+        UC["OpenProject, AddProject, EditProject,<br/>KillProject, ListProjects, LoadProject"]
+        AP["ProjectForm, Confirmer, ConfigEditor,<br/>ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]
-        P["Project, ProjectName, ProjectRoot"]
-        PR["ProjectRepository (port)"]
+        M["Project, Window, Pane, Split, Env, Runtimes, Checkouts<br/>SessionPlan, Restoration"]
+        DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer, RuntimeResolver,<br/>RuntimeCatalog, Workspace, CheckoutDetector (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        JSON["JSONProjectRepository"]
+        A["JSONProjectRepository + schema, Tmux,<br/>GitWorkspace, InstalledRuntimes, Editor, HuhForms"]
     end
 
-    CLI --> LP
-    CLI --> JSON
-    LP --> PR
-    JSON -.implements.-> PR
+    CLI --> UC
+    CLI --> A
+    UC --> M
+    UC --> DP
+    UC --> AP
+    A -.implements.-> DP
+    A -.implements.-> AP
 ```
