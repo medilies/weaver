@@ -123,14 +123,39 @@ func (r FileProjectRepository) Save(project domain.Project) error {
 	if err := writeFileAtomic(path, doc); err != nil {
 		return err
 	}
-	for _, ext := range configExtensions {
-		if other := r.path(project.Name(), ext); other != path {
-			if err := os.Remove(other); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return err
-			}
-		}
+	_, err = r.removeConfigs(project.Name(), path)
+	return err
+}
+
+// Delete implements domain.ProjectRepository: it removes the project's
+// config files.
+func (r FileProjectRepository) Delete(name domain.ProjectName) error {
+	removed, err := r.removeConfigs(name, "")
+	if err == nil && !removed {
+		return domain.NewProjectNotFound(name)
 	}
-	return nil
+	return err
+}
+
+// removeConfigs removes the config files of project name but the one at
+// keep, and reports whether it removed any.
+func (r FileProjectRepository) removeConfigs(name domain.ProjectName, keep string) (bool, error) {
+	removed := false
+	for _, ext := range configExtensions {
+		path := r.path(name, ext)
+		if path == keep {
+			continue
+		}
+		err := os.Remove(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return removed, err
+		}
+		removed = true
+	}
+	return removed, nil
 }
 
 // find is the path of the config file of project name.

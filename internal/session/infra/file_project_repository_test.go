@@ -409,3 +409,29 @@ func TestFileProjectRepositoryReadsYAML(t *testing.T) {
 		}
 	})
 }
+
+func TestFileProjectRepositoryDelete(t *testing.T) {
+	name, _ := domain.NewProjectName("shop")
+
+	for _, file := range []string{"shop.json", "shop.yml", "shop.yaml"} {
+		t.Run("removes "+file, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(`{"root": "/srv/shop"}`), 0o600); err != nil {
+				t.Fatalf("writing fixture: %v", err)
+			}
+			repo := infra.NewFileProjectRepository(dir)
+			if err := repo.Delete(name); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if _, err := repo.FindByName(name); !isNotFound(err) {
+				t.Fatalf("got %v, want ProjectNotFound once deleted", err)
+			}
+		})
+	}
+
+	t.Run("reports a project that isn't registered", func(t *testing.T) {
+		if err := infra.NewFileProjectRepository(t.TempDir()).Delete(name); !isNotFound(err) {
+			t.Fatalf("got %v, want ProjectNotFound", err)
+		}
+	})
+}

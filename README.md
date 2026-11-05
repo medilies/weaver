@@ -12,7 +12,7 @@ weave add                # register the project in the current directory, throug
 weave add --from scratch # same, starting from the windows and panes of the running session scratch
 weave bicyclette         # start or attach the bicyclette session, from anywhere
 weave .                  # same, for the project whose root holds the current directory
-weave                    # same as weave .
+weave                    # browse the projects, to open, add, edit, kill or delete them
 weave edit bicyclette    # edit its config in $VISUAL or $EDITOR; only a valid config is saved
 weave kill bicyclette    # stop the session and everything running in it
 weave list               # registered projects, and which sessions run
@@ -29,6 +29,22 @@ source <(weave completion bash)
 
 The command used to be called `weaver`: delete `~/go/bin/weaver`, and
 in `~/.bashrc`, change `weaver completion` to `weave completion`.
+
+`weave` alone lists the projects, a ● marking those whose session runs,
+beside the selected one's config:
+
+| Key | Does |
+| --- | --- |
+| ↑ ↓ or k j | select a project |
+| enter | open it, like `weave <project>` |
+| a | add the current directory, like `weave add` |
+| e | edit its config, like `weave edit <project>` |
+| x | stop its session, after you confirm |
+| d | delete its config, after you confirm; a running session keeps running |
+| q | quit |
+
+After adding, editing, stopping or deleting, the list comes back with
+what happened.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it). When the session isn't running, weaver first:
@@ -185,15 +201,15 @@ graph TD
         CLI["weave, add, edit, kill, list, show"]
     end
     subgraph app["internal/session/app"]
-        UC["OpenProject, AddProject, EditProject,<br/>KillProject, ListProjects, LoadProject"]
-        AP["ProjectForm, Confirmer, ConfigEditor,<br/>ProjectDocuments (ports)"]
+        UC["BrowseProjects, OpenProject, AddProject,<br/>EditProject, KillProject, ListProjects, LoadProject"]
+        AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]
         M["Project, Window, Pane, Split, Env, Runtimes, Checkouts<br/>SessionPlan, Restoration"]
         DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer, RuntimeResolver,<br/>RuntimeCatalog, Workspace, CheckoutDetector (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, InstalledRuntimes, Editor, HuhForms"]
+        A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, InstalledRuntimes, Editor,<br/>HuhForms, TeaBrowser"]
     end
 
     CLI --> UC

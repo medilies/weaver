@@ -14,8 +14,10 @@ func newRootCommand(weaver application) *cobra.Command {
 first from ~/.config/weaver/projects/<project>.json (or .yml) when it
 isn't running. Inside tmux, it switches to the session instead.
 
-weave . opens the project whose root contains the current directory, as
-does weave without a project.`,
+weave . opens the project whose root contains the current directory.
+
+Without a project, weave lists the projects and the selected one's
+config, to open, add, edit, kill or delete them.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		SilenceUsage:      true,
@@ -27,6 +29,9 @@ does weave without a project.`,
 			dir, err := os.Getwd()
 			if err != nil {
 				return err
+			}
+			if len(args) == 0 {
+				return weaver.browseProjects.Handle(dir)
 			}
 			return weaver.openProject.HandleDir(dir)
 		},

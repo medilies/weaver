@@ -3,7 +3,7 @@
 ## Design
 
 - SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weave` Cobra layer. `domain` and `app` never import Cobra, `charm.land` or `infra`; enforced by the `depguard` rules in `.golangci.yml`.
-- Ports about domain concepts (projects, tmux sessions, runtimes, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents) live in `app`. `infra` holds every adapter: JSON and YAML configs and their schema, tmux, git, installed runtimes, the editor and the huh forms. Keep logic out of the forms: they only collect answers checked by domain constructors.
+- Ports about domain concepts (projects, tmux sessions, runtimes, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: JSON and YAML configs and their schema, tmux, git, installed runtimes, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
 
@@ -18,7 +18,7 @@
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux and git tests skip when the tool is missing, except in CI, which installs tmux.
-- The huh forms aren't unit-tested; check them by running `weave add` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
+- The huh forms and the browser aren't unit-tested; check them by running `weave add` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
 
 ## Workflow
 

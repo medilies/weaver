@@ -29,6 +29,14 @@ func (r inMemoryRepository) Save(project domain.Project) error {
 	return nil
 }
 
+func (r inMemoryRepository) Delete(name domain.ProjectName) error {
+	if _, ok := r.projects[name.String()]; !ok {
+		return domain.NewProjectNotFound(name)
+	}
+	delete(r.projects, name.String())
+	return nil
+}
+
 func (r inMemoryRepository) Names() ([]domain.ProjectName, error) {
 	var names []domain.ProjectName
 	for _, key := range slices.Sorted(maps.Keys(r.projects)) {

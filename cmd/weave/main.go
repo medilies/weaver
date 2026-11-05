@@ -14,12 +14,13 @@ import (
 
 // application is the use cases the commands run.
 type application struct {
-	addProject   app.AddProject
-	editProject  app.EditProject
-	openProject  app.OpenProject
-	killProject  app.KillProject
-	listProjects app.ListProjects
-	loadProject  app.LoadProject
+	addProject     app.AddProject
+	browseProjects app.BrowseProjects
+	editProject    app.EditProject
+	openProject    app.OpenProject
+	killProject    app.KillProject
+	listProjects   app.ListProjects
+	loadProject    app.LoadProject
 	// sessions lists running tmux sessions, to complete `add --from`.
 	sessions domain.SessionLister
 }
@@ -52,7 +53,7 @@ func wire() (application, error) {
 
 	forms := infra.NewHuhForms()
 
-	return application{
+	weaver := application{
 		addProject:   app.NewAddProject(projects, workspace, runtimes, tmux, forms, forms),
 		editProject:  app.NewEditProject(projects, infra.NewEditor(), forms),
 		sessions:     tmux,
@@ -60,7 +61,10 @@ func wire() (application, error) {
 		killProject:  app.NewKillProject(tmux),
 		listProjects: app.NewListProjects(projects, tmux),
 		loadProject:  app.NewLoadProject(projects),
-	}, nil
+	}
+	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), forms, projects, projects,
+		weaver.listProjects, weaver.openProject, weaver.addProject, weaver.editProject, weaver.killProject)
+	return weaver, nil
 }
 
 func main() {

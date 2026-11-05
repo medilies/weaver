@@ -58,3 +58,35 @@ type ProjectDocuments interface {
 	// stored config stays and the error wraps domain.ErrInvalidConfig.
 	ReplaceDocument(name domain.ProjectName, content []byte) error
 }
+
+// Action is what the user can do from the project browser.
+type Action int
+
+const (
+	// ActionOpen opens the chosen project, as `weave <project>` does.
+	ActionOpen Action = iota + 1
+	// ActionAdd adds a project rooted at the working directory.
+	ActionAdd
+	// ActionEdit edits the chosen project's config.
+	ActionEdit
+	// ActionKill stops the chosen project's session.
+	ActionKill
+	// ActionDelete unregisters the chosen project.
+	ActionDelete
+)
+
+// Choice is what the user picked in the project browser: an action, and
+// the project it applies to (none when adding one).
+type Choice struct {
+	Action  Action
+	Project domain.ProjectName
+}
+
+// ProjectBrowser shows the registered projects and lets the user pick
+// what to do next.
+type ProjectBrowser interface {
+	// Browse shows projects, the one named selected highlighted and
+	// notice in a status line, and returns the user's choice, or
+	// ErrAborted when they quit.
+	Browse(projects []ProjectOverview, selected domain.ProjectName, notice string) (Choice, error)
+}

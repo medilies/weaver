@@ -21,6 +21,10 @@ func (r registered) Save(domain.Project) error {
 	return nil
 }
 
+func (r registered) Delete(domain.ProjectName) error {
+	return nil
+}
+
 func (r registered) Names() ([]domain.ProjectName, error) {
 	var names []domain.ProjectName
 	for _, raw := range r {

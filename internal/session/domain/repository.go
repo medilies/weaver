@@ -8,4 +8,6 @@ type ProjectRepository interface {
 	Names() ([]ProjectName, error)
 	// Save registers project, replacing a project of the same name.
 	Save(project Project) error
+	// Delete unregisters the project, or returns ProjectNotFound.
+	Delete(name ProjectName) error
 }
