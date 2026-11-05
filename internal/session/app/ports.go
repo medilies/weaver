@@ -35,8 +35,7 @@ type Confirmer interface {
 }
 
 // ConfigDocument is a project's config as the user writes it: the file it
-// is stored in, e.g. "shop.yml", whose extension says its format, and
-// what that file holds.
+// is stored in, e.g. "shop.yml", and what that file holds.
 type ConfigDocument struct {
 	File    string
 	Content []byte

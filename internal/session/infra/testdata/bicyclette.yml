@@ -9,10 +9,13 @@ windows:
         dir: api
       - name: task dev
         dir: api
-        split: { direction: right, size: 40% }
+        split:
+          direction: right
+          size: 40%
         command: task dev
       - name: psql
-        split: { direction: below }
+        split:
+          direction: below
         command: bicyclette psql
   - name: app
     panes:
@@ -20,9 +23,13 @@ windows:
         dir: app
       - name: flutter run
         dir: app
-        split: { direction: right, size: 40% }
+        split:
+          direction: right
+          size: 40%
         command: bicyclette app
       - name: emulator
-        split: { direction: below, size: 30% }
+        split:
+          direction: below
+          size: 30%
         prefill: bicyclette emulator
   - name: repo

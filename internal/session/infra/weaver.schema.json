@@ -6,9 +6,6 @@
   "additionalProperties": false,
   "required": ["root"],
   "properties": {
-    "$schema": {
-      "type": "string"
-    },
     "root": {
       "description": "Directory the session is rooted at: absolute, or starting with ~/.",
       "type": "string",

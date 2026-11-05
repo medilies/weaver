@@ -10,17 +10,21 @@ windows:
     panes:
       - name: back
         dir: back
-        runtimes: { php: "8.4" }
+        runtimes:
+          php: "8.4"
       - name: front
         dir: front
-        split: { direction: right, size: 30% }
+        split:
+          direction: right
+          size: 30%
         note:
           - ""
-          - "Usual commands:"
+          - 'Usual commands:'
           - ""
-          - "  npm i"
-          - "  npm run dev"
+          - '  npm i'
+          - '  npm run dev'
           - ""
         env:
           APP_ENV: dev
-        runtimes: { node: "20" }
+        runtimes:
+          node: "20"

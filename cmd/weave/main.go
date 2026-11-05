@@ -1,5 +1,5 @@
 // Command weave drives tmux sessions, windows and panes from a
-// per-project JSON or YAML config.
+// per-project YAML config.
 package main
 
 import (

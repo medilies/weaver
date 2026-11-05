@@ -3,7 +3,7 @@
 ## Design
 
 - SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weave` Cobra layer. `domain` and `app` never import Cobra, `charm.land` or `infra`; enforced by the `depguard` rules in `.golangci.yml`.
-- Ports about domain concepts (projects, tmux sessions, runtimes, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: JSON and YAML configs and their schema, tmux, git, installed runtimes, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
+- Ports about domain concepts (projects, tmux sessions, runtimes, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, git, installed runtimes, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
 
@@ -11,7 +11,7 @@
 
 - No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weave`.
 - Go version is `1.26` everywhere. `go.mod`'s `go` directive is the source of truth; CI reads it via `go-version-file`. Change it in one place.
-- No database: project configs are plain JSON or YAML files (one per project) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRepository` port and the `infra.FileProjectRepository` implementation; `Save` writes JSON. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
+- No database: project configs are plain YAML files (`<name>.yml`, one per project) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRepository` port and the `infra.FileProjectRepository` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
 - Pinned PHP versions are linked under `os.UserCacheDir()/weaver/php`; Node versions come from nvm's install directory.
 
 ## Tests

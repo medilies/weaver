@@ -1,5 +1,5 @@
 // Package infra adapts the Session bounded context to the outside world:
-// project configs stored as JSON or YAML files, the user's tmux server,
+// project configs stored as YAML files, the user's tmux server,
 // git, and the toolchains installed on the machine.
 package infra
 
@@ -16,16 +16,11 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// ErrSeveralConfigs is returned when a project has more than one config
-// file, e.g. shop.json and shop.yml: neither can be told to count.
-var ErrSeveralConfigs = errors.New("a project must have a single config file")
+// configExtension is the extension of the config files.
+const configExtension = ".yml"
 
-// configExtensions are the config files' formats; Save writes JSON.
-var configExtensions = []string{".json", ".yml", ".yaml"}
-
-// FileProjectRepository reads project configs from a directory of
-// "<name>.json", "<name>.yml" or "<name>.yaml" files, in the format of
-// projectFile, and saves them as JSON.
+// FileProjectRepository reads and saves project configs in a directory of
+// "<name>.yml" files, in the format of projectFile.
 type FileProjectRepository struct {
 	dir string
 }
@@ -48,16 +43,16 @@ func (r FileProjectRepository) Names() ([]domain.ProjectName, error) {
 	}
 	var names []domain.ProjectName
 	for _, entry := range entries {
-		ext := filepath.Ext(entry.Name())
-		if entry.IsDir() || !slices.Contains(configExtensions, ext) {
+		stem, isConfig := strings.CutSuffix(entry.Name(), configExtension)
+		if entry.IsDir() || !isConfig {
 			continue
 		}
-		if name, err := domain.NewProjectName(strings.TrimSuffix(entry.Name(), ext)); err == nil {
+		if name, err := domain.NewProjectName(stem); err == nil {
 			names = append(names, name)
 		}
 	}
 	slices.SortFunc(names, func(a, b domain.ProjectName) int { return strings.Compare(a.String(), b.String()) })
-	return slices.Compact(names), nil
+	return names, nil
 }
 
 // FindByName implements domain.ProjectRepository.
@@ -70,7 +65,7 @@ func (r FileProjectRepository) FindByName(name domain.ProjectName) (domain.Proje
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("reading %s: %w", path, err)
 	}
-	project, err := decodeProject(path, name, raw)
+	project, err := decodeProject(name, raw)
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("%s: %w: %w", path, domain.ErrInvalidConfig, err)
 	}
@@ -91,15 +86,14 @@ func (r FileProjectRepository) Document(name domain.ProjectName) (app.ConfigDocu
 }
 
 // ReplaceDocument implements app.ProjectDocuments: it stores content, as
-// written, in the project's config file if it is a valid config in that
-// file's format. Otherwise the stored config stays and the error wraps
+// written, in the project's config file if it is a valid config. Otherwise the stored config stays and the error wraps
 // domain.ErrInvalidConfig.
 func (r FileProjectRepository) ReplaceDocument(name domain.ProjectName, content []byte) error {
 	path, err := r.find(name)
 	if err != nil {
 		return err
 	}
-	if _, err := decodeProject(path, name, content); err != nil {
+	if _, err := decodeProject(name, content); err != nil {
 		return fmt.Errorf("%w: %w", domain.ErrInvalidConfig, err)
 	}
 	if err := r.writeSchema(); err != nil {
@@ -108,9 +102,9 @@ func (r FileProjectRepository) ReplaceDocument(name domain.ProjectName, content 
 	return writeFileAtomic(path, content)
 }
 
-// Save implements domain.ProjectRepository. It writes the config as JSON,
-// replacing one in another format, and saves the JSON Schema next to it,
-// which it points to so editors complete and check it.
+// Save implements domain.ProjectRepository. It writes the config and
+// saves the JSON Schema next to it, which it points to so editors
+// complete and check it.
 func (r FileProjectRepository) Save(project domain.Project) error {
 	doc, err := encodeProject(project)
 	if err != nil {
@@ -119,69 +113,32 @@ func (r FileProjectRepository) Save(project domain.Project) error {
 	if err := r.writeSchema(); err != nil {
 		return err
 	}
-	path := r.path(project.Name(), ".json")
-	if err := writeFileAtomic(path, doc); err != nil {
-		return err
-	}
-	_, err = r.removeConfigs(project.Name(), path)
-	return err
+	return writeFileAtomic(r.path(project.Name()), doc)
 }
 
 // Delete implements domain.ProjectRepository: it removes the project's
-// config files.
+// config file.
 func (r FileProjectRepository) Delete(name domain.ProjectName) error {
-	removed, err := r.removeConfigs(name, "")
-	if err == nil && !removed {
+	err := os.Remove(r.path(name))
+	if errors.Is(err, os.ErrNotExist) {
 		return domain.NewProjectNotFound(name)
 	}
 	return err
 }
 
-// removeConfigs removes the config files of project name but the one at
-// keep, and reports whether it removed any.
-func (r FileProjectRepository) removeConfigs(name domain.ProjectName, keep string) (bool, error) {
-	removed := false
-	for _, ext := range configExtensions {
-		path := r.path(name, ext)
-		if path == keep {
-			continue
-		}
-		err := os.Remove(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return removed, err
-		}
-		removed = true
-	}
-	return removed, nil
-}
-
 // find is the path of the config file of project name.
 func (r FileProjectRepository) find(name domain.ProjectName) (string, error) {
-	var found []string
-	for _, ext := range configExtensions {
-		path := r.path(name, ext)
-		_, err := os.Stat(path)
-		if err == nil {
-			found = append(found, path)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return "", err
-		}
-	}
-	switch len(found) {
-	case 0:
+	path := r.path(name)
+	_, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
 		return "", domain.NewProjectNotFound(name)
-	case 1:
-		return found[0], nil
 	}
-	return "", fmt.Errorf("%w: %s", ErrSeveralConfigs, strings.Join(found, ", "))
+	return path, err
 }
 
-// path is where the config of project name lives in the format of ext.
-func (r FileProjectRepository) path(name domain.ProjectName, ext string) string {
-	return filepath.Join(r.dir, name.String()+ext)
+// path is where the config of project name lives.
+func (r FileProjectRepository) path(name domain.ProjectName) string {
+	return filepath.Join(r.dir, name.String()+configExtension)
 }
 
 // writeSchema saves the JSON Schema next to the configs, unless it is

@@ -1,7 +1,7 @@
 # weaver
 
-Weaver drives tmux sessions, windows and panes from a per-project JSON
-or YAML config, so starting a dev environment is one command, `weave`,
+Weaver drives tmux sessions, windows and panes from a per-project YAML
+config, so starting a dev environment is one command, `weave`,
 instead of a bespoke script per project.
 
 ## Usage
@@ -83,89 +83,53 @@ sockets; they never touch your sessions.
 
 ## Project config
 
-A project is one config file at `~/.config/weaver/projects/<name>.json`,
-or `<name>.yml` / `<name>.yaml` to write it in YAML
+A project is one config file at `~/.config/weaver/projects/<name>.yml`
 (`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
 the project's name and its tmux session's name: letters, digits, `-` and
 `_`, and not one of weave's commands.
 
 The smallest config opens one window with one shell in the root:
 
-```json
-{ "root": "~/dev/weaver" }
+```yaml
+root: ~/dev/weaver
 ```
 
 A fuller one, with three windows:
 
-```json
-{
-  "root": "~/dev/bicyclette",
-  "repositories": { ".": "https://github.com/medilies/bicyclette.git" },
-  "windows": [
-    { "name": "api", "panes": [
-      { "name": "api shell", "dir": "api" },
-      { "name": "task dev", "dir": "api", "split": { "direction": "right", "size": "40%" }, "command": "task dev" },
-      { "name": "psql", "split": { "direction": "below" }, "command": "bicyclette psql" } ] },
-    { "name": "app", "panes": [
-      { "name": "app shell", "dir": "app" },
-      { "name": "flutter run", "dir": "app", "split": { "direction": "right", "size": "40%" }, "command": "bicyclette app" },
-      { "name": "emulator", "split": { "direction": "below", "size": "30%" }, "prefill": "bicyclette emulator" } ] },
-    { "name": "repo" }
-  ]
-}
+```yaml
+root: ~/dev/bicyclette
+repositories:
+  .: https://github.com/medilies/bicyclette.git
+windows:
+  - name: api
+    panes:
+      - name: api shell
+        dir: api
+      - name: task dev
+        dir: api
+        split: { direction: right, size: 40% }
+        command: task dev
+      - name: psql
+        split: { direction: below }
+        command: bicyclette psql
+  - name: app
+    panes:
+      - name: app shell
+        dir: app
+      - name: flutter run
+        dir: app
+        split: { direction: right, size: 40% }
+        command: bicyclette app
+      - name: emulator
+        split: { direction: below, size: 30% }
+        prefill: bicyclette emulator
+  - name: repo
 ```
 
 A back end and a front end, each its own repository, on different
 toolchain versions:
 
-```json
-{
-  "root": "~/dev/shop",
-  "repositories": {
-    "back": "git@bitbucket.org:acme/shop-back.git",
-    "front": "git@bitbucket.org:acme/shop-front.git"
-  },
-  "windows": [
-    { "name": "shop", "panes": [
-      { "name": "back", "dir": "back", "runtimes": { "php": "8.4" } },
-      { "name": "front", "dir": "front", "split": { "direction": "right", "size": "30%" },
-        "runtimes": { "node": "20" },
-        "note": ["Usual commands:", "  npm i", "  npm run dev"] } ] }
-  ]
-}
-```
-
-| Field | Meaning |
-| --- | --- |
-| `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. |
-| `repositories` | Directory (relative to `root`; `.` is `root`) → git remote. |
-| `env` | Variables for every pane. Values are literal. `PATH` is managed by `runtimes`. |
-| `runtimes` | Versions for every pane: `php` (e.g. `8.4`) and `node` (e.g. `20`). |
-| `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
-| `windows[].panes` | Panes in creation order. None: one shell in `root`. |
-| `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes. |
-| `dir` | Where the pane's shell starts, relative to `root` (or absolute). |
-| `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the pane it splits; default the previous one). |
-| `command` | Typed into the shell and run, so it stays in the shell history. |
-| `prefill` | Typed at the prompt but not run: press Enter to run it. |
-| `note` | Lines printed before the shell starts. |
-| `env`, `runtimes` (pane) | Override the project's, per key. |
-
-Unknown fields are errors: they are usually typos.
-
-When weaver saves a config, it writes `weaver.schema.json` next to it
-and points the config at it with `"$schema": "./weaver.schema.json"`, so
-editors such as VS Code complete fields and flag mistakes as you type.
-
-### YAML
-
-A YAML config has the same fields, and allows comments. `weave add`
-writes JSON; write YAML by hand, and `weave edit` keeps it YAML. The
-first line points YAML editors (e.g. VS Code's YAML extension) at the
-schema, which wants versions quoted, as in JSON:
-
 ```yaml
-# yaml-language-server: $schema=./weaver.schema.json
 root: ~/dev/shop
 repositories:
   back: git@bitbucket.org:acme/shop-back.git
@@ -180,10 +144,36 @@ windows:
         dir: front
         split: { direction: right, size: 30% }
         runtimes: { node: "20" }
+        note:
+          - "Usual commands:"
+          - "  npm i"
+          - "  npm run dev"
 ```
 
-A project has one config file: with both `shop.json` and `shop.yml`,
-weave stops and asks you to keep one.
+| Field | Meaning |
+| --- | --- |
+| `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. |
+| `repositories` | Directory (relative to `root`; `.` is `root`) → git remote. |
+| `env` | Variables for every pane. Values are literal. `PATH` is managed by `runtimes`. |
+| `runtimes` | Versions for every pane: `php` (e.g. `"8.4"`) and `node` (e.g. `"20"`). |
+| `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
+| `windows[].panes` | Panes in creation order. None: one shell in `root`. |
+| `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes. |
+| `dir` | Where the pane's shell starts, relative to `root` (or absolute). |
+| `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the pane it splits; default the previous one). |
+| `command` | Typed into the shell and run, so it stays in the shell history. |
+| `prefill` | Typed at the prompt but not run: press Enter to run it. |
+| `note` | Lines printed before the shell starts. |
+| `env`, `runtimes` (pane) | Override the project's, per key. |
+
+Unknown fields are errors: they are usually typos. Comments are kept by
+`weave edit`, but not when `weave add` replaces a config.
+
+When weaver saves a config, it writes `weaver.schema.json` next to it
+and points the config at it with a first line of
+`# yaml-language-server: $schema=./weaver.schema.json`, so editors such
+as VS Code (with its YAML extension) complete fields and flag mistakes
+as you type. Quote versions, as the schema wants: `"8.4"`, not `8.4`.
 
 ## Architecture
 

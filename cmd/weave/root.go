@@ -11,7 +11,7 @@ func newRootCommand(weaver application) *cobra.Command {
 		Use:   "weave [project | .]",
 		Short: "Start or attach a project's tmux session",
 		Long: `weave <project> attaches to the project's tmux session, starting it
-first from ~/.config/weaver/projects/<project>.json (or .yml) when it
+first from ~/.config/weaver/projects/<project>.yml when it
 isn't running. Inside tmux, it switches to the session instead.
 
 weave . opens the project whose root contains the current directory.

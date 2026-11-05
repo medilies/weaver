@@ -10,17 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/medilies/weaver/internal/session/domain"
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
 // gridDoc splits a pane that isn't the previous one, so its saved form
 // needs "split.of".
-const gridDoc = `{"root": "/srv/grid", "windows": [{"name": "main", "panes": [
-	{"name": "left"},
-	{"name": "right", "split": {"direction": "right"}},
-	{"name": "under left", "split": {"of": "left", "direction": "below"}}
-]}]}`
+const gridDoc = `root: /srv/grid
+windows:
+  - name: main
+    panes:
+      - name: left
+      - name: right
+        split: { direction: right }
+      - name: under left
+        split: { of: left, direction: below }
+`
 
 // save saves project into a fresh directory and returns the directory and
 // the saved config.
@@ -30,7 +37,7 @@ func save(t *testing.T, project domain.Project) (string, string) {
 	if err := infra.NewFileProjectRepository(dir).Save(project); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	doc, err := os.ReadFile(filepath.Join(dir, project.Name().String()+".json"))
+	doc, err := os.ReadFile(filepath.Join(dir, project.Name().String()+".yml"))
 	if err != nil {
 		t.Fatalf("reading the saved config: %v", err)
 	}
@@ -51,7 +58,7 @@ func TestFileProjectRepositorySave(t *testing.T) {
 
 	for _, fixture := range []string{"bicyclette", "shop"} {
 		t.Run("writes the "+fixture+" config back unchanged", func(t *testing.T) {
-			want, err := os.ReadFile(filepath.Join("testdata", fixture+".json"))
+			want, err := os.ReadFile(filepath.Join("testdata", fixture+".yml"))
 			if err != nil {
 				t.Fatalf("reading fixture: %v", err)
 			}
@@ -62,8 +69,8 @@ func TestFileProjectRepositorySave(t *testing.T) {
 	}
 
 	t.Run("saves a project opening its default window as its root alone", func(t *testing.T) {
-		_, got := save(t, mustLoad(t, "weaver", `{"root": "/home/someone/dev/weaver", "windows": [{"name": "weaver"}]}`))
-		want := "{\n  \"$schema\": \"./weaver.schema.json\",\n  \"root\": \"~/dev/weaver\"\n}\n"
+		_, got := save(t, mustLoad(t, "weaver", "root: /home/someone/dev/weaver\nwindows: [{name: weaver}]\n"))
+		want := "# yaml-language-server: $schema=./weaver.schema.json\nroot: ~/dev/weaver\n"
 		if got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -71,42 +78,51 @@ func TestFileProjectRepositorySave(t *testing.T) {
 
 	t.Run("names a split's target only when it isn't the previous pane", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "grid", gridDoc))
-		if n := strings.Count(got, `"of"`); n != 1 || !strings.Contains(got, `"of": "left"`) {
+		if n := strings.Count(got, "of:"); n != 1 || !strings.Contains(got, "of: left") {
 			t.Fatalf("got %d split targets in:\n%s\nwant only the one to left", n, got)
 		}
 	})
 
 	t.Run("writes pane directories under the root relative to it", func(t *testing.T) {
-		_, got := save(t, mustLoad(t, "shop", `{"root": "/srv/shop", "windows": [{"name": "shop", "panes": [
-			{"name": "back", "dir": "/srv/shop/back"},
-			{"name": "logs", "dir": "/var/log", "split": {"direction": "right"}}
-		]}]}`))
-		if !strings.Contains(got, `"dir": "back"`) || !strings.Contains(got, `"dir": "/var/log"`) {
+		_, got := save(t, mustLoad(t, "shop", `root: /srv/shop
+windows:
+  - name: shop
+    panes:
+      - name: back
+        dir: /srv/shop/back
+      - name: logs
+        dir: /var/log
+        split: { direction: right }
+`))
+		if !strings.Contains(got, "dir: back\n") || !strings.Contains(got, "dir: /var/log\n") {
 			t.Fatalf("got:\n%s\nwant back relative and /var/log as is", got)
 		}
 	})
 
 	t.Run("keeps shell operators readable", func(t *testing.T) {
-		_, got := save(t, mustLoad(t, "ops", `{"root": "/srv/ops", "windows": [{"name": "ops", "panes": [
-			{"command": "npm i && npm run dev > dev.log"}
-		]}]}`))
-		if !strings.Contains(got, `"npm i && npm run dev > dev.log"`) {
+		_, got := save(t, mustLoad(t, "ops", `root: /srv/ops
+windows:
+  - name: ops
+    panes:
+      - command: npm i && npm run dev > dev.log
+`))
+		if !strings.Contains(got, "command: npm i && npm run dev > dev.log\n") {
 			t.Fatalf("got:\n%s\nwant the command unescaped", got)
 		}
 	})
 
-	t.Run("replaces a project registered in YAML with its JSON config", func(t *testing.T) {
+	t.Run("replaces the project's config", func(t *testing.T) {
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/old\n"), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
 		repo := infra.NewFileProjectRepository(dir)
-		saved := mustLoad(t, "shop", `{"root": "/srv/shop"}`)
+		saved := mustLoad(t, "shop", "root: /srv/shop\n")
 		if err := repo.Save(saved); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got, err := repo.FindByName(saved.Name()); err != nil || got.Root().String() != "/srv/shop" {
-			t.Fatalf("got %v (%v), want the saved project alone", got.Describe(), err)
+			t.Fatalf("got %v (%v), want the saved project", got.Describe(), err)
 		}
 	})
 
@@ -184,7 +200,7 @@ func TestJSONSchema(t *testing.T) {
 		t.Run("declares every field of the saved "+name+" config", func(t *testing.T) {
 			_, doc := save(t, project)
 			var value any
-			if err := json.Unmarshal([]byte(doc), &value); err != nil {
+			if err := yaml.Unmarshal([]byte(doc), &value); err != nil {
 				t.Fatalf("parsing the saved config: %v", err)
 			}
 			if missing := undeclared(schema, schema, value, "$"); len(missing) != 0 {
