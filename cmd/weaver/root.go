@@ -32,6 +32,7 @@ current directory.`,
 	}
 	root.AddCommand(
 		newAddCommand(weaver),
+		newEditCommand(weaver),
 		newKillCommand(weaver),
 		newListCommand(weaver),
 		newShowCommand(weaver),

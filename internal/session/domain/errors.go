@@ -17,6 +17,9 @@ var (
 	// ErrRelativeProjectRoot is returned when a project root is not an
 	// absolute path: `weaver <project>` runs from anywhere.
 	ErrRelativeProjectRoot = errors.New("project root must be an absolute path")
+	// ErrInvalidConfig wraps whatever makes a stored project config
+	// unreadable, as opposed to failing to read it at all.
+	ErrInvalidConfig = errors.New("invalid config")
 )
 
 var (

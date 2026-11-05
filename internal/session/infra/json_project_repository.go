@@ -63,9 +63,31 @@ func (r JSONProjectRepository) FindByName(name domain.ProjectName) (domain.Proje
 
 	project, err := decodeProject(name, raw)
 	if err != nil {
-		return domain.Project{}, fmt.Errorf("%s: %w", path, err)
+		return domain.Project{}, fmt.Errorf("%s: %w: %w", path, domain.ErrInvalidConfig, err)
 	}
 	return project, nil
+}
+
+// Document is the config of project name as stored, for editing.
+func (r JSONProjectRepository) Document(name domain.ProjectName) ([]byte, error) {
+	document, err := os.ReadFile(r.path(name))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, domain.NewProjectNotFound(name)
+	}
+	return document, err
+}
+
+// ReplaceDocument stores document as the config of project name, as
+// written, if it is a valid config. Otherwise the stored config stays and
+// the error wraps domain.ErrInvalidConfig.
+func (r JSONProjectRepository) ReplaceDocument(name domain.ProjectName, document []byte) error {
+	if _, err := decodeProject(name, document); err != nil {
+		return fmt.Errorf("%w: %w", domain.ErrInvalidConfig, err)
+	}
+	if err := r.writeSchema(); err != nil {
+		return err
+	}
+	return writeFileAtomic(r.path(name), document)
 }
 
 // Save implements domain.ProjectRepository. It also saves the JSON Schema
@@ -76,15 +98,23 @@ func (r JSONProjectRepository) Save(project domain.Project) error {
 	if err != nil {
 		return err
 	}
+	if err := r.writeSchema(); err != nil {
+		return err
+	}
+	return writeFileAtomic(r.path(project.Name()), doc)
+}
+
+// writeSchema saves the JSON Schema next to the configs, unless it is
+// there already.
+func (r JSONProjectRepository) writeSchema() error {
 	if err := os.MkdirAll(r.dir, 0o755); err != nil {
 		return err
 	}
-	if current, err := os.ReadFile(filepath.Join(r.dir, schemaFileName)); err != nil || !bytes.Equal(current, schema) {
-		if err := writeFileAtomic(filepath.Join(r.dir, schemaFileName), schema); err != nil {
-			return err
-		}
+	path := filepath.Join(r.dir, schemaFileName)
+	if current, err := os.ReadFile(path); err == nil && bytes.Equal(current, schema) {
+		return nil
 	}
-	return writeFileAtomic(r.path(project.Name()), doc)
+	return writeFileAtomic(path, schema)
 }
 
 // path is where the config of project name lives.

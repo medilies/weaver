@@ -12,6 +12,7 @@ weaver add                # register the project in the current directory, throu
 weaver add --from scratch # same, starting from the windows and panes of the running session scratch
 weaver bicyclette         # start or attach the bicyclette session, from anywhere
 weaver                    # same, for the project whose root holds the current directory
+weaver edit bicyclette    # edit its config in $VISUAL or $EDITOR; only a valid config is saved
 weaver kill bicyclette    # stop the session and everything running in it
 weaver list               # registered projects, and which sessions run
 weaver show bicyclette    # print a registered project

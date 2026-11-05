@@ -33,3 +33,19 @@ type Confirmer interface {
 	// Confirm returns the answer, or ErrAborted.
 	Confirm(question string) (bool, error)
 }
+
+// ConfigEditor lets the user edit a project's config document.
+type ConfigEditor interface {
+	// Edit opens document in the user's editor and returns it as saved.
+	Edit(name domain.ProjectName, document []byte) ([]byte, error)
+}
+
+// ProjectDocuments are projects' configs as the user writes them.
+type ProjectDocuments interface {
+	// Document is the project's config as stored, or ProjectNotFound.
+	Document(name domain.ProjectName) ([]byte, error)
+	// ReplaceDocument stores document as the project's config if it is
+	// valid; otherwise the stored config stays and the error wraps
+	// domain.ErrInvalidConfig.
+	ReplaceDocument(name domain.ProjectName, document []byte) error
+}
