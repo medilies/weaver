@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/medilies/weaver/internal/session/domain"
@@ -40,15 +41,21 @@ func (uc OpenProject) Handle(rawName string) error {
 }
 
 // HandleDir opens the project whose root contains dir; when roots nest,
-// the innermost one.
+// the innermost one. Invalid configs are skipped, so one broken project
+// doesn't block the others, and named only when no project matches.
 func (uc OpenProject) HandleDir(dir string) error {
 	names, err := uc.projects.Names()
 	if err != nil {
 		return err
 	}
 	var found []domain.Project
+	var invalid []error
 	for _, name := range names {
 		project, err := uc.projects.FindByName(name)
+		if errors.Is(err, domain.ErrInvalidConfig) {
+			invalid = append(invalid, err)
+			continue
+		}
 		if err != nil {
 			return err
 		}
@@ -64,7 +71,11 @@ func (uc OpenProject) HandleDir(dir string) error {
 	}
 	switch len(found) {
 	case 0:
-		return fmt.Errorf("%w: %s (weave list shows the registered projects)", domain.ErrNoProjectAt, dir)
+		err := fmt.Errorf("%w: %s (weave list shows the registered projects)", domain.ErrNoProjectAt, dir)
+		if len(invalid) > 0 {
+			err = fmt.Errorf("%w; skipped invalid configs:\n%w", err, errors.Join(invalid...))
+		}
+		return err
 	case 1:
 		return uc.open(found[0])
 	}

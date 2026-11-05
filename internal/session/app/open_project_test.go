@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -270,13 +271,40 @@ func rootedAt(t *testing.T, raw, root string) domain.Project {
 	return domain.NewProject(name, projectRoot)
 }
 
+// withBrokenConfig is a repository that also lists the project "broken",
+// whose stored config can't be read.
+type withBrokenConfig struct {
+	inMemoryRepository
+}
+
+func (r withBrokenConfig) Names() ([]domain.ProjectName, error) {
+	names, err := r.inMemoryRepository.Names()
+	broken, _ := domain.NewProjectName("broken")
+	return append([]domain.ProjectName{broken}, names...), err
+}
+
+func (r withBrokenConfig) FindByName(name domain.ProjectName) (domain.Project, error) {
+	if name.String() == "broken" {
+		return domain.Project{}, fmt.Errorf("broken.yml: %w: root: missing", domain.ErrInvalidConfig)
+	}
+	return r.inMemoryRepository.FindByName(name)
+}
+
 func TestOpenProjectHandleDir(t *testing.T) {
-	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
-		t.Helper()
+	repository := func(projects ...domain.Project) inMemoryRepository {
 		repo := inMemoryRepository{projects: map[string]domain.Project{}}
 		for _, p := range projects {
 			repo.projects[p.Name().String()] = p
 		}
+		return repo
+	}
+	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
+		t.Helper()
+		return app.NewOpenProject(repository(projects...), sessions, everything(), php84).HandleDir(dir)
+	}
+	openPastBroken := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
+		t.Helper()
+		repo := withBrokenConfig{repository(projects...)}
 		return app.NewOpenProject(repo, sessions, everything(), php84).HandleDir(dir)
 	}
 
@@ -304,6 +332,23 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		err := open(t, &fakeSessions{}, "/home/me", shop(t))
 		if !errors.Is(err, domain.ErrNoProjectAt) {
 			t.Fatalf("got %v, want ErrNoProjectAt", err)
+		}
+	})
+
+	t.Run("opens the matching project past an invalid config", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		if err := openPastBroken(t, sessions, "/srv/shop/front", shop(t)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got %q attached, want shop", sessions.attached)
+		}
+	})
+
+	t.Run("names the invalid configs when no project contains the directory", func(t *testing.T) {
+		err := openPastBroken(t, &fakeSessions{}, "/home/me", shop(t))
+		if !errors.Is(err, domain.ErrNoProjectAt) || !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "broken.yml") {
+			t.Fatalf("got %v, want ErrNoProjectAt naming broken.yml", err)
 		}
 	})
 
