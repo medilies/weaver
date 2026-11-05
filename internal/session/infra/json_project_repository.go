@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
@@ -20,6 +21,30 @@ type JSONProjectRepository struct {
 // NewJSONProjectRepository constructs a repository rooted at dir.
 func NewJSONProjectRepository(dir string) JSONProjectRepository {
 	return JSONProjectRepository{dir: dir}
+}
+
+// Names implements domain.ProjectRepository. It reads file names only:
+// "<name>.json" files whose stem isn't a valid project name are skipped,
+// and a missing directory has no projects.
+func (r JSONProjectRepository) Names() ([]domain.ProjectName, error) {
+	entries, err := os.ReadDir(r.dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var names []domain.ProjectName
+	for _, entry := range entries {
+		stem, isJSON := strings.CutSuffix(entry.Name(), ".json")
+		if !isJSON || entry.IsDir() {
+			continue
+		}
+		if name, err := domain.NewProjectName(stem); err == nil {
+			names = append(names, name)
+		}
+	}
+	return names, nil
 }
 
 // FindByName implements domain.ProjectRepository.

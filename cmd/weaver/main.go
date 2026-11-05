@@ -13,9 +13,10 @@ import (
 
 // application is the use cases the commands run.
 type application struct {
-	openProject app.OpenProject
-	killProject app.KillProject
-	loadProject app.LoadProject
+	openProject  app.OpenProject
+	killProject  app.KillProject
+	listProjects app.ListProjects
+	loadProject  app.LoadProject
 }
 
 // wire builds the use cases against this machine: configs under the user
@@ -45,9 +46,10 @@ func wire() (application, error) {
 	runtimes := infra.NewInstalledRuntimes("/usr/bin", nvmDir, filepath.Join(cacheDir, "weaver", "php"))
 
 	return application{
-		openProject: app.NewOpenProject(projects, tmux, workspace, runtimes),
-		killProject: app.NewKillProject(tmux),
-		loadProject: app.NewLoadProject(projects),
+		openProject:  app.NewOpenProject(projects, tmux, workspace, runtimes),
+		killProject:  app.NewKillProject(tmux),
+		listProjects: app.NewListProjects(projects, tmux),
+		loadProject:  app.NewLoadProject(projects),
 	}, nil
 }
 

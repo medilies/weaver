@@ -9,8 +9,9 @@ func newRootCommand(weaver application) *cobra.Command {
 		Long: `weaver <project> attaches to the project's tmux session, starting it
 first from ~/.config/weaver/projects/<project>.json when it isn't
 running. Inside tmux, it switches to the session instead.`,
-		Args:         cobra.MaximumNArgs(1),
-		SilenceUsage: true,
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeProjects(weaver),
+		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
@@ -18,6 +19,6 @@ running. Inside tmux, it switches to the session instead.`,
 			return weaver.openProject.Handle(args[0])
 		},
 	}
-	root.AddCommand(newKillCommand(weaver), newShowCommand(weaver))
+	root.AddCommand(newKillCommand(weaver), newListCommand(weaver), newShowCommand(weaver))
 	return root
 }

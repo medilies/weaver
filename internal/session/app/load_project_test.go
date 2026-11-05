@@ -2,6 +2,8 @@ package app_test
 
 import (
 	"errors"
+	"maps"
+	"slices"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -20,6 +22,14 @@ func (r inMemoryRepository) FindByName(name domain.ProjectName) (domain.Project,
 		return domain.Project{}, domain.NewProjectNotFound(name)
 	}
 	return project, nil
+}
+
+func (r inMemoryRepository) Names() ([]domain.ProjectName, error) {
+	var names []domain.ProjectName
+	for _, key := range slices.Sorted(maps.Keys(r.projects)) {
+		names = append(names, r.projects[key].Name())
+	}
+	return names, nil
 }
 
 func TestLoadProjectHandle(t *testing.T) {

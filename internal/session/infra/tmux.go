@@ -77,6 +77,18 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 	return nil
 }
 
+// Running implements domain.SessionLister.
+func (t Tmux) Running() ([]string, error) {
+	out, err := t.run("list-sessions", "-F", "#{session_name}")
+	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+		return nil, nil // no server, so no sessions
+	}
+	if err != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(out, "\n"), nil
+}
+
 // Kill implements domain.SessionKiller.
 func (t Tmux) Kill(name domain.ProjectName) error {
 	_, err := t.run("kill-session", "-t", "="+name.String())

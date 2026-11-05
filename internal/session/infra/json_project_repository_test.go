@@ -284,3 +284,36 @@ func TestJSONProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
 		}
 	})
 }
+
+func TestJSONProjectRepositoryNames(t *testing.T) {
+	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
+		dir := t.TempDir()
+		for _, file := range []string{"shop.json", "bicyclette.json", "weaver.schema.json", "notes.txt", "show.json"} {
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(`{}`), 0o600); err != nil {
+				t.Fatalf("writing fixture: %v", err)
+			}
+		}
+		if err := os.Mkdir(filepath.Join(dir, "folder.json"), 0o755); err != nil {
+			t.Fatalf("creating fixture: %v", err)
+		}
+
+		names, err := infra.NewJSONProjectRepository(dir).Names()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got []string
+		for _, name := range names {
+			got = append(got, name.String())
+		}
+		if want := []string{"bicyclette", "shop"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("has no projects when the directory is missing", func(t *testing.T) {
+		names, err := infra.NewJSONProjectRepository(filepath.Join(t.TempDir(), "missing")).Names()
+		if err != nil || len(names) != 0 {
+			t.Fatalf("got %v (%v), want no projects", names, err)
+		}
+	})
+}

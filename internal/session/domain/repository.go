@@ -4,4 +4,6 @@ package domain
 // up registered projects. Infrastructure provides the implementation.
 type ProjectRepository interface {
 	FindByName(name ProjectName) (Project, error)
+	// Names lists the registered projects' names, sorted.
+	Names() ([]ProjectName, error)
 }

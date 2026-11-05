@@ -10,7 +10,16 @@ bespoke script per project.
 go install ./cmd/weaver   # puts weaver in ~/go/bin
 weaver bicyclette         # start or attach the bicyclette session, from anywhere
 weaver kill bicyclette    # stop the session and everything running in it
+weaver list               # registered projects, and which sessions run
 weaver show bicyclette    # print a registered project
+```
+
+To complete project names with Tab, load weaver's completion in your
+`~/.bashrc` (zsh, fish and PowerShell work too, see
+`weaver completion --help`):
+
+```sh
+source <(weaver completion bash)
 ```
 
 `weaver <project>` attaches to the project's tmux session (inside tmux,

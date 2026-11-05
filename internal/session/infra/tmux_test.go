@@ -310,6 +310,33 @@ func TestTmuxKill(t *testing.T) {
 	})
 }
 
+func TestTmuxRunning(t *testing.T) {
+	server := newTmuxServer(t)
+
+	t.Run("lists no sessions when no server runs", func(t *testing.T) {
+		if sessions, err := server.tmux().Running(); err != nil || len(sessions) != 0 {
+			t.Fatalf("got %q (%v), want none", sessions, err)
+		}
+	})
+
+	t.Run("lists the running sessions", func(t *testing.T) {
+		for _, name := range []string{"api", "front"} {
+			if err := server.tmux().Start(planOf(t, name, fmt.Sprintf(`{"root": %q}`, t.TempDir()), nil)); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		}
+
+		sessions, err := server.tmux().Running()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		slices.Sort(sessions)
+		if want := []string{"api", "front"}; !slices.Equal(sessions, want) {
+			t.Fatalf("got %q, want %q", sessions, want)
+		}
+	})
+}
+
 func TestTmuxIsRunning(t *testing.T) {
 	server := newTmuxServer(t)
 	shop, _ := domain.NewProjectName("shop")

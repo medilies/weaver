@@ -12,6 +12,13 @@ type SessionLauncher interface {
 	Attach(name ProjectName) error
 }
 
+// SessionLister lists running tmux sessions. Infrastructure provides the
+// implementation.
+type SessionLister interface {
+	// Running is the names of the running sessions, projects' or not.
+	Running() ([]string, error)
+}
+
 // SessionKiller stops projects' tmux sessions. Infrastructure provides the
 // implementation.
 type SessionKiller interface {
