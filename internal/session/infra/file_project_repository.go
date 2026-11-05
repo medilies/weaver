@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,17 +23,28 @@ const configExtension = ".yml"
 // FileProjectRepository reads and saves project configs in a directory of
 // "<name>.yml" files, in the format of projectFile.
 type FileProjectRepository struct {
-	dir string
+	dir      string
+	warnings io.Writer
+	// warned holds the skipped files already warned about: each is
+	// warned about once per repository and its copies.
+	warned map[string]bool
 }
 
 // NewFileProjectRepository constructs a repository rooted at dir.
 func NewFileProjectRepository(dir string) FileProjectRepository {
-	return FileProjectRepository{dir: dir}
+	return FileProjectRepository{dir: dir, warnings: io.Discard, warned: map[string]bool{}}
+}
+
+// WithWarnings writes to w why config files are skipped, e.g. "edit.yml",
+// which `weave edit` can't open since it runs the edit command.
+func (r FileProjectRepository) WithWarnings(w io.Writer) FileProjectRepository {
+	r.warnings = w
+	return r
 }
 
 // Names implements domain.ProjectRepository. It reads file names only:
-// config files whose stem isn't a valid project name are skipped, and a
-// missing directory has no projects.
+// config files whose stem isn't a valid project name are skipped, with a
+// warning, and a missing directory has no projects.
 func (r FileProjectRepository) Names() ([]domain.ProjectName, error) {
 	entries, err := os.ReadDir(r.dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -44,15 +56,30 @@ func (r FileProjectRepository) Names() ([]domain.ProjectName, error) {
 	var names []domain.ProjectName
 	for _, entry := range entries {
 		stem, isConfig := strings.CutSuffix(entry.Name(), configExtension)
-		if entry.IsDir() || !isConfig {
+		// Dot-files, such as the .#shop.yml lock Emacs makes while
+		// shop.yml is edited, aren't configs and aren't worth a warning.
+		if entry.IsDir() || !isConfig || strings.HasPrefix(stem, ".") {
 			continue
 		}
-		if name, err := domain.NewProjectName(stem); err == nil {
-			names = append(names, name)
+		name, err := domain.NewProjectName(stem)
+		if err != nil {
+			r.warnSkipped(entry.Name(), err)
+			continue
 		}
+		names = append(names, name)
 	}
 	slices.SortFunc(names, func(a, b domain.ProjectName) int { return strings.Compare(a.String(), b.String()) })
 	return names, nil
+}
+
+func (r FileProjectRepository) warnSkipped(file string, reason error) {
+	path := filepath.Join(r.dir, file)
+	if r.warned[path] {
+		return
+	}
+	r.warned[path] = true
+	// A warning that can't be written changes nothing worth failing for.
+	_, _ = fmt.Fprintf(r.warnings, "warning: skipping %s: %v; rename it to register it\n", path, reason)
 }
 
 // FindByName implements domain.ProjectRepository.

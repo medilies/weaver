@@ -34,7 +34,7 @@ func wire() (application, error) {
 		return application{}, err
 	}
 
-	projects := infra.NewFileProjectRepository(filepath.Join(configDir, "weaver", "projects"))
+	projects := infra.NewFileProjectRepository(filepath.Join(configDir, "weaver", "projects")).WithWarnings(os.Stderr)
 	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
 	// counts with $TMUX, which names the server it belongs to.
 	var pane string

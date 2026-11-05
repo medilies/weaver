@@ -316,6 +316,19 @@ windows:
 	})
 }
 
+// writeConfigs writes each file, holding a minimal config, in a fresh
+// directory and returns it.
+func writeConfigs(t *testing.T, files ...string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, file := range files {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+	}
+	return dir
+}
+
 func TestFileProjectRepositoryNames(t *testing.T) {
 	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
 		dir := t.TempDir()
@@ -338,6 +351,39 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 		}
 		if want := []string{"a", "a-b", "bicyclette", "shop"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("warns about a config skipped for its name", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml", "edit.yml", "my.shop.yml", ".#shop.yml")
+		var warnings strings.Builder
+
+		if _, err := infra.NewFileProjectRepository(dir).WithWarnings(&warnings).Names(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := "warning: skipping " + filepath.Join(dir, "edit.yml") +
+			": project name is a weave command: \"edit\"; rename it to register it\n" +
+			"warning: skipping " + filepath.Join(dir, "my.shop.yml") +
+			": " + domain.ErrInvalidProjectName.Error() + "; rename it to register it\n"
+		if got := warnings.String(); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("warns once per skipped config", func(t *testing.T) {
+		dir := writeConfigs(t, "edit.yml")
+		var warnings strings.Builder
+		repo := infra.NewFileProjectRepository(dir).WithWarnings(&warnings)
+
+		for range 2 {
+			if _, err := repo.Names(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		}
+
+		if got := strings.Count(warnings.String(), "warning:"); got != 1 {
+			t.Fatalf("got %d warnings, want 1", got)
 		}
 	})
 
