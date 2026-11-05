@@ -51,16 +51,14 @@ func (p *layoutParser) cell() (layoutCell, error) {
 	if cell.width, err = p.number(); err != nil {
 		return layoutCell{}, err
 	}
-	for _, step := range []struct {
-		sep  byte
-		into *int
-	}{{'x', &cell.height}, {',', new(int)}, {',', new(int)}} {
-		if err := p.expect(step.sep); err != nil {
-			return layoutCell{}, err
-		}
-		if *step.into, err = p.number(); err != nil {
-			return layoutCell{}, err
-		}
+	if cell.height, err = p.numberAfter('x'); err != nil {
+		return layoutCell{}, err
+	}
+	if _, err = p.numberAfter(','); err != nil { // X offset, unused
+		return layoutCell{}, err
+	}
+	if _, err = p.numberAfter(','); err != nil { // Y offset, unused
+		return layoutCell{}, err
 	}
 	switch p.peek() {
 	case ',':
@@ -95,6 +93,14 @@ func (p *layoutParser) number() (int, error) {
 		p.pos++
 	}
 	return strconv.Atoi(p.text[start:p.pos])
+}
+
+// numberAfter reads the separator sep, then a number.
+func (p *layoutParser) numberAfter(sep byte) (int, error) {
+	if err := p.expect(sep); err != nil {
+		return 0, err
+	}
+	return p.number()
 }
 
 func (p *layoutParser) expect(b byte) error {

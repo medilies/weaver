@@ -117,11 +117,12 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 	}
 	for _, placement := range placements {
 		window := placement.Window()
-		target := []string{"-a", "-t", last}
+		target, atEnd := []string{"-a", "-t", last}, true
 		if after, ok := placement.After(); ok && ids[after.String()] != "" {
-			target = []string{"-a", "-t", ids[after.String()]}
+			anchor := ids[after.String()]
+			target, atEnd = []string{"-a", "-t", anchor}, anchor == last
 		} else if before, ok := placement.Before(); ok && ids[before.String()] != "" {
-			target = []string{"-b", "-t", ids[before.String()]}
+			target, atEnd = []string{"-b", "-t", ids[before.String()]}, false
 		}
 		windowID, paneID, err := t.newWindow(target, window)
 		if err == nil {
@@ -131,7 +132,7 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 			return err
 		}
 		ids[window.Name().String()] = windowID
-		if target[0] == "-a" && target[2] == last {
+		if atEnd {
 			last = windowID
 		}
 	}

@@ -409,21 +409,22 @@ func (a *paneAnswers) pane(index int) (domain.Pane, error) {
 // none as the first choice.
 func versionFields(scope, none string, versions map[domain.RuntimeKind][]string, php, node *string) []huh.Field {
 	var fields []huh.Field
-	for _, choice := range []struct {
-		kind  domain.RuntimeKind
-		title string
-		value *string
-	}{{domain.PHP, "PHP " + scope, php}, {domain.Node, "Node.js " + scope, node}} {
-		if len(versions[choice.kind]) == 0 {
-			continue
-		}
-		options := []huh.Option[string]{huh.NewOption(none, "")}
-		for _, version := range versions[choice.kind] {
-			options = append(options, huh.NewOption(version, version))
-		}
-		fields = append(fields, huh.NewSelect[string]().Title(choice.title).Options(options...).Value(choice.value))
+	if len(versions[domain.PHP]) > 0 {
+		fields = append(fields, versionField("PHP "+scope, none, versions[domain.PHP], php))
+	}
+	if len(versions[domain.Node]) > 0 {
+		fields = append(fields, versionField("Node.js "+scope, none, versions[domain.Node], node))
 	}
 	return fields
+}
+
+// versionField offers versions, with none as the first choice.
+func versionField(title, none string, versions []string, value *string) huh.Field {
+	options := []huh.Option[string]{huh.NewOption(none, "")}
+	for _, version := range versions {
+		options = append(options, huh.NewOption(version, version))
+	}
+	return huh.NewSelect[string]().Title(title).Options(options...).Value(value)
 }
 
 func envField(title string, value *string) huh.Field {

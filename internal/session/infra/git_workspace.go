@@ -17,7 +17,8 @@ type GitWorkspace struct {
 	progress io.Writer
 }
 
-// NewGitWorkspace shows git's progress and prompts on progress.
+// NewGitWorkspace constructs a GitWorkspace that writes git's progress
+// and prompts to progress.
 func NewGitWorkspace(progress io.Writer) GitWorkspace {
 	return GitWorkspace{progress: progress}
 }

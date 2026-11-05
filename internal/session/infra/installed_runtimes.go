@@ -155,7 +155,6 @@ func link(target, path string) error {
 // Available implements domain.RuntimeCatalog: PHP as installed (8.4),
 // Node.js by major (20), which keeps a pin valid when nvm upgrades it.
 func (r InstalledRuntimes) Available() ([]domain.Runtime, error) {
-	var available []domain.Runtime
 	nodes, err := installedVersions(filepath.Join(r.nvmDir, "versions", "node"), nvmVersion)
 	if err != nil {
 		return nil, err
@@ -171,17 +170,26 @@ func (r InstalledRuntimes) Available() ([]domain.Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, pins := range []struct {
-		kind     domain.RuntimeKind
-		versions []string
-	}{{domain.Node, majors}, {domain.PHP, phps}} {
-		for _, version := range pins.versions {
-			runtime, err := domain.NewRuntime(string(pins.kind), version)
-			if err != nil {
-				return nil, err
-			}
-			available = append(available, runtime)
-		}
+	nodeRuntimes, err := runtimesOf(domain.Node, majors)
+	if err != nil {
+		return nil, err
 	}
-	return available, nil
+	phpRuntimes, err := runtimesOf(domain.PHP, phps)
+	if err != nil {
+		return nil, err
+	}
+	return append(nodeRuntimes, phpRuntimes...), nil
+}
+
+// runtimesOf pins each of versions of kind.
+func runtimesOf(kind domain.RuntimeKind, versions []string) ([]domain.Runtime, error) {
+	runtimes := make([]domain.Runtime, 0, len(versions))
+	for _, version := range versions {
+		runtime, err := domain.NewRuntime(string(kind), version)
+		if err != nil {
+			return nil, err
+		}
+		runtimes = append(runtimes, runtime)
+	}
+	return runtimes, nil
 }
