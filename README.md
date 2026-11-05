@@ -27,9 +27,6 @@ To complete project names with Tab, load weave's completion in your
 source <(weave completion bash)
 ```
 
-The command used to be called `weaver`: delete `~/go/bin/weaver`, and
-in `~/.bashrc`, change `weaver completion` to `weave completion`.
-
 `weave` alone lists the projects, a ● marking those whose session runs,
 beside the selected one's config:
 
