@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 type registered []string
 
 func (r registered) FindByName(name domain.ProjectName) (domain.Project, error) {
-	return domain.Project{}, domain.NewProjectNotFound(name)
+	return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 }
 
 func (r registered) Save(domain.Project) error {

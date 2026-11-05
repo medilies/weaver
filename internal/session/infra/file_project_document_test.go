@@ -42,7 +42,7 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 		repo, _, _ := setup(t)
 		name, _ := domain.NewProjectName("blog")
 		if _, err := repo.Document(name); !isNotFound(err) {
-			t.Fatalf("got %v, want ProjectNotFound", err)
+			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 
@@ -90,6 +90,5 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 }
 
 func isNotFound(err error) bool {
-	_, ok := errors.AsType[domain.ProjectNotFound](err)
-	return ok
+	return errors.Is(err, domain.ErrProjectNotFound)
 }

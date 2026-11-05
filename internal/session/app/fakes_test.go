@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 
@@ -16,7 +17,7 @@ type inMemoryRepository struct {
 func (r inMemoryRepository) FindByName(name domain.ProjectName) (domain.Project, error) {
 	project, ok := r.projects[name.String()]
 	if !ok {
-		return domain.Project{}, domain.NewProjectNotFound(name)
+		return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
 	return project, nil
 }
@@ -28,7 +29,7 @@ func (r inMemoryRepository) Save(project domain.Project) error {
 
 func (r inMemoryRepository) Delete(name domain.ProjectName) error {
 	if _, ok := r.projects[name.String()]; !ok {
-		return domain.NewProjectNotFound(name)
+		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
 	delete(r.projects, name.String())
 	return nil

@@ -121,7 +121,7 @@ func (r FileProjectRepository) Save(project domain.Project) error {
 func (r FileProjectRepository) Delete(name domain.ProjectName) error {
 	err := os.Remove(r.path(name))
 	if errors.Is(err, os.ErrNotExist) {
-		return domain.NewProjectNotFound(name)
+		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
 	return err
 }
@@ -131,7 +131,7 @@ func (r FileProjectRepository) find(name domain.ProjectName) (string, error) {
 	path := r.path(name)
 	_, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		return "", domain.NewProjectNotFound(name)
+		return "", fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
 	return path, err
 }

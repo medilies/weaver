@@ -15,7 +15,7 @@ func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
 	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, nil, nil)})
 	root.SetArgs([]string{"."})
 	root.SetErr(io.Discard)
-	if err := root.Execute(); !errors.Is(err, domain.ErrNoProjectAt) {
+	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {
 		t.Fatalf("got %v, want ErrNoProjectAt from looking up the current directory", err)
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -14,7 +15,7 @@ type storedDocuments map[string]string
 func (d storedDocuments) Document(name domain.ProjectName) (app.ConfigDocument, error) {
 	content, ok := d[name.String()]
 	if !ok {
-		return app.ConfigDocument{}, domain.NewProjectNotFound(name)
+		return app.ConfigDocument{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
 	return app.ConfigDocument{File: name.String() + ".yml", Content: []byte(content)}, nil
 }

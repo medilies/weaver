@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -16,7 +17,7 @@ type storedDocuments map[string]string
 func (d storedDocuments) Document(name domain.ProjectName) (app.ConfigDocument, error) {
 	content, ok := d[name.String()]
 	if !ok {
-		return app.ConfigDocument{}, domain.NewProjectNotFound(name)
+		return app.ConfigDocument{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
 	return app.ConfigDocument{File: name.String() + ".yml", Content: []byte(content)}, nil
 }
@@ -121,8 +122,8 @@ func TestEditProject(t *testing.T) {
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		_, err := edit(storedDocuments{}, &scriptedEditor{}, &countingConfirmer{})
-		if _, ok := errors.AsType[domain.ProjectNotFound](err); !ok {
-			t.Fatalf("got %v, want ProjectNotFound", err)
+		if !errors.Is(err, domain.ErrProjectNotFound) {
+			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 }

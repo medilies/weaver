@@ -17,6 +17,9 @@ var (
 	// ErrRelativeProjectRoot is returned when a project root is not an
 	// absolute path: `weave <project>` runs from anywhere.
 	ErrRelativeProjectRoot = errors.New("project root must be an absolute path")
+	// ErrProjectNotFound is returned when a repository has no project
+	// under the given name.
+	ErrProjectNotFound = errors.New("project not found")
 	// ErrInvalidConfig wraps whatever makes a stored project config
 	// unreadable, as opposed to failing to read it at all.
 	ErrInvalidConfig = errors.New("invalid config")
@@ -74,18 +77,9 @@ var (
 	// ErrRuntimeNotInstalled is returned when a pinned version can't be
 	// found on this machine.
 	ErrRuntimeNotInstalled = errors.New("runtime not installed")
-	// ErrMissingDirectory is returned when a pane's directory doesn't
-	// exist, and no repository would be cloned there.
-	ErrMissingDirectory = errors.New("directory not found")
 	// ErrSessionNotRunning is returned when killing a session that isn't
 	// running.
 	ErrSessionNotRunning = errors.New("session not running")
-	// ErrNoProjectAt is returned when no registered project's root
-	// contains a directory.
-	ErrNoProjectAt = errors.New("no registered project contains this directory")
-	// ErrAmbiguousProject is returned when two registered projects share
-	// the root containing a directory.
-	ErrAmbiguousProject = errors.New("several projects share this directory's root")
 	// ErrInvalidCheckoutDir is returned for a repository directory that
 	// isn't inside the project root.
 	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")
@@ -95,23 +89,3 @@ var (
 	// directory.
 	ErrDuplicateCheckout = errors.New("two repositories share a directory")
 )
-
-// ProjectNotFound is returned when a repository has no project under the
-// given name.
-type ProjectNotFound struct {
-	name ProjectName
-}
-
-// NewProjectNotFound constructs a ProjectNotFound for the given name.
-func NewProjectNotFound(name ProjectName) ProjectNotFound {
-	return ProjectNotFound{name: name}
-}
-
-// Name is the project name that could not be found.
-func (e ProjectNotFound) Name() ProjectName {
-	return e.name
-}
-
-func (e ProjectNotFound) Error() string {
-	return "project not found: " + e.name.String()
-}

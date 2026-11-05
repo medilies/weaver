@@ -198,7 +198,7 @@ func TestOpenProject(t *testing.T) {
 		workspace := everything()
 		delete(workspace.dirs, "/srv/shop/logs")
 		err := openShop(t, sessions, workspace, php84)
-		if !errors.Is(err, domain.ErrMissingDirectory) || len(sessions.restored)+len(sessions.attached) != 0 {
+		if !errors.Is(err, app.ErrMissingDirectory) || len(sessions.restored)+len(sessions.attached) != 0 {
 			t.Fatalf("got %v, restored %q, attached %q; want ErrMissingDirectory and nothing done",
 				err, sessions.restored, sessions.attached)
 		}
@@ -240,7 +240,7 @@ func TestOpenProject(t *testing.T) {
 		workspace := everything()
 		delete(workspace.dirs, "/srv/shop/logs")
 		err := openShop(t, sessions, workspace, php84)
-		if !errors.Is(err, domain.ErrMissingDirectory) {
+		if !errors.Is(err, app.ErrMissingDirectory) {
 			t.Fatalf("got %v, want ErrMissingDirectory", err)
 		}
 		if len(sessions.started) != 0 || len(sessions.attached) != 0 {
@@ -251,8 +251,8 @@ func TestOpenProject(t *testing.T) {
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		repo := inMemoryRepository{projects: map[string]domain.Project{}}
 		err := app.NewOpenProject(repo, &fakeSessions{}, everything(), php84).Handle("shop")
-		if _, ok := errors.AsType[domain.ProjectNotFound](err); !ok {
-			t.Fatalf("got %v, want ProjectNotFound", err)
+		if !errors.Is(err, domain.ErrProjectNotFound) {
+			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 }
@@ -330,7 +330,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 
 	t.Run("reports a directory no project contains", func(t *testing.T) {
 		err := open(t, &fakeSessions{}, "/home/me", shop(t))
-		if !errors.Is(err, domain.ErrNoProjectAt) {
+		if !errors.Is(err, app.ErrNoProjectAt) {
 			t.Fatalf("got %v, want ErrNoProjectAt", err)
 		}
 	})
@@ -347,7 +347,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 
 	t.Run("names the invalid configs when no project contains the directory", func(t *testing.T) {
 		err := openPastBroken(t, &fakeSessions{}, "/home/me", shop(t))
-		if !errors.Is(err, domain.ErrNoProjectAt) || !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "broken.yml") {
+		if !errors.Is(err, app.ErrNoProjectAt) || !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "broken.yml") {
 			t.Fatalf("got %v, want ErrNoProjectAt naming broken.yml", err)
 		}
 	})
@@ -355,7 +355,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 	t.Run("refuses to guess between projects sharing a root", func(t *testing.T) {
 		sessions := &fakeSessions{}
 		err := open(t, sessions, "/srv/blog", rootedAt(t, "blog", "/srv/blog"), rootedAt(t, "notes", "/srv/blog"))
-		if !errors.Is(err, domain.ErrAmbiguousProject) || len(sessions.attached) != 0 {
+		if !errors.Is(err, app.ErrAmbiguousProject) || len(sessions.attached) != 0 {
 			t.Fatalf("got %v with %q attached, want ErrAmbiguousProject and nothing attached", err, sessions.attached)
 		}
 	})

@@ -89,8 +89,8 @@ func TestFileProjectRepositoryFindByName(t *testing.T) {
 		}
 
 		_, err = infra.NewFileProjectRepository(t.TempDir()).FindByName(name)
-		if _, ok := errors.AsType[domain.ProjectNotFound](err); !ok {
-			t.Fatalf("got %v, want ProjectNotFound", err)
+		if !errors.Is(err, domain.ErrProjectNotFound) {
+			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 }
@@ -361,13 +361,13 @@ func TestFileProjectRepositoryDelete(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, err := repo.FindByName(name); !isNotFound(err) {
-			t.Fatalf("got %v, want ProjectNotFound once deleted", err)
+			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
 		}
 	})
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		if err := infra.NewFileProjectRepository(t.TempDir()).Delete(name); !isNotFound(err) {
-			t.Fatalf("got %v, want ProjectNotFound", err)
+			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 }

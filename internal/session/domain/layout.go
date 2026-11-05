@@ -161,8 +161,8 @@ func Percent(n int) (Size, error) {
 	return Size{amount: n, percent: true}, nil
 }
 
-// Cells is a number of columns (right) or lines (below).
-func Cells(n int) (Size, error) {
+// cells is a number of columns (right) or lines (below).
+func cells(n int) (Size, error) {
 	if n < 1 {
 		return Size{}, fmt.Errorf("%w: %d cells (want at least 1)", ErrInvalidSize, n)
 	}
@@ -183,7 +183,7 @@ func ParseSize(raw string) (Size, error) {
 	if percent {
 		return Percent(n)
 	}
-	return Cells(n)
+	return cells(n)
 }
 
 // IsDefault reports whether tmux picks the size.

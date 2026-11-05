@@ -52,7 +52,7 @@ type ConfigEditor interface {
 
 // ProjectDocuments are projects' configs as the user writes them.
 type ProjectDocuments interface {
-	// Document is the project's config as stored, or ProjectNotFound.
+	// Document is the project's config as stored, or ErrProjectNotFound.
 	Document(name domain.ProjectName) (ConfigDocument, error)
 	// ReplaceDocument stores content as the project's config, in the
 	// stored config's file, if it is valid; otherwise the

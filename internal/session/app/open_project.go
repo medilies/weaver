@@ -7,6 +7,18 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
+var (
+	// ErrMissingDirectory is returned when a pane's directory doesn't
+	// exist, and no repository would be cloned there.
+	ErrMissingDirectory = errors.New("directory not found")
+	// ErrNoProjectAt is returned when no registered project's root
+	// contains a directory.
+	ErrNoProjectAt = errors.New("no registered project contains this directory")
+	// ErrAmbiguousProject is returned when two registered projects share
+	// the root containing a directory.
+	ErrAmbiguousProject = errors.New("several projects share this directory's root")
+)
+
 // OpenProject puts the user in a project's tmux session, starting it
 // first when it isn't running, or re-creating the windows it lacks when
 // weaver started it.
@@ -71,7 +83,7 @@ func (uc OpenProject) HandleDir(dir string) error {
 	}
 	switch len(found) {
 	case 0:
-		err := fmt.Errorf("%w: %s (weave list shows the registered projects)", domain.ErrNoProjectAt, dir)
+		err := fmt.Errorf("%w: %s (weave list shows the registered projects)", ErrNoProjectAt, dir)
 		if len(invalid) > 0 {
 			err = fmt.Errorf("%w; skipped invalid configs:\n%w", err, errors.Join(invalid...))
 		}
@@ -79,7 +91,7 @@ func (uc OpenProject) HandleDir(dir string) error {
 	case 1:
 		return uc.open(found[0])
 	}
-	return fmt.Errorf("%w: %s and %s are both rooted at %s", domain.ErrAmbiguousProject,
+	return fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject,
 		found[0].Name(), found[1].Name(), found[0].Root())
 }
 
@@ -166,7 +178,7 @@ func (uc OpenProject) checkWindowDirs(window domain.WindowPlan) error {
 			return err
 		}
 		if !exists {
-			return fmt.Errorf("%s: %w: %s", where(window, pane), domain.ErrMissingDirectory, pane.Dir())
+			return fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingDirectory, pane.Dir())
 		}
 	}
 	return nil

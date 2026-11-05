@@ -134,7 +134,7 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if blog, _ := s.browser.last().overview("blog"); !isProjectNotFound(blog.Problem()) {
-			t.Fatalf("got problem %v, want ProjectNotFound", blog.Problem())
+			t.Fatalf("got problem %v, want ErrProjectNotFound", blog.Problem())
 		}
 	})
 
@@ -168,7 +168,7 @@ func TestBrowseProjects(t *testing.T) {
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if notice := s.browser.last().notice; !strings.Contains(notice, domain.ErrMissingDirectory.Error()) {
+		if notice := s.browser.last().notice; !strings.Contains(notice, app.ErrMissingDirectory.Error()) {
 			t.Fatalf("got notice %q, want the missing directory", notice)
 		}
 	})
@@ -291,8 +291,7 @@ func TestBrowseProjects(t *testing.T) {
 }
 
 func isProjectNotFound(err error) bool {
-	_, ok := errors.AsType[domain.ProjectNotFound](err)
-	return ok
+	return errors.Is(err, domain.ErrProjectNotFound)
 }
 
 // failingBrowser is an app.ProjectBrowser that can't show anything.
