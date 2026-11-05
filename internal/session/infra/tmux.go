@@ -77,6 +77,15 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 	return nil
 }
 
+// Kill implements domain.SessionKiller.
+func (t Tmux) Kill(name domain.ProjectName) error {
+	_, err := t.run("kill-session", "-t", "="+name.String())
+	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	return err
+}
+
 // Attach implements domain.SessionLauncher. Outside tmux it replaces
 // weaver with `tmux attach-session`, like the shell scripts it replaces.
 func (t Tmux) Attach(name domain.ProjectName) error {

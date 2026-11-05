@@ -14,6 +14,7 @@ import (
 // application is the use cases the commands run.
 type application struct {
 	openProject app.OpenProject
+	killProject app.KillProject
 	loadProject app.LoadProject
 }
 
@@ -45,6 +46,7 @@ func wire() (application, error) {
 
 	return application{
 		openProject: app.NewOpenProject(projects, tmux, workspace, runtimes),
+		killProject: app.NewKillProject(tmux),
 		loadProject: app.NewLoadProject(projects),
 	}, nil
 }

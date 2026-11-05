@@ -1,6 +1,7 @@
 package infra_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -283,6 +284,30 @@ func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
 	if running, err := server.tmux().IsRunning(name); err != nil || running {
 		t.Fatalf("got running=%v (%v), want the half-built session gone", running, err)
 	}
+}
+
+func TestTmuxKill(t *testing.T) {
+	server := newTmuxServer(t)
+	name, _ := domain.NewProjectName("doomed")
+
+	t.Run("reports a session that isn't running", func(t *testing.T) {
+		if err := server.tmux().Kill(name); !errors.Is(err, domain.ErrSessionNotRunning) {
+			t.Fatalf("got %v, want ErrSessionNotRunning", err)
+		}
+	})
+
+	t.Run("stops a running session", func(t *testing.T) {
+		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q}`, t.TempDir()), nil)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := server.tmux().Kill(name); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if running, err := server.tmux().IsRunning(name); err != nil || running {
+			t.Fatalf("got running=%v (%v), want the session gone", running, err)
+		}
+	})
 }
 
 func TestTmuxIsRunning(t *testing.T) {

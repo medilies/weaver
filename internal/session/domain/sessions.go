@@ -11,3 +11,11 @@ type SessionLauncher interface {
 	// Attach puts the user in the project's running session.
 	Attach(name ProjectName) error
 }
+
+// SessionKiller stops projects' tmux sessions. Infrastructure provides the
+// implementation.
+type SessionKiller interface {
+	// Kill stops the project's session and everything running in it, or
+	// returns an error wrapping ErrSessionNotRunning.
+	Kill(name ProjectName) error
+}

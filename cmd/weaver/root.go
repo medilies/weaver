@@ -18,6 +18,6 @@ running. Inside tmux, it switches to the session instead.`,
 			return weaver.openProject.Handle(args[0])
 		},
 	}
-	root.AddCommand(newShowCommand(weaver))
+	root.AddCommand(newKillCommand(weaver), newShowCommand(weaver))
 	return root
 }

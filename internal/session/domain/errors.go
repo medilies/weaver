@@ -74,6 +74,9 @@ var (
 	// ErrMissingDirectory is returned when a pane's directory doesn't
 	// exist, and no repository would be cloned there.
 	ErrMissingDirectory = errors.New("directory not found")
+	// ErrSessionNotRunning is returned when killing a session that isn't
+	// running.
+	ErrSessionNotRunning = errors.New("session not running")
 	// ErrInvalidCheckoutDir is returned for a repository directory that
 	// isn't inside the project root.
 	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")
