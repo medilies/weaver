@@ -76,7 +76,8 @@ const (
 )
 
 // Choice is what the user picked in the project browser: an action, and
-// the project it applies to (none when adding one).
+// the project highlighted then, which the action applies to (adding a
+// project applies to none, but the browser comes back to it).
 type Choice struct {
 	Action  Action
 	Project domain.ProjectName

@@ -116,16 +116,25 @@ func choose(t *testing.T, action app.Action, raw string) app.Choice {
 }
 
 func TestBrowseProjects(t *testing.T) {
-	t.Run("shows each project's config, or why it can't be read", func(t *testing.T) {
+	t.Run("shows each project's config", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if got := shop.Config(); got.File != "shop.yml" || string(got.Content) != "root: /srv/shop\n" {
+			t.Fatalf("got %q %q, want shop.yml as stored", got.File, got.Content)
+		}
+	})
+
+	t.Run("shows why a project's config can't be read", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		delete(s.documents, "blog")
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		shop, _ := s.browser.last().overview("shop")
-		blog, _ := s.browser.last().overview("blog")
-		if shop.Config().File != "shop.yml" || string(shop.Config().Content) != "root: /srv/shop\n" || blog.Problem() == nil {
-			t.Fatalf("got shop %+v and blog problem %v, want shop's config and blog's problem", shop.Config(), blog.Problem())
+		if blog, _ := s.browser.last().overview("blog"); !isProjectNotFound(blog.Problem()) {
+			t.Fatalf("got problem %v, want ProjectNotFound", blog.Problem())
 		}
 	})
 
@@ -136,13 +145,20 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("opens the chosen project and stops browsing", func(t *testing.T) {
+	t.Run("opens the chosen project", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionOpen, "shop"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !slices.Equal(s.sessions.attached, []string{"shop"}) || len(s.browser.shown) != 1 {
-			t.Fatalf("got %q attached after %d views, want shop after one", s.sessions.attached, len(s.browser.shown))
+		if !slices.Equal(s.sessions.attached, []string{"shop"}) {
+			t.Fatalf("got %q attached, want shop", s.sessions.attached)
+		}
+	})
+
+	t.Run("stops browsing once a project opens", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionOpen, "shop"), choose(t, app.ActionOpen, "blog"))
+		if err := s.browse(answer(true)); err != nil || len(s.browser.shown) != 1 {
+			t.Fatalf("got %v after %d views, want nil after one", err, len(s.browser.shown))
 		}
 	})
 
@@ -165,6 +181,16 @@ func TestBrowseProjects(t *testing.T) {
 		shop, _ := s.browser.last().overview("shop")
 		if shop.Running() || s.browser.last().notice != "Stopped shop." {
 			t.Fatalf("got running=%v and notice %q, want shop stopped", shop.Running(), s.browser.last().notice)
+		}
+	})
+
+	t.Run("shows why a session couldn't be stopped", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "blog"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if notice := s.browser.last().notice; !strings.Contains(notice, domain.ErrSessionNotRunning.Error()) {
+			t.Fatalf("got notice %q, want blog's session not running", notice)
 		}
 	})
 
@@ -199,17 +225,38 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("adds a project rooted at the working directory, then selects it", func(t *testing.T) {
-		s := newBrowseSetup(t, app.Choice{Action: app.ActionAdd})
+	t.Run("roots an added project at the working directory", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionAdd, "shop"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if s.form.draft.Root != "/srv/new" || s.browser.last().selected.String() != "new" {
-			t.Fatalf("got root %q and %q selected, want /srv/new and new", s.form.draft.Root, s.browser.last().selected)
+		if s.form.draft.Root != "/srv/new" {
+			t.Fatalf("got root %q, want /srv/new", s.form.draft.Root)
 		}
 	})
 
-	t.Run("tells what an edit did", func(t *testing.T) {
+	t.Run("selects an added project", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionAdd, "shop"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.browser.last().selected.String(); got != "new" {
+			t.Fatalf("got %q selected, want new", got)
+		}
+	})
+
+	t.Run("comes back to the highlighted project when adding is abandoned", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionAdd, "shop"))
+		s.form.err = app.ErrAborted
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if last := s.browser.last(); last.selected.String() != "shop" || last.notice != "Nothing done." {
+			t.Fatalf("got %q selected and notice %q, want shop and nothing done", last.selected, last.notice)
+		}
+	})
+
+	t.Run("says when an edit saved the config", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionEdit, "shop"))
 		s.editor.saves = []string{"root: /srv/store\n"}
 		if err := s.browse(answer(true)); err != nil {
@@ -217,6 +264,17 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if notice := s.browser.last().notice; notice != "Saved shop." {
 			t.Fatalf("got notice %q, want %q", notice, "Saved shop.")
+		}
+	})
+
+	t.Run("says when an edit changed nothing", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionEdit, "shop"))
+		s.editor.saves = []string{"root: /srv/shop\n"}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if notice := s.browser.last().notice; notice != "No changes." {
+			t.Fatalf("got notice %q, want %q", notice, "No changes.")
 		}
 	})
 
@@ -230,6 +288,11 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("got %v, want the browser's error", err)
 		}
 	})
+}
+
+func isProjectNotFound(err error) bool {
+	_, ok := errors.AsType[domain.ProjectNotFound](err)
+	return ok
 }
 
 // failingBrowser is an app.ProjectBrowser that can't show anything.

@@ -40,9 +40,9 @@ func (TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Project
 	return choice, nil
 }
 
-// browserKeys are the keys acting on the selected project.
+// browserKeys are the keys making a choice.
 var browserKeys = map[string]app.Action{
-	"enter": app.ActionOpen, "e": app.ActionEdit, "x": app.ActionKill, "d": app.ActionDelete,
+	"enter": app.ActionOpen, "a": app.ActionAdd, "e": app.ActionEdit, "x": app.ActionKill, "d": app.ActionDelete,
 }
 
 var (
@@ -76,29 +76,24 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// press moves the cursor, or ends with the choice the key makes. Only a
-// running project's session can be killed.
+// press moves the cursor, or ends with the choice the key makes.
 func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "up", "k":
 		m.cursor = max(m.cursor-1, 0)
 	case "down", "j":
 		m.cursor = max(min(m.cursor+1, len(m.projects)-1), 0)
-	case "a":
-		m.choice = app.Choice{Action: app.ActionAdd}
-		return m, tea.Quit
 	case "q", "esc", "ctrl+c":
 		return m, tea.Quit
 	default:
 		action, ok := browserKeys[key]
-		if !ok || len(m.projects) == 0 {
+		if !ok || (len(m.projects) == 0 && action != app.ActionAdd) {
 			break
 		}
-		project := m.projects[m.cursor]
-		if action == app.ActionKill && !project.Running() {
-			break
+		m.choice = app.Choice{Action: action}
+		if len(m.projects) > 0 {
+			m.choice.Project = m.projects[m.cursor].Name()
 		}
-		m.choice = app.Choice{Action: action, Project: project.Name()}
 		return m, tea.Quit
 	}
 	return m, nil
