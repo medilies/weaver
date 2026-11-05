@@ -66,6 +66,13 @@ func (r ProjectRoot) String() string {
 	return r.path
 }
 
+// Contains reports whether path is the root or a directory under it:
+// /srv/shop contains /srv/shop/back, not /srv/shopping.
+func (r ProjectRoot) Contains(path string) bool {
+	rel, err := filepath.Rel(r.path, filepath.Clean(path))
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+}
+
 // Resolve is the absolute directory dir points to: the root itself, a
 // directory under it, or dir as is when absolute.
 func (r ProjectRoot) Resolve(dir PaneDir) string {

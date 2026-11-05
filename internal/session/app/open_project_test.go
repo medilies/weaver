@@ -121,7 +121,7 @@ func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace, ru
 
 func everything() *fakeWorkspace {
 	return &fakeWorkspace{dirs: map[string]bool{
-		"/srv/shop": true, "/srv/shop/back": true, "/srv/shop/front": true, "/srv/shop/logs": true,
+		"/srv/shop": true, "/srv/shop/back": true, "/srv/shop/front": true, "/srv/shop/logs": true, "/srv/blog": true,
 	}}
 }
 
@@ -197,6 +197,66 @@ func TestOpenProject(t *testing.T) {
 		err := app.NewOpenProject(repo, &fakeSessions{}, everything(), php84).Handle("shop")
 		if _, ok := errors.AsType[domain.ProjectNotFound](err); !ok {
 			t.Fatalf("got %v, want ProjectNotFound", err)
+		}
+	})
+}
+
+// rootedAt is a project with its default window, rooted at root.
+func rootedAt(t *testing.T, raw, root string) domain.Project {
+	t.Helper()
+	name, err := domain.NewProjectName(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	projectRoot, err := domain.NewProjectRoot(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return domain.NewProject(name, projectRoot)
+}
+
+func TestOpenProjectHandleDir(t *testing.T) {
+	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
+		t.Helper()
+		repo := inMemoryRepository{projects: map[string]domain.Project{}}
+		for _, p := range projects {
+			repo.projects[p.Name().String()] = p
+		}
+		return app.NewOpenProject(repo, sessions, everything(), php84).HandleDir(dir)
+	}
+
+	t.Run("opens the project whose root contains the directory", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		if err := open(t, sessions, "/srv/shop/front/src", shop(t), rootedAt(t, "blog", "/srv/blog")); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got %q attached, want shop", sessions.attached)
+		}
+	})
+
+	t.Run("prefers the innermost root when roots nest", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		if err := open(t, sessions, "/srv/shop/back/app", shop(t), rootedAt(t, "back", "/srv/shop/back")); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"back"}) {
+			t.Fatalf("got %q attached, want back", sessions.attached)
+		}
+	})
+
+	t.Run("reports a directory no project contains", func(t *testing.T) {
+		err := open(t, &fakeSessions{}, "/home/me", shop(t))
+		if !errors.Is(err, domain.ErrNoProjectAt) {
+			t.Fatalf("got %v, want ErrNoProjectAt", err)
+		}
+	})
+
+	t.Run("refuses to guess between projects sharing a root", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		err := open(t, sessions, "/srv/blog", rootedAt(t, "blog", "/srv/blog"), rootedAt(t, "notes", "/srv/blog"))
+		if !errors.Is(err, domain.ErrAmbiguousProject) || len(sessions.attached) != 0 {
+			t.Fatalf("got %v with %q attached, want ErrAmbiguousProject and nothing attached", err, sessions.attached)
 		}
 	})
 }

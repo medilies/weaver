@@ -35,7 +35,44 @@ func (uc OpenProject) Handle(rawName string) error {
 	if err != nil {
 		return err
 	}
-	running, err := uc.sessions.IsRunning(name)
+	return uc.open(project)
+}
+
+// HandleDir opens the project whose root contains dir; when roots nest,
+// the innermost one.
+func (uc OpenProject) HandleDir(dir string) error {
+	names, err := uc.projects.Names()
+	if err != nil {
+		return err
+	}
+	var found []domain.Project
+	for _, name := range names {
+		project, err := uc.projects.FindByName(name)
+		if err != nil {
+			return err
+		}
+		if !project.Root().Contains(dir) {
+			continue
+		}
+		switch {
+		case len(found) == 0 || len(project.Root().String()) > len(found[0].Root().String()):
+			found = []domain.Project{project}
+		case len(project.Root().String()) == len(found[0].Root().String()):
+			found = append(found, project)
+		}
+	}
+	switch len(found) {
+	case 0:
+		return fmt.Errorf("%w: %s (weaver list shows the registered projects)", domain.ErrNoProjectAt, dir)
+	case 1:
+		return uc.open(found[0])
+	}
+	return fmt.Errorf("%w: %s and %s are both rooted at %s", domain.ErrAmbiguousProject,
+		found[0].Name(), found[1].Name(), found[0].Root())
+}
+
+func (uc OpenProject) open(project domain.Project) error {
+	running, err := uc.sessions.IsRunning(project.Name())
 	if err != nil {
 		return err
 	}
@@ -44,7 +81,7 @@ func (uc OpenProject) Handle(rawName string) error {
 			return err
 		}
 	}
-	return uc.sessions.Attach(name)
+	return uc.sessions.Attach(project.Name())
 }
 
 // start checks what can be checked before changing anything: pinned

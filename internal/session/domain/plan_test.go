@@ -32,6 +32,24 @@ func TestProjectRootResolve(t *testing.T) {
 	}
 }
 
+func TestProjectRootContains(t *testing.T) {
+	root := projectRoot(t, "/srv/shop")
+
+	for path, want := range map[string]bool{
+		"/srv/shop":         true,
+		"/srv/shop/back/":   true,
+		"/srv/shopping":     false,
+		"/srv":              false,
+		"/srv/shop/../blog": false,
+	} {
+		t.Run(path, func(t *testing.T) {
+			if got := root.Contains(path); got != want {
+				t.Fatalf("got %v, want %v", got, want)
+			}
+		})
+	}
+}
+
 func TestProjectPlan(t *testing.T) {
 	back := domain.NewPane().Named(paneName(t, "back")).In(paneDir(t, "back"))
 	front := domain.NewPane().

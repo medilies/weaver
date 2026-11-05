@@ -77,6 +77,12 @@ var (
 	// ErrSessionNotRunning is returned when killing a session that isn't
 	// running.
 	ErrSessionNotRunning = errors.New("session not running")
+	// ErrNoProjectAt is returned when no registered project's root
+	// contains a directory.
+	ErrNoProjectAt = errors.New("no registered project contains this directory")
+	// ErrAmbiguousProject is returned when two registered projects share
+	// the root containing a directory.
+	ErrAmbiguousProject = errors.New("several projects share this directory's root")
 	// ErrInvalidCheckoutDir is returned for a repository directory that
 	// isn't inside the project root.
 	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")

@@ -9,6 +9,7 @@ bespoke script per project.
 ```sh
 go install ./cmd/weaver   # puts weaver in ~/go/bin
 weaver bicyclette         # start or attach the bicyclette session, from anywhere
+weaver                    # same, for the project whose root holds the current directory
 weaver kill bicyclette    # stop the session and everything running in it
 weaver list               # registered projects, and which sessions run
 weaver show bicyclette    # print a registered project
