@@ -3,12 +3,14 @@ package infra
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -24,11 +26,53 @@ func NewHuhForms() HuhForms {
 	return HuhForms{}
 }
 
-// Confirm implements app.Confirmer.
+// Confirm implements app.Confirmer, as a dialog in the middle of the
+// screen.
 func (HuhForms) Confirm(question string) (bool, error) {
 	yes := false
-	err := show(huh.NewGroup(huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&yes)))
+	form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&yes)))
+	form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Interrupt
+	help := form.Help().ShortHelpView(form.KeyBinds())
+	width := max(lipgloss.Width(question)+confirmFrameWidth, lipgloss.Width(help))
+	_, err := tea.NewProgram(dialog{form: form, width: width}, tea.WithOutput(os.Stderr)).Run() // where huh draws
+	if errors.Is(err, tea.ErrInterrupted) || form.State == huh.StateAborted {
+		return false, app.ErrAborted
+	}
 	return yes, err
+}
+
+const confirmFrameWidth = 2 // the field's left border and padding
+
+// dialog shows a form full screen, centred, as wide as its content or the
+// screen, whichever is narrower.
+type dialog struct {
+	form       *huh.Form
+	width      int
+	cols, rows int
+}
+
+func (d dialog) Init() tea.Cmd {
+	return d.form.Init()
+}
+
+func (d dialog) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if size, ok := msg.(tea.WindowSizeMsg); ok {
+		d.cols, d.rows = size.Width, size.Height
+		d.form = d.form.WithWidth(min(d.width, size.Width))
+	}
+	_, cmd := d.form.Update(msg)
+	return d, cmd
+}
+
+func (d dialog) View() tea.View {
+	view := tea.NewView("") // until the terminal's size is known
+	if d.cols > 0 {
+		form := d.form.View()
+		form = lipgloss.NewStyle().Width(lipgloss.Width(form)).Render(form) // centred as a block, not line by line
+		view.SetContent(lipgloss.Place(d.cols, d.rows, lipgloss.Center, lipgloss.Center, form))
+	}
+	view.AltScreen = true
+	return view
 }
 
 // Fill implements app.ProjectForm: a screen for the project, then, for
