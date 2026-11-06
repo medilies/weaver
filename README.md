@@ -25,6 +25,7 @@ weave .               # same, for the project whose root holds the current direc
 weave                 # browse the projects, to open, freeze, edit, kill or delete them
 weave edit bicyclette # edit its config in $VISUAL or $EDITOR; only a valid config is saved
 weave kill bicyclette # kill the session and everything running in it
+weave kill            # same, for the session you're in
 weave list            # registered projects, and which sessions run
 weave show bicyclette # print its config file
 ```

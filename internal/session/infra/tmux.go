@@ -243,7 +243,7 @@ func foreground(pid string) (domain.Command, bool) {
 	return cmd, err == nil
 }
 
-// Current implements domain.SessionCapturer.
+// Current implements domain.SessionLocator.
 func (t Tmux) Current() (string, error) {
 	if t.opts.Pane == "" {
 		return "", domain.ErrNotInsideTmux

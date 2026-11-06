@@ -53,15 +53,21 @@ type SessionLister interface {
 	Running() ([]string, error)
 }
 
+// SessionLocator tells which tmux session weaver runs in. Infrastructure
+// provides the implementation.
+type SessionLocator interface {
+	// Current is the session weaver runs in, or ErrNotInsideTmux.
+	Current() (string, error)
+}
+
 // SessionCapturer reads the layout of a running tmux session, weaver's or
 // not. Infrastructure provides the implementation.
 type SessionCapturer interface {
+	SessionLocator
 	// Capture returns the session's windows in order, their panes in an
 	// order that recreates them, with absolute directories and the
 	// commands running in them typed at their prompts, not run.
 	Capture(session string) ([]Window, error)
-	// Current is the session weaver runs in, or ErrNotInsideTmux.
-	Current() (string, error)
 }
 
 // SessionKiller kills projects' tmux sessions. Infrastructure provides the

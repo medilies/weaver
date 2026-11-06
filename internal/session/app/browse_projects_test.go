@@ -109,7 +109,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		app.NewOpenProject(s.configs, server, s.workspace),
 		app.NewFreezeProject(s.configs, foundRepos{}, capturedSessions{}, s.form, confirm),
 		app.NewEditProject(s.documents, s.editor, confirm),
-		app.NewKillProject(server),
+		app.NewKillProject(server, capturedSessions{}),
 	).Handle("/srv/new")
 }
 

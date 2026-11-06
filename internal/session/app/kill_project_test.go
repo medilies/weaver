@@ -27,7 +27,7 @@ func (k *fakeKiller) Kill(name domain.ProjectName) error {
 func TestKillProject(t *testing.T) {
 	t.Run("kills the project's session", func(t *testing.T) {
 		killer := &fakeKiller{running: map[string]bool{"shop": true}}
-		if err := app.NewKillProject(killer).Handle("shop"); err != nil {
+		if err := app.NewKillProject(killer, capturedSessions{}).Handle("shop"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(killer.killed, []string{"shop"}) {
@@ -36,7 +36,7 @@ func TestKillProject(t *testing.T) {
 	})
 
 	t.Run("reports a session that isn't running", func(t *testing.T) {
-		err := app.NewKillProject(&fakeKiller{}).Handle("shop")
+		err := app.NewKillProject(&fakeKiller{}, capturedSessions{}).Handle("shop")
 		if !errors.Is(err, domain.ErrSessionNotRunning) {
 			t.Fatalf("got %v, want ErrSessionNotRunning", err)
 		}
@@ -44,7 +44,33 @@ func TestKillProject(t *testing.T) {
 
 	t.Run("rejects an invalid name before killing anything", func(t *testing.T) {
 		killer := &fakeKiller{running: map[string]bool{"my.app": true}}
-		err := app.NewKillProject(killer).Handle("my.app")
+		err := app.NewKillProject(killer, capturedSessions{}).Handle("my.app")
+		if !errors.Is(err, domain.ErrInvalidProjectName) || len(killer.killed) != 0 {
+			t.Fatalf("got %v with %q killed, want ErrInvalidProjectName and nothing killed", err, killer.killed)
+		}
+	})
+
+	t.Run("kills the session weaver runs in", func(t *testing.T) {
+		killer := &fakeKiller{running: map[string]bool{"shop": true, "blog": true}}
+		if err := app.NewKillProject(killer, capturedSessions{current: "shop"}).HandleCurrent(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(killer.killed, []string{"shop"}) {
+			t.Fatalf("got %q killed, want shop", killer.killed)
+		}
+	})
+
+	t.Run("kills nothing outside tmux", func(t *testing.T) {
+		killer := &fakeKiller{running: map[string]bool{"shop": true}}
+		err := app.NewKillProject(killer, capturedSessions{}).HandleCurrent()
+		if !errors.Is(err, domain.ErrNotInsideTmux) || len(killer.killed) != 0 {
+			t.Fatalf("got %v with %q killed, want ErrNotInsideTmux and nothing killed", err, killer.killed)
+		}
+	})
+
+	t.Run("leaves a current session no project could be named after", func(t *testing.T) {
+		killer := &fakeKiller{running: map[string]bool{"my session": true}}
+		err := app.NewKillProject(killer, capturedSessions{current: "my session"}).HandleCurrent()
 		if !errors.Is(err, domain.ErrInvalidProjectName) || len(killer.killed) != 0 {
 			t.Fatalf("got %v with %q killed, want ErrInvalidProjectName and nothing killed", err, killer.killed)
 		}
