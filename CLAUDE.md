@@ -7,6 +7,40 @@
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
 
+## Ubiquitous language
+
+Code, configs, CLI, browser text, docs and commits use these words, and only these. The config format and CLI are released, so when code and user-facing words disagree, the code is renamed. A new concept gets an entry here before it gets code.
+
+| Term | Meaning | Config / CLI / browser | Code |
+| --- | --- | --- | --- |
+| project | A named dev environment weaver can open | `<name>.yml` | `Project`, `ProjectName` |
+| config | A project's YAML file | `weave show`, `weave edit` | `ProjectRepository`, `ConfigDocument` |
+| registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRepository.Names()` |
+| root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
+| repository | A git repository expected under the root, cloned when missing | `repositories:` | `Repo`, `Repos`, `RepoDetector` |
+| remote | The URL a repository is cloned from | value in `repositories:` | `Repo.Remote()` |
+| working tree | Where the root's git checkout stands: branch, changes, commits ahead or behind | browser summary | `WorkingTree` |
+| window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
+| dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |
+| env | Environment variables, a pane's overriding the project's | `env:` | `Env`, `WithEnv` |
+| before commands | Commands typed and run in a pane before its own | `before:` | `Project`, `Window` and `Pane.Before()`, `RunningFirst` |
+| command / prefill | What a pane runs, or types without running | `command:` / `prefill:` | `Startup`, `Pane.Running`, `Pane.Prefilling` |
+| note | Lines printed in a pane before its shell starts | `note:` | `Pane.WithNote` |
+| session | The tmux session named after a project | | `RunningSession`, `Session*` ports |
+| running / not running | Whether a project's session exists | ● in the browser | `ProjectStatus.Running()` |
+| owned session | A session weaver started; only those are restored | | `RunningSession.Owned()` |
+| plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |
+| restoration | Putting back the configured windows an owned session lost | | `Project.Restoration`, `WindowPlacement` |
+| freeze | Register a project through forms, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
+| open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
+| edit | Change a config in the editor, keeping it only if valid | `weave edit`, key `e` | `EditProject`, `ActionEdit` |
+| kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
+| delete | Remove a config; a running session keeps running | key `d` | `ProjectRepository.Delete`, `ActionDelete` |
+| browser | The project list `weave` shows without arguments | `weave` | `BrowseProjects`, `ProjectBrowser`, `ProjectOverview` |
+| warning | Something opening would likely fail on | browser summary | `ProjectOverview.Warnings()` |
+
+`ProjectRepository` is the DDD repository of configs, unrelated to git repositories.
+
 ## Environment
 
 - No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weave`.
