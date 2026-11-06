@@ -41,11 +41,11 @@ quotes and variables don't survive. Choose "Run it" to run it.`,
 			if err != nil {
 				return err
 			}
-			request := app.AddRequest{Name: name, Root: root, WorkingDir: dir}
+			request := app.FreezeRequest{Name: name, Root: root, WorkingDir: dir}
 			if len(args) == 1 {
 				request.Session = args[0]
 			}
-			project, err := weaver.addProject.Handle(request)
+			project, err := weaver.freezeProject.Handle(request)
 			if errors.Is(err, app.ErrAborted) {
 				_, err = fmt.Fprintln(cmd.ErrOrStderr(), "Nothing saved.")
 				return err

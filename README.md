@@ -22,7 +22,7 @@ weave freeze scratch  # same, starting from the windows, panes and commands of t
 weave freeze .        # same, from the session you're in
 weave bicyclette      # start or attach the bicyclette session, from anywhere
 weave .               # same, for the project whose root holds the current directory
-weave                 # browse the projects, to open, add, edit, kill or delete them
+weave                 # browse the projects, to open, freeze, edit, kill or delete them
 weave edit bicyclette # edit its config in $VISUAL or $EDITOR; only a valid config is saved
 weave kill bicyclette # stop the session and everything running in it
 weave list            # registered projects, and which sessions run
@@ -53,13 +53,13 @@ the `before` commands and variables every pane starts with:
 | --- | --- |
 | ↑ ↓ or k j | select a project |
 | enter | open it, like `weave <project>` |
-| a | add the current directory, like `weave freeze` |
+| f | freeze the current directory, like `weave freeze` |
 | e | edit its config, like `weave edit <project>` |
 | x | stop its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
 | q | quit |
 
-After adding, editing, stopping or deleting, the list comes back with
+After freezing, editing, stopping or deleting, the list comes back with
 what happened.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
@@ -200,10 +200,10 @@ implements them and `cmd/weave` wires everything together.
 ```mermaid
 graph TD
     subgraph cmd["cmd/weave (Cobra CLI)"]
-        CLI["weave, add, edit, kill, list, show"]
+        CLI["weave, freeze, edit, kill, list, show, completion"]
     end
     subgraph app["internal/session/app"]
-        UC["BrowseProjects, OpenProject, AddProject,<br/>EditProject, KillProject, ListProjects, LoadProject"]
+        UC["BrowseProjects, OpenProject, FreezeProject,<br/>EditProject, KillProject, ListProjects"]
         AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]

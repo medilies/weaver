@@ -8,8 +8,8 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// AddRequest is how `weave freeze` was called.
-type AddRequest struct {
+// FreezeRequest is how `weave freeze` was called.
+type FreezeRequest struct {
 	// Name is the project's name; by default the root's base name.
 	Name string
 	// Root is the project's directory, relative to WorkingDir or
@@ -23,14 +23,14 @@ type AddRequest struct {
 	Session string
 }
 
-// CurrentSession, as AddRequest.Session, is the session weaver runs in.
+// CurrentSession, as FreezeRequest.Session, is the session weaver runs in.
 // tmux turns "." in session names into "_", so no session is named so.
 const CurrentSession = "."
 
-// AddProject registers a project the user describes in a form, started
+// FreezeProject registers a project the user describes in a form, started
 // from what weaver finds: the repositories under its root, and the layout
 // and commands of a running session if asked.
-type AddProject struct {
+type FreezeProject struct {
 	projects domain.ProjectRepository
 	detector domain.RepoDetector
 	capturer domain.SessionCapturer
@@ -38,22 +38,22 @@ type AddProject struct {
 	confirm  Confirmer
 }
 
-// NewAddProject constructs the use case against its ports.
-func NewAddProject(
+// NewFreezeProject constructs the use case against its ports.
+func NewFreezeProject(
 	projects domain.ProjectRepository,
 	detector domain.RepoDetector,
 	capturer domain.SessionCapturer,
 	form ProjectForm,
 	confirm Confirmer,
-) AddProject {
-	return AddProject{
+) FreezeProject {
+	return FreezeProject{
 		projects: projects, detector: detector, capturer: capturer, form: form, confirm: confirm,
 	}
 }
 
 // Handle runs the form and saves the project, asking before replacing a
 // registered one.
-func (uc AddProject) Handle(request AddRequest) (domain.Project, error) {
+func (uc FreezeProject) Handle(request FreezeRequest) (domain.Project, error) {
 	draft, err := uc.draft(request)
 	if err != nil {
 		return domain.Project{}, err
@@ -78,7 +78,7 @@ func (uc AddProject) Handle(request AddRequest) (domain.Project, error) {
 	return project, uc.projects.Save(project)
 }
 
-func (uc AddProject) draft(request AddRequest) (ProjectDraft, error) {
+func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {
 	root := request.Root
 	if root == "" {
 		root = request.WorkingDir

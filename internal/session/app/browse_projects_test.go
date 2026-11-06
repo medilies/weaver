@@ -107,7 +107,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		s.browser, confirm, s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace),
-		app.NewAddProject(s.configs, foundRepos{}, capturedSessions{}, s.form, confirm),
+		app.NewFreezeProject(s.configs, foundRepos{}, capturedSessions{}, s.form, confirm),
 		app.NewEditProject(s.documents, s.editor, confirm),
 		app.NewKillProject(server),
 	).Handle("/srv/new")
@@ -148,7 +148,7 @@ func TestBrowseProjects(t *testing.T) {
 	t.Run("shows why a readable config isn't valid, beside the config", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.configs, "shop"}, s.documents, s.workspace, tmuxServer{s.sessions},
-			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.FreezeProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -277,7 +277,7 @@ func TestBrowseProjects(t *testing.T) {
 		s := newBrowseSetup(t)
 		err := app.NewBrowseProjects(s.browser, answer(true), s.configs, s.documents, s.workspace,
 			unfindableSessions{errors.New("tmux gone")},
-			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.FreezeProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -543,8 +543,8 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("roots an added project at the working directory", func(t *testing.T) {
-		s := newBrowseSetup(t, choose(t, app.ActionAdd, "shop"))
+	t.Run("roots a frozen project at the working directory", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionFreeze, "shop"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -553,8 +553,8 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("selects an added project", func(t *testing.T) {
-		s := newBrowseSetup(t, choose(t, app.ActionAdd, "shop"))
+	t.Run("selects a frozen project", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionFreeze, "shop"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -563,8 +563,8 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("comes back to the highlighted project when adding is abandoned", func(t *testing.T) {
-		s := newBrowseSetup(t, choose(t, app.ActionAdd, "shop"))
+	t.Run("comes back to the highlighted project when freezing is abandoned", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionFreeze, "shop"))
 		s.form.err = app.ErrAborted
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -600,7 +600,7 @@ func TestBrowseProjects(t *testing.T) {
 		s := newBrowseSetup(t)
 		failing := errors.New("no terminal")
 		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.configs, s.documents, s.workspace, tmuxServer{s.sessions},
-			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.FreezeProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if !errors.Is(err, failing) {
 			t.Fatalf("got %v, want the browser's error", err)

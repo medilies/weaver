@@ -42,7 +42,7 @@ func (TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Project
 
 // browserKeys are the keys making a choice.
 var browserKeys = map[string]app.Action{
-	"enter": app.ActionOpen, "a": app.ActionAdd, "e": app.ActionEdit, "x": app.ActionKill, "d": app.ActionDelete,
+	"enter": app.ActionOpen, "f": app.ActionFreeze, "e": app.ActionEdit, "x": app.ActionKill, "d": app.ActionDelete,
 }
 
 var (
@@ -89,7 +89,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	default:
 		action, ok := browserKeys[key]
-		if !ok || (len(m.projects) == 0 && action != app.ActionAdd) {
+		if !ok || (len(m.projects) == 0 && action != app.ActionFreeze) {
 			break
 		}
 		m.choice = app.Choice{Action: action}
@@ -114,7 +114,7 @@ func (m browser) render() string {
 		return "" // until the terminal's size is known
 	}
 	notice := lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
-	keys := keysStyle.Render("enter open · a add · e edit · x kill · d delete · q quit")
+	keys := keysStyle.Render("enter open · f freeze · e edit · x kill · d delete · q quit")
 	height := max(m.height-lipgloss.Height(notice)-1, 1)
 
 	list := lipgloss.NewStyle().Height(height).MaxHeight(height).
@@ -151,7 +151,7 @@ func (m browser) list(height int) string {
 // why it can't be read.
 func (m browser) details() string {
 	if len(m.projects) == 0 {
-		return "No projects yet: press a to add the current directory."
+		return "No projects yet: press f to freeze the current directory."
 	}
 	project := m.projects[m.cursor]
 	config := project.Config()

@@ -14,7 +14,7 @@ import (
 
 // application is the use cases the commands run.
 type application struct {
-	addProject     app.AddProject
+	freezeProject  app.FreezeProject
 	browseProjects app.BrowseProjects
 	editProject    app.EditProject
 	openProject    app.OpenProject
@@ -47,16 +47,16 @@ func wire() (application, error) {
 	forms := infra.NewHuhForms()
 
 	weaver := application{
-		addProject:   app.NewAddProject(projects, workspace, tmux, forms, forms),
-		editProject:  app.NewEditProject(projects, infra.NewEditor(), forms),
-		sessions:     tmux,
-		openProject:  app.NewOpenProject(projects, tmux, workspace),
-		killProject:  app.NewKillProject(tmux),
-		listProjects: app.NewListProjects(projects, tmux),
-		documents:    projects,
+		freezeProject: app.NewFreezeProject(projects, workspace, tmux, forms, forms),
+		editProject:   app.NewEditProject(projects, infra.NewEditor(), forms),
+		sessions:      tmux,
+		openProject:   app.NewOpenProject(projects, tmux, workspace),
+		killProject:   app.NewKillProject(tmux),
+		listProjects:  app.NewListProjects(projects, tmux),
+		documents:     projects,
 	}
 	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), forms, projects, projects, workspace, tmux,
-		weaver.listProjects, weaver.openProject, weaver.addProject, weaver.editProject, weaver.killProject)
+		weaver.listProjects, weaver.openProject, weaver.freezeProject, weaver.editProject, weaver.killProject)
 	return weaver, nil
 }
 

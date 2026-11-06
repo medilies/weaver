@@ -136,7 +136,7 @@ type BrowseProjects struct {
 	sessions  domain.SessionFinder
 	list      ListProjects
 	open      OpenProject
-	add       AddProject
+	freeze    FreezeProject
 	edit      EditProject
 	kill      KillProject
 }
@@ -152,18 +152,18 @@ func NewBrowseProjects(
 	sessions domain.SessionFinder,
 	list ListProjects,
 	open OpenProject,
-	add AddProject,
+	freeze FreezeProject,
 	edit EditProject,
 	kill KillProject,
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
-		sessions: sessions, list: list, open: open, add: add, edit: edit, kill: kill,
+		sessions: sessions, list: list, open: open, freeze: freeze, edit: edit, kill: kill,
 	}
 }
 
 // Handle shows the browser until the user opens a project or quits; a
-// project added from it is rooted at workingDir.
+// project frozen from it is rooted at workingDir.
 func (uc BrowseProjects) Handle(workingDir string) error {
 	var selected domain.ProjectName
 	notice := ""
@@ -339,8 +339,8 @@ func (uc BrowseProjects) act(choice Choice, workingDir string) (domain.ProjectNa
 	switch choice.Action {
 	case ActionOpen:
 		return name, "", uc.open.Handle(name.String())
-	case ActionAdd:
-		project, err := uc.add.Handle(AddRequest{WorkingDir: workingDir})
+	case ActionFreeze:
+		project, err := uc.freeze.Handle(FreezeRequest{WorkingDir: workingDir})
 		if err != nil {
 			return name, "", err
 		}

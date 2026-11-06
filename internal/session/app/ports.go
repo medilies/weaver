@@ -14,8 +14,8 @@ var ErrAborted = errors.New("aborted")
 // Ports about domain concepts live in the domain package. The ones below
 // are about talking to the user, which only use cases do.
 
-// ProjectDraft is what the add form starts from: suggestions the user can
-// change.
+// ProjectDraft is what the freeze form starts from: suggestions the user
+// can change.
 type ProjectDraft struct {
 	Name    string
 	Root    string
@@ -65,8 +65,8 @@ type Action int
 const (
 	// ActionOpen opens the chosen project, as `weave <project>` does.
 	ActionOpen Action = iota + 1
-	// ActionAdd adds a project rooted at the working directory.
-	ActionAdd
+	// ActionFreeze registers a project rooted at the working directory.
+	ActionFreeze
 	// ActionEdit edits the chosen project's config.
 	ActionEdit
 	// ActionKill stops the chosen project's session.
@@ -76,7 +76,7 @@ const (
 )
 
 // Choice is what the user picked in the project browser: an action, and
-// the project highlighted then, which the action applies to (adding a
+// the project highlighted then, which the action applies to (freezing a
 // project applies to none, but the browser comes back to it).
 type Choice struct {
 	Action  Action

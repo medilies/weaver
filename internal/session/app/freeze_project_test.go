@@ -58,14 +58,14 @@ func (c capturedSessions) Current() (string, error) {
 	return c.current, nil
 }
 
-type addSetup struct {
+type freezeSetup struct {
 	configs inMemoryRepository
 	form    *fakeForm
 	found   domain.Repos
 	current string // the session weaver runs in; none outside tmux
 }
 
-func newAddSetup(t *testing.T) addSetup {
+func newFreezeSetup(t *testing.T) freezeSetup {
 	t.Helper()
 	backRepo, err := domain.NewRepo("back", "git@host:back.git")
 	if err != nil {
@@ -75,26 +75,26 @@ func newAddSetup(t *testing.T) addSetup {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	return addSetup{
+	return freezeSetup{
 		configs: inMemoryRepository{projects: map[string]domain.Project{}},
 		form:    &fakeForm{project: shop(t)},
 		found:   found,
 	}
 }
 
-func (s addSetup) add(t *testing.T, confirm app.Confirmer, request app.AddRequest) (domain.Project, error) {
+func (s freezeSetup) freeze(t *testing.T, confirm app.Confirmer, request app.FreezeRequest) (domain.Project, error) {
 	t.Helper()
 	sessions := capturedSessions{
 		windows: map[string][]domain.Window{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()},
 		current: s.current,
 	}
-	return app.NewAddProject(s.configs, foundRepos{s.found}, sessions, s.form, confirm).Handle(request)
+	return app.NewFreezeProject(s.configs, foundRepos{s.found}, sessions, s.form, confirm).Handle(request)
 }
 
-func TestAddProject(t *testing.T) {
+func TestFreezeProject(t *testing.T) {
 	t.Run("starts from the working directory when no root is given", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Root != "/srv/shop" || s.form.draft.Name != "shop" {
@@ -103,8 +103,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("resolves a relative root against the working directory", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{Root: "../blog", WorkingDir: "/srv/shop"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{Root: "../blog", WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Root != "/srv/blog" || s.form.draft.Name != "blog" {
@@ -113,8 +113,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("suggests the name given", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{Name: "store", WorkingDir: "/srv/shop"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{Name: "store", WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "store" {
@@ -123,8 +123,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("offers the repositories found under the root", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if list := s.form.draft.Repos.List(); len(list) != 1 || list[0].Dir() != "back" {
@@ -133,8 +133,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("saves the project the user described", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, saved := s.configs.projects["shop"]; !saved {
@@ -143,19 +143,19 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("keeps a registered project the user won't replace", func(t *testing.T) {
-		s := newAddSetup(t)
+		s := newFreezeSetup(t)
 		existing := rootedAt(t, "shop", "/srv/old-shop")
 		s.configs.projects["shop"] = existing
-		_, err := s.add(t, answer(false), app.AddRequest{WorkingDir: "/srv/shop"})
+		_, err := s.freeze(t, answer(false), app.FreezeRequest{WorkingDir: "/srv/shop"})
 		if !errors.Is(err, app.ErrAborted) || s.configs.projects["shop"].Root() != existing.Root() {
 			t.Fatalf("got %v, root %s; want ErrAborted and the old project kept", err, s.configs.projects["shop"].Root())
 		}
 	})
 
 	t.Run("replaces a registered project when the user agrees", func(t *testing.T) {
-		s := newAddSetup(t)
+		s := newFreezeSetup(t)
 		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got := s.configs.projects["shop"].Root().String(); got != "/srv/shop" {
@@ -164,8 +164,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("starts from a running session's windows", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(s.form.draft.Windows) != 2 || s.form.draft.Windows[1].Name().String() != "logs" {
@@ -174,8 +174,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("suggests the session's name, keeping the working directory as root", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "store-dev" || s.form.draft.Root != "/srv/shop" {
@@ -184,8 +184,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("prefers the given name to the session's", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{Name: "store", WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{Name: "store", WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "store" {
@@ -194,8 +194,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("suggests the root's name when the session's isn't a valid project name", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "my.session"}); err != nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: "my.session"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "shop" {
@@ -204,8 +204,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("reports a session it can't read, before the form", func(t *testing.T) {
-		s := newAddSetup(t)
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: "missing"}); err == nil {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: "missing"}); err == nil {
 			t.Fatal("got no error, want the missing session reported")
 		}
 		if s.form.draft.Root != "" {
@@ -214,9 +214,9 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("freezes the session it runs in", func(t *testing.T) {
-		s := newAddSetup(t)
+		s := newFreezeSetup(t)
 		s.current = "store-dev"
-		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession}); err != nil {
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if s.form.draft.Name != "store-dev" || len(s.form.draft.Windows) != 2 {
@@ -225,8 +225,8 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("can't freeze the current session outside tmux", func(t *testing.T) {
-		s := newAddSetup(t)
-		_, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession})
+		s := newFreezeSetup(t)
+		_, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession})
 		if !errors.Is(err, domain.ErrNotInsideTmux) {
 			t.Fatalf("got %v, want ErrNotInsideTmux", err)
 		}
@@ -236,9 +236,9 @@ func TestAddProject(t *testing.T) {
 	})
 
 	t.Run("saves nothing when the user cancels the form", func(t *testing.T) {
-		s := newAddSetup(t)
+		s := newFreezeSetup(t)
 		s.form.err = app.ErrAborted
-		_, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"})
+		_, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"})
 		if !errors.Is(err, app.ErrAborted) || len(s.configs.projects) != 0 {
 			t.Fatalf("got %v with %d projects saved, want ErrAborted and nothing saved", err, len(s.configs.projects))
 		}
