@@ -167,8 +167,8 @@ func TestFileProjectRepositoryReadsEnvironments(t *testing.T) {
 
 	t.Run("reads repositories by directory", func(t *testing.T) {
 		var got []string
-		for _, c := range shop.Checkouts().List() {
-			got = append(got, c.Dir()+" "+c.Remote())
+		for _, r := range shop.Repos().List() {
+			got = append(got, r.Dir()+" "+r.Remote())
 		}
 		want := []string{"back git@bitbucket.org:acme/shop-back.git", "front git@bitbucket.org:acme/shop-front.git"}
 		if !slices.Equal(got, want) {
@@ -374,10 +374,10 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 	t.Run("warns once per skipped config", func(t *testing.T) {
 		dir := writeConfigs(t, "edit.yml")
 		var warnings strings.Builder
-		repo := infra.NewFileProjectRepository(dir).WithWarnings(&warnings)
+		configs := infra.NewFileProjectRepository(dir).WithWarnings(&warnings)
 
 		for range 2 {
-			if _, err := repo.Names(); err != nil {
+			if _, err := configs.Names(); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		}
@@ -403,11 +403,11 @@ func TestFileProjectRepositoryDelete(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/shop\n"), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
-		repo := infra.NewFileProjectRepository(dir)
-		if err := repo.Delete(name); err != nil {
+		configs := infra.NewFileProjectRepository(dir)
+		if err := configs.Delete(name); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, err := repo.FindByName(name); !isNotFound(err) {
+		if _, err := configs.FindByName(name); !isNotFound(err) {
 			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
 		}
 	})

@@ -39,11 +39,11 @@ func (w GitWorkspace) Exists(dir string) (bool, error) {
 }
 
 // Clone implements domain.Workspace.
-func (w GitWorkspace) Clone(checkout domain.Checkout, dir string) error {
-	cmd := exec.Command("git", "clone", "--", checkout.Remote(), dir)
+func (w GitWorkspace) Clone(repo domain.Repo, dir string) error {
+	cmd := exec.Command("git", "clone", "--", repo.Remote(), dir)
 	cmd.Stdout, cmd.Stderr = w.progress, w.progress
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git clone %s: %w", checkout.Remote(), err)
+		return fmt.Errorf("git clone %s: %w", repo.Remote(), err)
 	}
 	return nil
 }
@@ -101,16 +101,16 @@ func (w GitWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
 	return tree.Diverged(ahead, behind), true
 }
 
-// Detect implements domain.CheckoutDetector. A directory counts only when
+// Detect implements domain.RepoDetector. A directory counts only when
 // it is a repository's top level (a project's subdirectory inside its
 // repository isn't another repository) and has an origin remote.
-func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Checkouts, error) {
+func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Repos, error) {
 	entries, err := os.ReadDir(root.String())
 	if errors.Is(err, os.ErrNotExist) {
-		return domain.Checkouts{}, nil
+		return domain.Repos{}, nil
 	}
 	if err != nil {
-		return domain.Checkouts{}, err
+		return domain.Repos{}, err
 	}
 	dirs := []string{"."}
 	for _, entry := range entries {
@@ -118,19 +118,19 @@ func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Checkouts, error) 
 			dirs = append(dirs, entry.Name())
 		}
 	}
-	var checkouts []domain.Checkout
+	var repos []domain.Repo
 	for _, dir := range dirs {
 		remote, ok := originOf(filepath.Join(root.String(), dir))
 		if !ok {
 			continue
 		}
-		checkout, err := domain.NewCheckout(dir, remote)
+		repo, err := domain.NewRepo(dir, remote)
 		if err != nil {
-			return domain.Checkouts{}, err
+			return domain.Repos{}, err
 		}
-		checkouts = append(checkouts, checkout)
+		repos = append(repos, repo)
 	}
-	return domain.NewCheckouts(checkouts...)
+	return domain.NewRepos(repos...)
 }
 
 // originOf is the origin remote of the repository whose top level is dir.

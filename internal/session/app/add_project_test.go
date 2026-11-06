@@ -29,11 +29,11 @@ func (a answer) Confirm(string) (bool, error) {
 	return bool(a), nil
 }
 
-// foundCheckouts is a fake domain.CheckoutDetector.
-type foundCheckouts struct{ checkouts domain.Checkouts }
+// foundRepos is a fake domain.RepoDetector.
+type foundRepos struct{ repos domain.Repos }
 
-func (f foundCheckouts) Detect(domain.ProjectRoot) (domain.Checkouts, error) {
-	return f.checkouts, nil
+func (f foundRepos) Detect(domain.ProjectRoot) (domain.Repos, error) {
+	return f.repos, nil
 }
 
 // capturedSessions is a fake domain.SessionCapturer: running sessions'
@@ -59,26 +59,26 @@ func (c capturedSessions) Current() (string, error) {
 }
 
 type addSetup struct {
-	repo    inMemoryRepository
+	configs inMemoryRepository
 	form    *fakeForm
-	found   domain.Checkouts
+	found   domain.Repos
 	current string // the session weaver runs in; none outside tmux
 }
 
 func newAddSetup(t *testing.T) addSetup {
 	t.Helper()
-	backRepo, err := domain.NewCheckout("back", "git@host:back.git")
+	backRepo, err := domain.NewRepo("back", "git@host:back.git")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	found, err := domain.NewCheckouts(backRepo)
+	found, err := domain.NewRepos(backRepo)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	return addSetup{
-		repo:  inMemoryRepository{projects: map[string]domain.Project{}},
-		form:  &fakeForm{project: shop(t)},
-		found: found,
+		configs: inMemoryRepository{projects: map[string]domain.Project{}},
+		form:    &fakeForm{project: shop(t)},
+		found:   found,
 	}
 }
 
@@ -88,7 +88,7 @@ func (s addSetup) add(t *testing.T, confirm app.Confirmer, request app.AddReques
 		windows: map[string][]domain.Window{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()},
 		current: s.current,
 	}
-	return app.NewAddProject(s.repo, foundCheckouts{s.found}, sessions, s.form, confirm).Handle(request)
+	return app.NewAddProject(s.configs, foundRepos{s.found}, sessions, s.form, confirm).Handle(request)
 }
 
 func TestAddProject(t *testing.T) {
@@ -127,7 +127,7 @@ func TestAddProject(t *testing.T) {
 		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if list := s.form.draft.Checkouts.List(); len(list) != 1 || list[0].Dir() != "back" {
+		if list := s.form.draft.Repos.List(); len(list) != 1 || list[0].Dir() != "back" {
 			t.Fatalf("got %v, want the back repository", list)
 		}
 	})
@@ -137,7 +137,7 @@ func TestAddProject(t *testing.T) {
 		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, saved := s.repo.projects["shop"]; !saved {
+		if _, saved := s.configs.projects["shop"]; !saved {
 			t.Fatal("got nothing saved, want shop")
 		}
 	})
@@ -145,20 +145,20 @@ func TestAddProject(t *testing.T) {
 	t.Run("keeps a registered project the user won't replace", func(t *testing.T) {
 		s := newAddSetup(t)
 		existing := rootedAt(t, "shop", "/srv/old-shop")
-		s.repo.projects["shop"] = existing
+		s.configs.projects["shop"] = existing
 		_, err := s.add(t, answer(false), app.AddRequest{WorkingDir: "/srv/shop"})
-		if !errors.Is(err, app.ErrAborted) || s.repo.projects["shop"].Root() != existing.Root() {
-			t.Fatalf("got %v, root %s; want ErrAborted and the old project kept", err, s.repo.projects["shop"].Root())
+		if !errors.Is(err, app.ErrAborted) || s.configs.projects["shop"].Root() != existing.Root() {
+			t.Fatalf("got %v, root %s; want ErrAborted and the old project kept", err, s.configs.projects["shop"].Root())
 		}
 	})
 
 	t.Run("replaces a registered project when the user agrees", func(t *testing.T) {
 		s := newAddSetup(t)
-		s.repo.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
+		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
 		if _, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := s.repo.projects["shop"].Root().String(); got != "/srv/shop" {
+		if got := s.configs.projects["shop"].Root().String(); got != "/srv/shop" {
 			t.Fatalf("got root %s, want the new project's /srv/shop", got)
 		}
 	})
@@ -239,8 +239,8 @@ func TestAddProject(t *testing.T) {
 		s := newAddSetup(t)
 		s.form.err = app.ErrAborted
 		_, err := s.add(t, answer(true), app.AddRequest{WorkingDir: "/srv/shop"})
-		if !errors.Is(err, app.ErrAborted) || len(s.repo.projects) != 0 {
-			t.Fatalf("got %v with %d projects saved, want ErrAborted and nothing saved", err, len(s.repo.projects))
+		if !errors.Is(err, app.ErrAborted) || len(s.configs.projects) != 0 {
+			t.Fatalf("got %v with %d projects saved, want ErrAborted and nothing saved", err, len(s.configs.projects))
 		}
 	})
 }

@@ -207,8 +207,8 @@ graph TD
         AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]
-        M["Project, Window, Pane, Split, Command, Env, Checkouts<br/>SessionPlan, Restoration"]
-        DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer,<br/>Workspace, CheckoutDetector (ports)"]
+        M["Project, Window, Pane, Split, Command, Env, Repos<br/>SessionPlan, WindowPlacement"]
+        DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer,<br/>Workspace, RepoDetector (ports)"]
     end
     subgraph infra["internal/session/infra"]
         A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, Editor,<br/>HuhForms, TeaBrowser"]

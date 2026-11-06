@@ -16,12 +16,12 @@ func (r runningSessions) Running() ([]string, error) {
 }
 
 func TestListProjects(t *testing.T) {
-	repo := inMemoryRepository{projects: map[string]domain.Project{
+	configs := inMemoryRepository{projects: map[string]domain.Project{
 		"shop":       shop(t),
 		"bicyclette": project(t, "bicyclette"),
 	}}
 
-	statuses, err := app.NewListProjects(repo, runningSessions{"shop", "scratch"}).Handle()
+	statuses, err := app.NewListProjects(configs, runningSessions{"shop", "scratch"}).Handle()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

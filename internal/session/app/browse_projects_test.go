@@ -77,7 +77,7 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 // browseSetup is blog, stopped, and shop, running in a session weaver
 // didn't start, with their configs stored as YAML.
 type browseSetup struct {
-	repo      inMemoryRepository
+	configs   inMemoryRepository
 	documents storedDocuments
 	sessions  *fakeSessions
 	workspace *fakeWorkspace
@@ -89,7 +89,7 @@ type browseSetup struct {
 func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 	t.Helper()
 	return browseSetup{
-		repo:      inMemoryRepository{projects: map[string]domain.Project{"blog": project(t, "blog"), "shop": shop(t)}},
+		configs:   inMemoryRepository{projects: map[string]domain.Project{"blog": project(t, "blog"), "shop": shop(t)}},
 		documents: storedDocuments{"blog": "root: /srv/blog\n", "shop": "root: /srv/shop\n"},
 		sessions:  &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}},
 		workspace: everything(),
@@ -104,10 +104,10 @@ func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 func (s browseSetup) browse(confirm app.Confirmer) error {
 	server := tmuxServer{s.sessions}
 	return app.NewBrowseProjects(
-		s.browser, confirm, s.repo, s.documents, s.workspace, server,
-		app.NewListProjects(s.repo, server),
-		app.NewOpenProject(s.repo, server, s.workspace),
-		app.NewAddProject(s.repo, foundCheckouts{}, capturedSessions{}, s.form, confirm),
+		s.browser, confirm, s.configs, s.documents, s.workspace, server,
+		app.NewListProjects(s.configs, server),
+		app.NewOpenProject(s.configs, server, s.workspace),
+		app.NewAddProject(s.configs, foundRepos{}, capturedSessions{}, s.form, confirm),
 		app.NewEditProject(s.documents, s.editor, confirm),
 		app.NewKillProject(server),
 	).Handle("/srv/new")
@@ -147,8 +147,8 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("shows why a readable config isn't valid, beside the config", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.repo, "shop"}, s.documents, s.workspace, tmuxServer{s.sessions},
-			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.configs, "shop"}, s.documents, s.workspace, tmuxServer{s.sessions},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -167,8 +167,8 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		shop, _ := s.browser.last().overview("shop")
 		var got []string
-		for _, status := range shop.Checkouts() {
-			got = append(got, fmt.Sprintf("%s %v", status.Checkout().Dir(), status.Cloned()))
+		for _, status := range shop.Repos() {
+			got = append(got, fmt.Sprintf("%s %v", status.Repo().Dir(), status.Cloned()))
 		}
 		if want := []string{"back true", "front false"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
@@ -275,9 +275,9 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("keeps the summary when tmux can't describe a running session", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		err := app.NewBrowseProjects(s.browser, answer(true), s.repo, s.documents, s.workspace,
+		err := app.NewBrowseProjects(s.browser, answer(true), s.configs, s.documents, s.workspace,
 			unfindableSessions{errors.New("tmux gone")},
-			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -291,7 +291,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("warns about a pane directory that is missing", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		s.repo.projects["blog"] = serving(t, "docs", "")
+		s.configs.projects["blog"] = serving(t, "docs", "")
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -327,7 +327,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("warns about a command whose program can't be found", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		s.repo.projects["blog"] = serving(t, "", "hugo server")
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -340,7 +340,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("doesn't warn about a program that can be run", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		s.repo.projects["blog"] = serving(t, "", "hugo server")
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
 		s.workspace.programs = map[string]bool{"hugo": true}
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -352,7 +352,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("doesn't look for programs in panes whose before commands may provide them", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		s.repo.projects["blog"] = serving(t, "", "npm run dev", "nvm use")
+		s.configs.projects["blog"] = serving(t, "", "npm run dev", "nvm use")
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -405,7 +405,7 @@ func TestBrowseProjects(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		s.repo.projects["blog"] = serving(t, "", "hugo server").WithEnv(env)
+		s.configs.projects["blog"] = serving(t, "", "hugo server").WithEnv(env)
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -436,7 +436,7 @@ func TestBrowseProjects(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		s.repo.projects["blog"] = blog
+		s.configs.projects["blog"] = blog
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -599,8 +599,8 @@ func TestBrowseProjects(t *testing.T) {
 	t.Run("reports a browser that fails", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		failing := errors.New("no terminal")
-		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.repo, s.documents, s.workspace, tmuxServer{s.sessions},
-			app.NewListProjects(s.repo, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
+		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.configs, s.documents, s.workspace, tmuxServer{s.sessions},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.AddProject{}, app.EditProject{}, app.KillProject{},
 		).Handle("/srv/new")
 		if !errors.Is(err, failing) {
 			t.Fatalf("got %v, want the browser's error", err)

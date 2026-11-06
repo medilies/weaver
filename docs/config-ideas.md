@@ -391,7 +391,7 @@ Review a PR or try a fix without stopping what runs in the main
 session. This one is mostly open questions:
 
 - **Where**: a parallel root, such as `~/dev/shop@fix-123/`, with one
-  `git worktree` per checkout in `repositories`. With several
+  `git worktree` per repository in `repositories`. With several
   repositories (back, front), which ones get the branch? Those that
   have it, the others staying on their default branch? A root that
   isn't a repository and has no `repositories` can't have variants.

@@ -31,25 +31,25 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 	}
 
 	t.Run("reads a config as stored, with its file name", func(t *testing.T) {
-		repo, _, name := setup(t)
-		got, err := repo.Document(name)
+		configs, _, name := setup(t)
+		got, err := configs.Document(name)
 		if err != nil || got.File != "shop.yml" || string(got.Content) != stored {
 			t.Fatalf("got %q %q (%v), want shop.yml %q", got.File, got.Content, err, stored)
 		}
 	})
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
-		repo, _, _ := setup(t)
+		configs, _, _ := setup(t)
 		name, _ := domain.NewProjectName("blog")
-		if _, err := repo.Document(name); !isNotFound(err) {
+		if _, err := configs.Document(name); !isNotFound(err) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 
 	t.Run("stores a valid config as written", func(t *testing.T) {
-		repo, dir, name := setup(t)
+		configs, dir, name := setup(t)
 		edited := "# yaml-language-server: $schema=./weaver.schema.json\nroot: /srv/shop\nenv: {A: 1}  # kept\n"
-		if err := repo.ReplaceDocument(name, []byte(edited)); err != nil {
+		if err := configs.ReplaceDocument(name, []byte(edited)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got := read(t, filepath.Join(dir, "shop.yml")); got != edited {
@@ -58,8 +58,8 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 	})
 
 	t.Run("keeps the stored config when the new one is invalid", func(t *testing.T) {
-		repo, dir, name := setup(t)
-		err := repo.ReplaceDocument(name, []byte("root: relative/shop\n"))
+		configs, dir, name := setup(t)
+		err := configs.ReplaceDocument(name, []byte("root: relative/shop\n"))
 		if !errors.Is(err, domain.ErrInvalidConfig) {
 			t.Fatalf("got %v, want ErrInvalidConfig", err)
 		}
@@ -69,8 +69,8 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 	})
 
 	t.Run("saves the JSON Schema next to a stored config", func(t *testing.T) {
-		repo, dir, name := setup(t)
-		if err := repo.ReplaceDocument(name, []byte(stored)); err != nil {
+		configs, dir, name := setup(t)
+		if err := configs.ReplaceDocument(name, []byte(stored)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "weaver.schema.json")); err != nil {
@@ -79,11 +79,11 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 	})
 
 	t.Run("marks an unreadable stored config as invalid", func(t *testing.T) {
-		repo, dir, name := setup(t)
+		configs, dir, name := setup(t)
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: [1]\n"), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
-		if _, err := repo.FindByName(name); !errors.Is(err, domain.ErrInvalidConfig) {
+		if _, err := configs.FindByName(name); !errors.Is(err, domain.ErrInvalidConfig) {
 			t.Fatalf("got %v, want ErrInvalidConfig", err)
 		}
 	})

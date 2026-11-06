@@ -102,13 +102,13 @@ func TestGitWorkspaceClone(t *testing.T) {
 	workspace := infra.NewGitWorkspace(io.Discard)
 
 	t.Run("clones into a directory whose parents are missing", func(t *testing.T) {
-		checkout, err := domain.NewCheckout("back", remote)
+		repo, err := domain.NewRepo("back", remote)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		dir := filepath.Join(t.TempDir(), "dev", "shop", "back")
 
-		if err := workspace.Clone(checkout, dir); err != nil {
+		if err := workspace.Clone(repo, dir); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
@@ -118,12 +118,12 @@ func TestGitWorkspaceClone(t *testing.T) {
 
 	t.Run("names the remote it failed to clone", func(t *testing.T) {
 		missing := filepath.Join(t.TempDir(), "missing.git")
-		checkout, err := domain.NewCheckout("back", missing)
+		repo, err := domain.NewRepo("back", missing)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		err = workspace.Clone(checkout, filepath.Join(t.TempDir(), "back"))
+		err = workspace.Clone(repo, filepath.Join(t.TempDir(), "back"))
 		if err == nil || !strings.Contains(err.Error(), missing) {
 			t.Fatalf("got %v, want an error naming %s", err, missing)
 		}
@@ -153,13 +153,13 @@ func TestGitWorkspaceDetect(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		checkouts, err := workspace.Detect(projectRoot)
+		repos, err := workspace.Detect(projectRoot)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		var found []string
-		for _, c := range checkouts.List() {
-			found = append(found, c.Dir()+" "+c.Remote())
+		for _, r := range repos.List() {
+			found = append(found, r.Dir()+" "+r.Remote())
 		}
 		return found
 	}

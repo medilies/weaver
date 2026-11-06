@@ -1,7 +1,7 @@
 # Browser details pane: ideas
 
 The browser's details pane shows the selected project's summary (root,
-checkouts, working tree, session comparison, warnings), then its raw
+repositories, working tree, session comparison, warnings), then its raw
 YAML (`infra/tea_browser.go`, `details()`). The YAML says little at a
 glance, and `e` already opens the file. The domain knows much more than
 the file shows: splits with direction and size, startup commands and
@@ -79,7 +79,7 @@ behind a toggle (`y`).
 
 ## Suggested order
 
-The `ProjectOverview` read model already carries checkout states, root
+The `ProjectOverview` read model already carries repository states, root
 existence, the working tree, the session comparison and the warnings;
 the browser only draws them.
 
@@ -94,6 +94,6 @@ flowchart LR
     Repo[ProjectRepository] --> Read[app: ProjectOverview read model]
     Tmux[tmux: running sessions] --> Read
     WS[Workspace: dirs, programs, working tree] --> Read
-    Read -->|Plan, missing windows, checkout states, warnings| Browser[infra: TeaBrowser]
+    Read -->|Plan, missing windows, repository states, warnings| Browser[infra: TeaBrowser]
     Browser --> Layout[layout renderer]
 ```

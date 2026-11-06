@@ -22,7 +22,7 @@ type ProjectOverview struct {
 	problem    error
 	project    domain.Project
 	rootExists bool
-	checkouts  []CheckoutStatus
+	repos      []RepoStatus
 	tree       domain.WorkingTree
 	inGit      bool
 	session    domain.RunningSession
@@ -64,10 +64,10 @@ func (o ProjectOverview) RootExists() bool {
 	return o.rootExists
 }
 
-// Checkouts are the project's repositories, in clone order, and whether
+// Repos are the project's repositories, in clone order, and whether
 // each is cloned.
-func (o ProjectOverview) Checkouts() []CheckoutStatus {
-	return slices.Clone(o.checkouts)
+func (o ProjectOverview) Repos() []RepoStatus {
+	return slices.Clone(o.repos)
 }
 
 // WorkingTree is where the git repository the root is in stands, or
@@ -109,18 +109,18 @@ func (o ProjectOverview) WindowCount() (present, configured int) {
 	return configured - len(o.missing), configured
 }
 
-// CheckoutStatus is a project's repository and whether it is cloned.
-type CheckoutStatus struct {
-	checkout domain.Checkout
-	cloned   bool
+// RepoStatus is a project's repository and whether it is cloned.
+type RepoStatus struct {
+	repo   domain.Repo
+	cloned bool
 }
 
-func (s CheckoutStatus) Checkout() domain.Checkout {
-	return s.checkout
+func (s RepoStatus) Repo() domain.Repo {
+	return s.repo
 }
 
 // Cloned reports whether the repository's directory exists.
-func (s CheckoutStatus) Cloned() bool {
+func (s RepoStatus) Cloned() bool {
 	return s.cloned
 }
 
@@ -224,16 +224,16 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 		overview.problem = err
 		return overview
 	}
-	var checkouts []CheckoutStatus
-	for _, checkout := range project.Checkouts().List() {
-		cloned, err := uc.workspace.Exists(checkout.Path(project.Root()))
+	var repos []RepoStatus
+	for _, repo := range project.Repos().List() {
+		cloned, err := uc.workspace.Exists(repo.Path(project.Root()))
 		if err != nil {
 			overview.problem = err
 			return overview
 		}
-		checkouts = append(checkouts, CheckoutStatus{checkout: checkout, cloned: cloned})
+		repos = append(repos, RepoStatus{repo: repo, cloned: cloned})
 	}
-	overview.project, overview.rootExists, overview.checkouts = project, rootExists, checkouts
+	overview.project, overview.rootExists, overview.repos = project, rootExists, repos
 	if rootExists {
 		overview.tree, overview.inGit = uc.workspace.WorkingTree(project.Root().String())
 	}
@@ -312,8 +312,8 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.Win
 // clones reports whether opening the project clones a repository dir is
 // in, which would create it.
 func (o ProjectOverview) clones(dir string) bool {
-	for _, status := range o.checkouts {
-		if !status.cloned && status.checkout.Contains(o.project.Root(), dir) {
+	for _, status := range o.repos {
+		if !status.cloned && status.repo.Contains(o.project.Root(), dir) {
 			return true
 		}
 	}

@@ -71,12 +71,11 @@ var (
 	// ErrNotInsideTmux is returned when asking for the session weaver runs
 	// in while it runs outside tmux.
 	ErrNotInsideTmux = errors.New("not inside tmux; name a session")
-	// ErrInvalidCheckoutDir is returned for a repository directory that
-	// isn't inside the project root.
-	ErrInvalidCheckoutDir = errors.New("repository directory must be relative to the project root and inside it")
+	// ErrInvalidRepoDir is returned for a repository directory that isn't
+	// inside the project root.
+	ErrInvalidRepoDir = errors.New("repository directory must be relative to the project root and inside it")
 	// ErrEmptyRemote is returned when a repository has no remote to clone.
 	ErrEmptyRemote = errors.New("repository remote must not be empty")
-	// ErrDuplicateCheckout is returned when two repositories share a
-	// directory.
-	ErrDuplicateCheckout = errors.New("two repositories share a directory")
+	// ErrDuplicateRepo is returned when two repositories share a directory.
+	ErrDuplicateRepo = errors.New("two repositories share a directory")
 )

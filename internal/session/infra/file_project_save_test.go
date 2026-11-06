@@ -128,12 +128,12 @@ windows:
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/old\n"), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
-		repo := infra.NewFileProjectRepository(dir)
+		configs := infra.NewFileProjectRepository(dir)
 		saved := mustLoad(t, "shop", "root: /srv/shop\n")
-		if err := repo.Save(saved); err != nil {
+		if err := configs.Save(saved); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got, err := repo.FindByName(saved.Name()); err != nil || got.Root().String() != "/srv/shop" {
+		if got, err := configs.FindByName(saved.Name()); err != nil || got.Root().String() != "/srv/shop" {
 			t.Fatalf("got %v (%v), want the saved project", got.Root(), err)
 		}
 	})

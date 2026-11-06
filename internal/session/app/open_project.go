@@ -140,8 +140,8 @@ func (uc OpenProject) restore(project domain.Project, session domain.RunningSess
 }
 
 func (uc OpenProject) cloneMissing(project domain.Project) error {
-	for _, checkout := range project.Checkouts().List() {
-		dir := checkout.Path(project.Root())
+	for _, repo := range project.Repos().List() {
+		dir := repo.Path(project.Root())
 		exists, err := uc.workspace.Exists(dir)
 		if err != nil {
 			return err
@@ -149,7 +149,7 @@ func (uc OpenProject) cloneMissing(project domain.Project) error {
 		if exists {
 			continue
 		}
-		if err := uc.workspace.Clone(checkout, dir); err != nil {
+		if err := uc.workspace.Clone(repo, dir); err != nil {
 			return err
 		}
 	}

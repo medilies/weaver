@@ -8,50 +8,50 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-func checkout(t *testing.T, dir, remote string) domain.Checkout {
+func repo(t *testing.T, dir, remote string) domain.Repo {
 	t.Helper()
-	c, err := domain.NewCheckout(dir, remote)
+	r, err := domain.NewRepo(dir, remote)
 	if err != nil {
-		t.Fatalf("NewCheckout(%q, %q): %v", dir, remote, err)
+		t.Fatalf("NewRepo(%q, %q): %v", dir, remote, err)
 	}
-	return c
+	return r
 }
 
-func TestNewCheckout(t *testing.T) {
+func TestNewRepo(t *testing.T) {
 	t.Run("treats a blank directory as the project root", func(t *testing.T) {
-		if got := checkout(t, "", "git@host:repo.git").Dir(); got != "." {
+		if got := repo(t, "", "git@host:repo.git").Dir(); got != "." {
 			t.Fatalf("got %q, want %q", got, ".")
 		}
 	})
 
 	t.Run("rejects an absolute directory", func(t *testing.T) {
-		_, err := domain.NewCheckout("/srv/back", "git@host:repo.git")
-		if !errors.Is(err, domain.ErrInvalidCheckoutDir) {
-			t.Fatalf("got %v, want ErrInvalidCheckoutDir", err)
+		_, err := domain.NewRepo("/srv/back", "git@host:repo.git")
+		if !errors.Is(err, domain.ErrInvalidRepoDir) {
+			t.Fatalf("got %v, want ErrInvalidRepoDir", err)
 		}
 	})
 
 	t.Run("rejects a directory outside the project root", func(t *testing.T) {
-		_, err := domain.NewCheckout("back/../../elsewhere", "git@host:repo.git")
-		if !errors.Is(err, domain.ErrInvalidCheckoutDir) {
-			t.Fatalf("got %v, want ErrInvalidCheckoutDir", err)
+		_, err := domain.NewRepo("back/../../elsewhere", "git@host:repo.git")
+		if !errors.Is(err, domain.ErrInvalidRepoDir) {
+			t.Fatalf("got %v, want ErrInvalidRepoDir", err)
 		}
 	})
 
 	t.Run("rejects a blank remote", func(t *testing.T) {
-		_, err := domain.NewCheckout("back", " ")
+		_, err := domain.NewRepo("back", " ")
 		if !errors.Is(err, domain.ErrEmptyRemote) {
 			t.Fatalf("got %v, want ErrEmptyRemote", err)
 		}
 	})
 }
 
-func TestCheckoutContains(t *testing.T) {
+func TestRepoContains(t *testing.T) {
 	root, err := domain.NewProjectRoot("/srv/shop")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	back := checkout(t, "back", "git@host:back.git")
+	back := repo(t, "back", "git@host:back.git")
 
 	for _, dir := range []string{"/srv/shop/back", "/srv/shop/back/src"} {
 		t.Run("contains "+dir, func(t *testing.T) {
@@ -70,20 +70,20 @@ func TestCheckoutContains(t *testing.T) {
 	}
 }
 
-func TestNewCheckouts(t *testing.T) {
+func TestNewRepos(t *testing.T) {
 	t.Run("orders the root first and parents before nested repositories", func(t *testing.T) {
-		checkouts, err := domain.NewCheckouts(
-			checkout(t, "front/docs", "git@host:docs.git"),
-			checkout(t, "back", "git@host:back.git"),
-			checkout(t, "front", "git@host:front.git"),
-			checkout(t, ".", "git@host:root.git"),
+		repos, err := domain.NewRepos(
+			repo(t, "front/docs", "git@host:docs.git"),
+			repo(t, "back", "git@host:back.git"),
+			repo(t, "front", "git@host:front.git"),
+			repo(t, ".", "git@host:root.git"),
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		var dirs []string
-		for _, c := range checkouts.List() {
-			dirs = append(dirs, c.Dir())
+		for _, r := range repos.List() {
+			dirs = append(dirs, r.Dir())
 		}
 		if want := []string{".", "back", "front", "front/docs"}; !slices.Equal(dirs, want) {
 			t.Fatalf("got %q, want %q", dirs, want)
@@ -91,12 +91,12 @@ func TestNewCheckouts(t *testing.T) {
 	})
 
 	t.Run("rejects two repositories in one directory", func(t *testing.T) {
-		_, err := domain.NewCheckouts(
-			checkout(t, "back", "git@host:back.git"),
-			checkout(t, "back/", "git@host:other.git"),
+		_, err := domain.NewRepos(
+			repo(t, "back", "git@host:back.git"),
+			repo(t, "back/", "git@host:other.git"),
 		)
-		if !errors.Is(err, domain.ErrDuplicateCheckout) {
-			t.Fatalf("got %v, want ErrDuplicateCheckout", err)
+		if !errors.Is(err, domain.ErrDuplicateRepo) {
+			t.Fatalf("got %v, want ErrDuplicateRepo", err)
 		}
 	})
 }

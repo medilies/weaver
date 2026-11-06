@@ -36,13 +36,13 @@ func (HuhForms) Confirm(question string) (bool, error) {
 // running session come first, pre-filled.
 func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	answers := projectAnswers{name: draft.Name, root: draft.Root}
-	for _, checkout := range draft.Checkouts.List() {
-		answers.keep = append(answers.keep, checkout.Dir())
+	for _, repo := range draft.Repos.List() {
+		answers.keep = append(answers.keep, repo.Dir())
 	}
-	if err := show(answers.groups(draft.Checkouts)...); err != nil {
+	if err := show(answers.groups(draft.Repos)...); err != nil {
 		return domain.Project{}, err
 	}
-	project, err := answers.project(draft.Checkouts)
+	project, err := answers.project(draft.Repos)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -98,7 +98,7 @@ type projectAnswers struct {
 	env        string   // "NAME=value" lines
 }
 
-func (a *projectAnswers) groups(found domain.Checkouts) []*huh.Group {
+func (a *projectAnswers) groups(found domain.Repos) []*huh.Group {
 	groups := []*huh.Group{huh.NewGroup(
 		huh.NewInput().Title("Project name").
 			Description("Used as `weave <name>` and as the tmux session name.").
@@ -110,11 +110,11 @@ func (a *projectAnswers) groups(found domain.Checkouts) []*huh.Group {
 
 	repositories := []huh.Field{huh.NewText().Title("Other repositories").
 		Description("Cloned when missing. One per line: directory = remote, e.g. back = git@host:back.git").
-		Value(&a.more).Validate(func(s string) error { _, err := parseCheckouts(s); return err })}
+		Value(&a.more).Validate(func(s string) error { _, err := parseRepos(s); return err })}
 	if list := found.List(); len(list) > 0 {
 		options := make([]huh.Option[string], 0, len(list))
-		for _, checkout := range list {
-			options = append(options, huh.NewOption(checkout.Dir()+"  "+checkout.Remote(), checkout.Dir()))
+		for _, repo := range list {
+			options = append(options, huh.NewOption(repo.Dir()+"  "+repo.Remote(), repo.Dir()))
 		}
 		repositories = append([]huh.Field{huh.NewMultiSelect[string]().Title("Repositories found").
 			Description("Cloned when missing, e.g. on a new machine.").
@@ -130,7 +130,7 @@ func (a *projectAnswers) groups(found domain.Checkouts) []*huh.Group {
 	).Title("Every pane"))
 }
 
-func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) {
+func (a projectAnswers) project(found domain.Repos) (domain.Project, error) {
 	name, err := domain.NewProjectName(a.name)
 	if err != nil {
 		return domain.Project{}, err
@@ -139,16 +139,16 @@ func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, err
 	}
-	checkouts, err := parseCheckouts(a.more)
+	repos, err := parseRepos(a.more)
 	if err != nil {
 		return domain.Project{}, err
 	}
-	for _, checkout := range found.List() {
-		if slices.Contains(a.keep, checkout.Dir()) {
-			checkouts = append(checkouts, checkout)
+	for _, repo := range found.List() {
+		if slices.Contains(a.keep, repo.Dir()) {
+			repos = append(repos, repo)
 		}
 	}
-	kept, err := domain.NewCheckouts(checkouts...)
+	kept, err := domain.NewRepos(repos...)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -160,7 +160,7 @@ func (a projectAnswers) project(found domain.Checkouts) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, err
 	}
-	return domain.NewProject(name, root).WithCheckouts(kept).WithEnv(env).RunningFirst(before...), nil
+	return domain.NewProject(name, root).WithRepos(kept).WithEnv(env).RunningFirst(before...), nil
 }
 
 // askWindow asks for a window's name, then for its panes one by one. A

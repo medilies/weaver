@@ -87,7 +87,7 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, err
 	}
-	checkouts, err := toCheckouts(f.Repositories)
+	repos, err := toRepos(f.Repositories)
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("repositories: %w", err)
 	}
@@ -108,22 +108,22 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 		windows = append(windows, window)
 	}
 	return domain.NewProject(name, root).
-		WithCheckouts(checkouts).
+		WithRepos(repos).
 		WithEnv(env).
 		RunningFirst(before...).
 		WithWindows(windows...)
 }
 
-func toCheckouts(repositories map[string]string) (domain.Checkouts, error) {
-	checkouts := make([]domain.Checkout, 0, len(repositories))
+func toRepos(repositories map[string]string) (domain.Repos, error) {
+	repos := make([]domain.Repo, 0, len(repositories))
 	for dir, remote := range repositories {
-		checkout, err := domain.NewCheckout(dir, remote)
+		repo, err := domain.NewRepo(dir, remote)
 		if err != nil {
-			return domain.Checkouts{}, err
+			return domain.Repos{}, err
 		}
-		checkouts = append(checkouts, checkout)
+		repos = append(repos, repo)
 	}
-	return domain.NewCheckouts(checkouts...)
+	return domain.NewRepos(repos...)
 }
 
 func toCommands(lines []string) ([]domain.Command, error) {
@@ -278,11 +278,11 @@ func encodeProject(project domain.Project) ([]byte, error) {
 		Env:    envMap(project.Env()),
 		Before: lines(project.Before()),
 	}
-	for _, checkout := range project.Checkouts().List() {
+	for _, repo := range project.Repos().List() {
 		if file.Repositories == nil {
 			file.Repositories = make(map[string]string)
 		}
-		file.Repositories[checkout.Dir()] = checkout.Remote()
+		file.Repositories[repo.Dir()] = repo.Remote()
 	}
 	if windows := project.Windows(); !onlyDefaultWindow(project.Name(), windows) {
 		for _, window := range windows {

@@ -17,10 +17,10 @@ var ErrAborted = errors.New("aborted")
 // ProjectDraft is what the add form starts from: suggestions the user can
 // change.
 type ProjectDraft struct {
-	Name      string
-	Root      string
-	Checkouts domain.Checkouts // found under Root, offered for cloning
-	Windows   []domain.Window  // a running session's, to start from; none to start blank
+	Name    string
+	Root    string
+	Repos   domain.Repos    // found under Root, offered for cloning
+	Windows []domain.Window // a running session's, to start from; none to start blank
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.

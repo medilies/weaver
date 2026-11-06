@@ -5,8 +5,9 @@ package domain
 type Workspace interface {
 	// Exists reports whether dir is an existing directory.
 	Exists(dir string) (bool, error)
-	// Clone clones checkout's remote into dir, creating missing parents.
-	Clone(checkout Checkout, dir string) error
+	// Clone clones the repository's remote into dir, creating missing
+	// parents.
+	Clone(repo Repo, dir string) error
 	// WorkingTree is where the git repository dir is in stands, or false
 	// when dir isn't in one.
 	WorkingTree(dir string) (WorkingTree, bool)
@@ -15,12 +16,12 @@ type Workspace interface {
 	Executable(program, dir string) bool
 }
 
-// CheckoutDetector finds the git repositories already in a project root.
+// RepoDetector finds the git repositories already in a project root.
 // Infrastructure provides the implementation.
-type CheckoutDetector interface {
+type RepoDetector interface {
 	// Detect finds the repositories at root and in its immediate
 	// directories, each with the remote it was cloned from.
-	Detect(root ProjectRoot) (Checkouts, error)
+	Detect(root ProjectRoot) (Repos, error)
 }
 
 // WorkingTree is where a git working tree stands: the branch checked out,

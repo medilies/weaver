@@ -65,7 +65,7 @@ func (w *fakeWorkspace) Exists(dir string) (bool, error) {
 	return w.dirs[dir], nil
 }
 
-func (w *fakeWorkspace) Clone(_ domain.Checkout, dir string) error {
+func (w *fakeWorkspace) Clone(_ domain.Repo, dir string) error {
 	w.cloned = append(w.cloned, dir)
 	w.dirs[dir] = true
 	return nil
@@ -86,11 +86,11 @@ func shop(t *testing.T) domain.Project {
 	must(err)
 	root, err := domain.NewProjectRoot("/srv/shop")
 	must(err)
-	backRepo, err := domain.NewCheckout("back", "git@host:back.git")
+	backRepo, err := domain.NewRepo("back", "git@host:back.git")
 	must(err)
-	frontRepo, err := domain.NewCheckout("front", "git@host:front.git")
+	frontRepo, err := domain.NewRepo("front", "git@host:front.git")
 	must(err)
-	checkouts, err := domain.NewCheckouts(backRepo, frontRepo)
+	repos, err := domain.NewRepos(backRepo, frontRepo)
 	must(err)
 	backName, err := domain.NewPaneName("back")
 	must(err)
@@ -115,7 +115,7 @@ func shop(t *testing.T) domain.Project {
 	must(err)
 	logs, err := domain.NewWindow(logsName, domain.NewPane().In(logsDir))
 	must(err)
-	project, err := domain.NewProject(name, root).WithCheckouts(checkouts).WithWindows(window, logs)
+	project, err := domain.NewProject(name, root).WithRepos(repos).WithWindows(window, logs)
 	must(err)
 	return project
 }
@@ -123,8 +123,8 @@ func shop(t *testing.T) domain.Project {
 // openShop runs OpenProject on the shop project with the given state.
 func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace) error {
 	t.Helper()
-	repo := inMemoryRepository{projects: map[string]domain.Project{"shop": shop(t)}}
-	return app.NewOpenProject(repo, sessions, workspace).Handle("shop")
+	configs := inMemoryRepository{projects: map[string]domain.Project{"shop": shop(t)}}
+	return app.NewOpenProject(configs, sessions, workspace).Handle("shop")
 }
 
 // owned is a running session weaver started, which still has windows.
@@ -234,8 +234,8 @@ func TestOpenProject(t *testing.T) {
 	})
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
-		repo := inMemoryRepository{projects: map[string]domain.Project{}}
-		err := app.NewOpenProject(repo, &fakeSessions{}, everything()).Handle("shop")
+		configs := inMemoryRepository{projects: map[string]domain.Project{}}
+		err := app.NewOpenProject(configs, &fakeSessions{}, everything()).Handle("shop")
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
@@ -277,11 +277,11 @@ func (r withBrokenConfig) FindByName(name domain.ProjectName) (domain.Project, e
 
 func TestOpenProjectHandleDir(t *testing.T) {
 	repository := func(projects ...domain.Project) inMemoryRepository {
-		repo := inMemoryRepository{projects: map[string]domain.Project{}}
+		configs := inMemoryRepository{projects: map[string]domain.Project{}}
 		for _, p := range projects {
-			repo.projects[p.Name().String()] = p
+			configs.projects[p.Name().String()] = p
 		}
-		return repo
+		return configs
 	}
 	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
@@ -289,8 +289,8 @@ func TestOpenProjectHandleDir(t *testing.T) {
 	}
 	openPastBroken := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
-		repo := withBrokenConfig{repository(projects...)}
-		return app.NewOpenProject(repo, sessions, everything()).HandleDir(dir)
+		configs := withBrokenConfig{repository(projects...)}
+		return app.NewOpenProject(configs, sessions, everything()).HandleDir(dir)
 	}
 
 	t.Run("opens the project whose root contains the directory", func(t *testing.T) {

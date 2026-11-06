@@ -27,9 +27,9 @@ func parseEnv(text string) (domain.Env, error) {
 	return domain.NewEnv(vars)
 }
 
-// parseCheckouts reads "dir = remote" lines, skipping blank ones.
-func parseCheckouts(text string) ([]domain.Checkout, error) {
-	var checkouts []domain.Checkout
+// parseRepos reads "dir = remote" lines, skipping blank ones.
+func parseRepos(text string) ([]domain.Repo, error) {
+	var repos []domain.Repo
 	for line := range strings.Lines(text) {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -39,13 +39,13 @@ func parseCheckouts(text string) ([]domain.Checkout, error) {
 		if !ok {
 			return nil, fmt.Errorf("%q: want directory = remote", line)
 		}
-		checkout, err := domain.NewCheckout(strings.TrimSpace(dir), strings.TrimSpace(remote))
+		repo, err := domain.NewRepo(strings.TrimSpace(dir), strings.TrimSpace(remote))
 		if err != nil {
 			return nil, err
 		}
-		checkouts = append(checkouts, checkout)
+		repos = append(repos, repo)
 	}
-	return checkouts, nil
+	return repos, nil
 }
 
 // parseCommands reads one command per line, skipping blank ones.

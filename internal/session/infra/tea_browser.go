@@ -181,20 +181,20 @@ func summary(project app.ProjectOverview) string {
 	}
 	lines = append(lines, root)
 
-	var checkouts []string
-	for _, status := range project.Checkouts() {
-		dir := status.Checkout().Dir()
+	var repos []string
+	for _, status := range project.Repos() {
+		dir := status.Repo().Dir()
 		if dir == "." {
 			dir = "root"
 		}
 		if status.Cloned() {
-			checkouts = append(checkouts, dir+" "+clonedStyle.Render("✓ cloned"))
+			repos = append(repos, dir+" "+clonedStyle.Render("✓ cloned"))
 		} else {
-			checkouts = append(checkouts, dir+" "+problemStyle.Render("✗ missing"))
+			repos = append(repos, dir+" "+problemStyle.Render("✗ missing"))
 		}
 	}
-	if len(checkouts) > 0 {
-		lines = append(lines, strings.Join(checkouts, " · "))
+	if len(repos) > 0 {
+		lines = append(lines, strings.Join(repos, " · "))
 	}
 	for _, warning := range project.Warnings() {
 		lines = append(lines, warningStyle.Render("⚠ "+warning.Error()))

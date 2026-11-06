@@ -32,7 +32,7 @@ const CurrentSession = "."
 // and commands of a running session if asked.
 type AddProject struct {
 	projects domain.ProjectRepository
-	detector domain.CheckoutDetector
+	detector domain.RepoDetector
 	capturer domain.SessionCapturer
 	form     ProjectForm
 	confirm  Confirmer
@@ -41,7 +41,7 @@ type AddProject struct {
 // NewAddProject constructs the use case against its ports.
 func NewAddProject(
 	projects domain.ProjectRepository,
-	detector domain.CheckoutDetector,
+	detector domain.RepoDetector,
 	capturer domain.SessionCapturer,
 	form ProjectForm,
 	confirm Confirmer,
@@ -109,7 +109,7 @@ func (uc AddProject) draft(request AddRequest) (ProjectDraft, error) {
 	if err != nil {
 		return ProjectDraft{}, err
 	}
-	if draft.Checkouts, err = uc.detector.Detect(projectRoot); err != nil {
+	if draft.Repos, err = uc.detector.Detect(projectRoot); err != nil {
 		return ProjectDraft{}, err
 	}
 	return draft, nil
