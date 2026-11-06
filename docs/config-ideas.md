@@ -221,7 +221,7 @@ checks, so a failure leaves no session behind.
   stays, as today). Restoring windows and attaching don't run `start`.
 - `stop`, in `app`: `KillProject` only holds a `SessionKiller` today. It
   would also load the project from the `ProjectRepository`. When the
-  config can't be read, kill anyway, as now: you asked to stop it. When
+  config can't be read, kill anyway, as now: you asked to kill it. When
   a `stop` command fails, still kill the session and report the failure.
 - Browser: `enter` and `x` run their use case after the Bubble Tea
   program exits (`BrowseProjects.act`), so the output reaches the
@@ -404,7 +404,7 @@ session. This one is mostly open questions:
   variants. Check that tmux accepts it in `-t` targets. The session's
   `@weaver_project` tag, and `Find`'s check of who started the session,
   have to include the variant.
-- **Lifecycle**: `weave kill shop@fix-123` stops the session. Removing
+- **Lifecycle**: `weave kill shop@fix-123` kills the session. Removing
   the worktrees, and refusing when they have uncommitted changes, is
   another command or flag.
 - **Browser**: variants listed under their project, each with its own

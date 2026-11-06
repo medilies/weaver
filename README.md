@@ -24,7 +24,7 @@ weave bicyclette      # start or attach the bicyclette session, from anywhere
 weave .               # same, for the project whose root holds the current directory
 weave                 # browse the projects, to open, freeze, edit, kill or delete them
 weave edit bicyclette # edit its config in $VISUAL or $EDITOR; only a valid config is saved
-weave kill bicyclette # stop the session and everything running in it
+weave kill bicyclette # kill the session and everything running in it
 weave list            # registered projects, and which sessions run
 weave show bicyclette # print its config file
 ```
@@ -55,11 +55,11 @@ the `before` commands and variables every pane starts with:
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
 | e | edit its config, like `weave edit <project>` |
-| x | stop its session, after you confirm |
+| x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
 | q | quit |
 
-After freezing, editing, stopping or deleting, the list comes back with
+After freezing, editing, killing or deleting, the list comes back with
 what happened.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
@@ -74,10 +74,10 @@ it switches to it). When the session isn't running, weaver first:
 If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
 newer.
 
-When weaver started the running session and you closed some of its
-windows, `weave <project>` puts them back where the config lists them
-before attaching. Windows you opened yourself stay as they are, and a
-session weaver didn't start is only attached.
+When weaver started the running session (an owned session) and you
+closed some of its windows, `weave <project>` puts them back where the
+config lists them before attaching. Windows you opened yourself stay as
+they are, and a session weaver didn't start is only attached.
 
 ## Development
 

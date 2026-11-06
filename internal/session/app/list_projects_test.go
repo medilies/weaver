@@ -28,13 +28,13 @@ func TestListProjects(t *testing.T) {
 
 	var got []string
 	for _, s := range statuses {
-		state := "stopped"
+		state := "not running"
 		if s.Running() {
 			state = "running"
 		}
 		got = append(got, s.Name().String()+" "+state)
 	}
-	if want := []string{"bicyclette stopped", "shop running"}; !slices.Equal(got, want) {
+	if want := []string{"bicyclette not running", "shop running"}; !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }

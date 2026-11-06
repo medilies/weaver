@@ -69,7 +69,7 @@ const (
 	ActionFreeze
 	// ActionEdit edits the chosen project's config.
 	ActionEdit
-	// ActionKill stops the chosen project's session.
+	// ActionKill kills the chosen project's session.
 	ActionKill
 	// ActionDelete unregisters the chosen project.
 	ActionDelete

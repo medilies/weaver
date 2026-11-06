@@ -91,9 +91,9 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 // Warnings are what would likely go wrong in the panes opening the
 // project creates: a directory missing that no clone creates, wrapping
 // ErrMissingDirectory, or a command whose program can't be found,
-// wrapping ErrMissingProgram. Opening a stopped project creates every
-// pane, a session weaver started the missing windows' panes, and one it
-// didn't start none.
+// wrapping ErrMissingProgram. Opening a project that isn't running
+// creates every pane, an owned session the missing windows' panes, and a
+// session weaver didn't start none.
 func (o ProjectOverview) Warnings() []error {
 	return slices.Clone(o.warnings)
 }
@@ -352,10 +352,10 @@ func (uc BrowseProjects) act(choice Choice, workingDir string) (domain.ProjectNa
 		}
 		return name, fmt.Sprintf("Saved %s.", name), nil
 	case ActionKill:
-		if err := uc.ask(fmt.Sprintf("Stop %s's session and everything running in it?", name)); err != nil {
+		if err := uc.ask(fmt.Sprintf("Kill %s's session and everything running in it?", name)); err != nil {
 			return name, "", err
 		}
-		return name, fmt.Sprintf("Stopped %s.", name), uc.kill.Handle(name.String())
+		return name, fmt.Sprintf("Killed %s.", name), uc.kill.Handle(name.String())
 	case ActionDelete:
 		if err := uc.ask(fmt.Sprintf("Delete %s's config? A running session keeps running.", name)); err != nil {
 			return name, "", err

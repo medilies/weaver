@@ -299,7 +299,7 @@ func TestTmuxKill(t *testing.T) {
 		}
 	})
 
-	t.Run("stops a running session", func(t *testing.T) {
+	t.Run("kills a running session", func(t *testing.T) {
 		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q}`, t.TempDir()))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

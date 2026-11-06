@@ -64,10 +64,10 @@ type SessionCapturer interface {
 	Current() (string, error)
 }
 
-// SessionKiller stops projects' tmux sessions. Infrastructure provides the
+// SessionKiller kills projects' tmux sessions. Infrastructure provides the
 // implementation.
 type SessionKiller interface {
-	// Kill stops the project's session and everything running in it, or
+	// Kill ends the project's session and everything running in it, or
 	// returns an error wrapping ErrSessionNotRunning.
 	Kill(name ProjectName) error
 }

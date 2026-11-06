@@ -52,7 +52,7 @@ func (v browserView) overview(name string) (app.ProjectOverview, bool) {
 }
 
 // tmuxServer is fakeSessions that also lists and kills its sessions, so a
-// stopped session shows as stopped.
+// killed session shows as not running.
 type tmuxServer struct{ *fakeSessions }
 
 func (s tmuxServer) Running() ([]string, error) {
@@ -74,7 +74,7 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 	return domain.RunningSession{}, false, s.err
 }
 
-// browseSetup is blog, stopped, and shop, running in a session weaver
+// browseSetup is blog, not running, and shop, running in a session weaver
 // didn't start, with their configs stored as YAML.
 type browseSetup struct {
 	configs   inMemoryRepository
@@ -262,7 +262,7 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("shows no session for a stopped project", func(t *testing.T) {
+	t.Run("shows no session for a project that isn't running", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -491,18 +491,18 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("stops a session once confirmed, then shows it stopped", func(t *testing.T) {
+	t.Run("kills a session once confirmed, then shows it not running", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shop, _ := s.browser.last().overview("shop")
-		if shop.Running() || s.browser.last().notice != "Stopped shop." {
-			t.Fatalf("got running=%v and notice %q, want shop stopped", shop.Running(), s.browser.last().notice)
+		if shop.Running() || s.browser.last().notice != "Killed shop." {
+			t.Fatalf("got running=%v and notice %q, want shop killed", shop.Running(), s.browser.last().notice)
 		}
 	})
 
-	t.Run("shows why a session couldn't be stopped", func(t *testing.T) {
+	t.Run("shows why a session couldn't be killed", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "blog"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
