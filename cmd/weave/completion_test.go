@@ -102,7 +102,7 @@ func TestListCommand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got, want := out.String(), "nimbus  -\nshop        running\n"; got != want {
+	if got, want := out.String(), "nimbus  -\nshop    running\n"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
