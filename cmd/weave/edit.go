@@ -15,8 +15,9 @@ func newEditCommand(weaver application) *cobra.Command {
 		Short: "Edit a project's config in your editor, keeping only a valid one",
 		Long: `weave edit opens a copy of the project's config in $VISUAL, else
 $EDITOR, else vi (with VS Code, use VISUAL="code --wait"). The config is
-replaced only once the copy is valid: on a mistake, weaver offers to open
-the editor again on what you wrote.`,
+replaced only once the copy is valid: on a mistake, weaver asks whether
+to discard your changes, and otherwise reopens the editor on what you
+wrote.`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		RunE: func(cmd *cobra.Command, args []string) error {

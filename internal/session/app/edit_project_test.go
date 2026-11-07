@@ -86,7 +86,7 @@ func TestEditProject(t *testing.T) {
 	t.Run("reopens the editor on what the user wrote to fix an invalid config", func(t *testing.T) {
 		documents := storedDocuments{"shop": "old"}
 		editor := &scriptedEditor{saves: []string{"invalid", "fixed"}}
-		changed, err := edit(documents, editor, &countingConfirmer{answer: true})
+		changed, err := edit(documents, editor, &countingConfirmer{answer: false})
 		if err != nil || !changed || documents["shop"] != "fixed" {
 			t.Fatalf("got changed=%v (%v), stored %q; want fixed stored", changed, err, documents["shop"])
 		}
@@ -97,7 +97,7 @@ func TestEditProject(t *testing.T) {
 
 	t.Run("opens the stored config's file each time, keeping its format", func(t *testing.T) {
 		editor := &scriptedEditor{saves: []string{"invalid", "fixed"}}
-		if _, err := edit(storedDocuments{"shop": "old"}, editor, &countingConfirmer{answer: true}); err != nil {
+		if _, err := edit(storedDocuments{"shop": "old"}, editor, &countingConfirmer{answer: false}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if want := []string{"shop.yml", "shop.yml"}; !slices.Equal(editor.files, want) {
@@ -105,9 +105,9 @@ func TestEditProject(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps the stored config when the user gives up on an invalid one", func(t *testing.T) {
+	t.Run("keeps the stored config when the user discards an invalid one", func(t *testing.T) {
 		documents := storedDocuments{"shop": "old"}
-		changed, err := edit(documents, &scriptedEditor{saves: []string{"invalid"}}, &countingConfirmer{answer: false})
+		changed, err := edit(documents, &scriptedEditor{saves: []string{"invalid"}}, &countingConfirmer{answer: true})
 		if !errors.Is(err, domain.ErrInvalidConfig) || changed || documents["shop"] != "old" {
 			t.Fatalf("got changed=%v (%v), stored %q; want ErrInvalidConfig and old kept", changed, err, documents["shop"])
 		}

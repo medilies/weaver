@@ -10,7 +10,8 @@ import (
 
 // EditProject lets the user edit a project's config in their editor. An
 // invalid config is never stored: the user may edit it again, starting
-// from what they wrote, or give up and keep the stored one.
+// from what they wrote, or discard it and keep the stored one. Answering
+// No reopens the editor, so Esc never loses edits.
 type EditProject struct {
 	documents ProjectDocuments
 	editor    ConfigEditor
@@ -46,11 +47,11 @@ func (uc EditProject) Handle(rawName string) (bool, error) {
 		if !errors.Is(err, domain.ErrInvalidConfig) {
 			return err == nil, err
 		}
-		again, confirmErr := uc.confirm.Confirm(fmt.Sprintf("%v\n\nEdit it again?", err))
+		discard, confirmErr := uc.confirm.Confirm(fmt.Sprintf("%v\n\nDiscard your changes?", err))
 		if confirmErr != nil {
 			return false, confirmErr
 		}
-		if !again {
+		if discard {
 			return false, fmt.Errorf("changes discarded: %w", err)
 		}
 		document.Content = edited
