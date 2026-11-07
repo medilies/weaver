@@ -49,7 +49,7 @@ Corrections to the findings below:
 ### Other sections
 
 - **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item (but see restoring below), the `Problem` comment, `specs.md`, tests before releasing, the `Confirm` dialog items, and the marked minor items and test gaps.
-- **Open:** a hint in the error when a restored window's directory is missing, `#` in pane labels (`#{q/h:…}` works on tmux 3.4), the concepts missing from the glossary, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
+- **Open:** a hint in the error when a restored window's directory is missing, the concepts missing from the glossary, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
 - **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency (as the report says), the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, and a tmux version check when weave runs.
 
@@ -388,7 +388,7 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 - Decoding `~` is only tested for `root`, not for a pane's `dir:`. There is no save/reload test for a relative dir starting with `~` (bug #1).
 - **Fixed.** No test that `ReplaceDocument` and `Save` keep a symlink (bug #2). `ReplaceDocument` is tested; `Save` shares `writeFileAtomic`.
 - `Capture` isn't tested with a pane started with a command (bug #5) or a foreground job in another directory (#9). Names that differ only by spaces: **Fixed.**
-- `TestTmuxStartPassesTextVerbatim` covers a `#` in window names and directories, but not in pane labels.
+- **Fixed.** `TestTmuxStartPassesTextVerbatim` covers a `#` in window names and directories, but not in pane labels. It now reads a pane label as drawn, through a client attached from a second private server.
 - Untested:
   - a `Size` of 0x0 (#11)
   - `Kill` and `Running` against a server they can't reach (#12)
@@ -418,9 +418,10 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 
 ### Freeze and capture
 
+- `Capture` reads labels with `display-message -p` (`tmux.go:196`), and tmux 3.4 escapes a `$` followed by a name or `{` in its output. A pane named `run $HOME` is frozen as `run \$HOME`. Window names read the same way would be too.
 - **Fixed.** `Capture` trims window and pane names only after making them unique (`tmux.go:166`, `:205-209`). tmux keeps `x` and `x ` apart, both become `x`, and freezing fails with "pane names must be unique". Trim before `unique`.
 - **Fixed.** `parseEnv` (`form_text.go:14-28`) silently keeps the last of two lines that set the same name, while a config with a duplicate key is rejected. Reject duplicates in the validator.
-- Pane labels holding `##` or `#[` are drawn as formats in their borders (`tmux.go:399`): `a##b` shows as `a#b`, and `#[reverse]` changes the style. Window names and directories are kept verbatim. `#{q/h:@label}` shows labels verbatim on tmux 3.4. Check that it exists in tmux 3.2.
+- **Fixed**, with `#{q/h:@label}`. tmux 3.2's `format.c` takes `e` or `h` for it: the changelog names `e`, the man page documents `h`. Pane labels holding `##` or `#[` are drawn as formats in their borders (`tmux.go:399`): `a##b` shows as `a#b`, and `#[reverse]` changes the style. Window names and directories are kept verbatim.
 
 ### Configs
 

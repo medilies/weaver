@@ -107,6 +107,20 @@ func (s tmuxServer) busy(t *testing.T, session, program string) domain.Startup {
 	}
 }
 
+// attached is a pane of another private server, holding a client
+// attached to session, and that server. capture-pane leaves out pane
+// borders: reading that pane shows what tmux draws, borders included.
+func (s tmuxServer) attached(t *testing.T, session string) (tmuxServer, string) {
+	t.Helper()
+	viewer := newTmuxServer(t)
+	attach := []string{"unset TMUX; exec tmux"}
+	for _, arg := range append(slices.Clone(s.global), "attach-session", "-t", "="+session) {
+		attach = append(attach, "'"+strings.ReplaceAll(arg, "'", `'\''`)+"'")
+	}
+	viewer.query(t, "new-session", "-d", "-s", "viewer", "-x", "200", "-y", "50", strings.Join(attach, " "))
+	return viewer, "=viewer:"
+}
+
 // paneLabelled is the ID of the pane labelled label in session.
 func (s tmuxServer) paneLabelled(t *testing.T, session, label string) string {
 	t.Helper()
@@ -240,7 +254,8 @@ func TestTmuxStartPassesTextVerbatim(t *testing.T) {
 	plan := planOf(t, "verbatim", fmt.Sprintf(`{"root": %q, "windows": [
 		{"name": "a#Sb", "panes": [
 			{"name": "semicolon", "dir": "x#Sy", "command": "printf '%%s%%s\\n' semi colon\\;"},
-			{"name": "dash", "split": {"direction": "right"}, "prefill": "-n leading-dash"}
+			{"name": "dash", "split": {"direction": "right"}, "prefill": "-n leading-dash"},
+			{"name": "a##b #[reverse]c", "split": {"direction": "below"}}
 		]}
 	]}`, root))
 
@@ -260,6 +275,11 @@ func TestTmuxStartPassesTextVerbatim(t *testing.T) {
 		if got := server.query(t, "list-windows", "-t", "=verbatim", "-F", "#{window_name}"); got != "a#Sb" {
 			t.Fatalf("got %q, want %q", got, "a#Sb")
 		}
+	})
+
+	t.Run("draws a hash in a pane name as written", func(t *testing.T) {
+		viewer, pane := server.attached(t, "verbatim")
+		viewer.waitFor(t, pane, " a##b #[reverse]c ")
 	})
 
 	t.Run("keeps a hash in a directory", func(t *testing.T) {

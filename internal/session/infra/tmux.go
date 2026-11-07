@@ -410,7 +410,9 @@ func (t Tmux) label(windowID string, ids []string, panes []domain.PanePlan) erro
 	if _, err := t.run("set-option", "-w", "-t", windowID, "pane-border-status", "top"); err != nil {
 		return err
 	}
-	_, err := t.run("set-option", "-w", "-t", windowID, "pane-border-format", " #{@label} ")
+	// tmux reads #[…] and ## in a drawn border as styles and escapes;
+	// q/h doubles each # of the label, so it shows as written.
+	_, err := t.run("set-option", "-w", "-t", windowID, "pane-border-format", " #{q/h:@label} ")
 	return err
 }
 
