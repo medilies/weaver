@@ -279,15 +279,16 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("doesn't warn about a directory opening clones", func(t *testing.T) {
+	t.Run("warns about a pane directory in a repository not cloned", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		delete(s.sessions.running, "shop")
 		delete(s.workspace.dirs, "/srv/shop/front")
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if shop, _ := s.browser.last().overview("shop"); len(shop.Warnings()) > 0 {
-			t.Fatalf("got %v, want no warnings", shop.Warnings())
+		shop, _ := s.browser.last().overview("shop")
+		if got := shop.Warnings(); len(got) != 1 || !strings.Contains(got[0].Error(), "/srv/shop/front") {
+			t.Fatalf("got %v, want /srv/shop/front missing", got)
 		}
 	})
 
@@ -360,19 +361,6 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if shop, _ := s.browser.last().overview("shop"); len(shop.Warnings()) > 0 {
 			t.Fatalf("got %v, want no warnings", shop.Warnings())
-		}
-	})
-
-	t.Run("warns about a repository restoring a window doesn't clone", func(t *testing.T) {
-		s := newBrowseSetup(t)
-		s.sessions.running["shop"] = owned(t, "logs")
-		delete(s.workspace.dirs, "/srv/shop/back")
-		if err := s.browse(answer(true)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		shop, _ := s.browser.last().overview("shop")
-		if got := shop.Warnings(); len(got) != 1 || !strings.Contains(got[0].Error(), "/srv/shop/back") {
-			t.Fatalf("got %v, want /srv/shop/back missing", got)
 		}
 	})
 

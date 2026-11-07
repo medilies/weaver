@@ -3,9 +3,10 @@
 ## Design
 
 - SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weave` Cobra layer. `domain` imports only the standard library, and `app` only that and `domain`; enforced by the `depguard` allow-lists in `.golangci.yml`.
-- Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, git, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
+- Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, the local filesystem, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
+- Minimal and explicit in what weaver executes: it runs only what the user wrote in a config, and does nothing on their behalf, such as cloning repositories. Users add commands for that themselves.
 
 ## Ubiquitous language
 
@@ -17,9 +18,8 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | config | A project's YAML file | `weave show`, `weave edit` | `ProjectRepository`, `ConfigDocument` |
 | registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRepository.Names()` |
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
-| repository | A git repository expected under the root, cloned when missing | `repositories:` | `Repo`, `Repos`, `RepoDetector` |
+| repository | A git repository expected under the root; the browser shows whether it is cloned, weaver never clones it | `repositories:` | `Repo`, `Repos`, `RepoStatus` |
 | remote | The URL a repository is cloned from | value in `repositories:` | `Repo.Remote()` |
-| working tree | Where the root's git checkout stands: branch, changes, commits ahead or behind | browser summary | `WorkingTree` |
 | window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
 | dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |
@@ -51,7 +51,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 ## Tests
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
-- tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux and git tests skip when the tool is missing, except in CI, which installs tmux.
+- tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
 - The huh forms and the browser aren't unit-tested; check them by running `weave freeze` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
 
 ## Workflow

@@ -1,14 +1,11 @@
 package infra_test
 
 import (
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/medilies/weaver/internal/session/domain"
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
@@ -24,23 +21,8 @@ func requireTool(t *testing.T, name string) {
 	}
 }
 
-// bareRepository creates an empty repository to clone from, without the
-// user's git config.
-func bareRepository(t *testing.T) string {
-	t.Helper()
-	requireTool(t, "git")
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull) // also shuts out $XDG_CONFIG_HOME/git/config
-	remote := filepath.Join(t.TempDir(), "remote.git")
-	if out, err := exec.Command("git", "init", "--bare", "-q", remote).CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v: %s", err, out)
-	}
-	return remote
-}
-
-func TestGitWorkspaceExists(t *testing.T) {
-	workspace := infra.NewGitWorkspace(io.Discard)
+func TestLocalWorkspaceExists(t *testing.T) {
+	workspace := infra.NewLocalWorkspace()
 	dir := t.TempDir()
 	file := filepath.Join(dir, "file")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
@@ -57,8 +39,8 @@ func TestGitWorkspaceExists(t *testing.T) {
 	}
 }
 
-func TestGitWorkspaceExecutable(t *testing.T) {
-	workspace := infra.NewGitWorkspace(io.Discard)
+func TestLocalWorkspaceExecutable(t *testing.T) {
+	workspace := infra.NewLocalWorkspace()
 
 	t.Run("finds a program on PATH", func(t *testing.T) {
 		requireTool(t, "sh")
@@ -93,39 +75,6 @@ func TestGitWorkspaceExecutable(t *testing.T) {
 		}
 		if workspace.Executable("./notes", dir) {
 			t.Fatal("got a plain file executable")
-		}
-	})
-}
-
-func TestGitWorkspaceClone(t *testing.T) {
-	remote := bareRepository(t)
-	workspace := infra.NewGitWorkspace(io.Discard)
-
-	t.Run("clones into a directory whose parents are missing", func(t *testing.T) {
-		repo, err := domain.NewRepo("back", remote)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		dir := filepath.Join(t.TempDir(), "dev", "shop", "back")
-
-		if err := workspace.Clone(repo, dir); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-			t.Fatalf("got no repository in %s: %v", dir, err)
-		}
-	})
-
-	t.Run("names the remote it failed to clone", func(t *testing.T) {
-		missing := filepath.Join(t.TempDir(), "missing.git")
-		repo, err := domain.NewRepo("back", missing)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		err = workspace.Clone(repo, filepath.Join(t.TempDir(), "back"))
-		if err == nil || !strings.Contains(err.Error(), missing) {
-			t.Fatalf("got %v, want an error naming %s", err, missing)
 		}
 	})
 }

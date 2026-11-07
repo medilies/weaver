@@ -157,7 +157,7 @@ func (a *projectAnswers) groups() []*huh.Group {
 				Value(&a.root).Validate(func(s string) error { _, err := parseRoot(s); return err }),
 		).Title("New project"),
 		huh.NewGroup(huh.NewText().Title("Repositories").
-			Description("Cloned when missing. One per line: directory = remote, e.g. back = git@host:back.git").
+			Description("Expected under the root, reported when missing. One per line: directory = remote, e.g. back = git@host:back.git").
 			Value(&a.repos).Validate(func(s string) error { _, err := parseRepos(s); return err })).Title("Repositories"),
 		huh.NewGroup(
 			beforeField("Before commands for every pane", &a.before),

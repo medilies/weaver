@@ -18,8 +18,8 @@ func newFreezeCommand(weaver application) *cobra.Command {
 		Use:   "freeze [session]",
 		Short: "Register a project through interactive forms, from a running session if given",
 		Long: `weave freeze asks for a project's name and root (the current
-directory unless --root says otherwise), the repositories to clone when
-missing, the before commands of its panes, and its windows and panes,
+directory unless --root says otherwise), the repositories expected under
+it, the before commands of its panes, and its windows and panes,
 then saves it.
 
 Given a running tmux session, the windows and panes start as the session

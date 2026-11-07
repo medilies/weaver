@@ -8,7 +8,7 @@ import (
 )
 
 // Repo is a git repository a project expects at dir, relative to its
-// root ("." is the root itself), cloned from remote when missing.
+// root ("." is the root itself), cloned from remote.
 type Repo struct {
 	dir    string
 	remote string
@@ -51,12 +51,6 @@ func (r Repo) Path(root ProjectRoot) string {
 	return filepath.Join(root.path, r.dir)
 }
 
-// Contains reports whether dir is the repository's directory under root,
-// or a directory inside it.
-func (r Repo) Contains(root ProjectRoot, dir string) bool {
-	return ProjectRoot{path: r.Path(root)}.Contains(dir)
-}
-
 // Repos are a project's repositories, at most one per directory.
 type Repos struct {
 	list []Repo
@@ -66,7 +60,7 @@ type Repos struct {
 func NewRepos(repos ...Repo) (Repos, error) {
 	sorted := slices.Clone(repos)
 	slices.SortFunc(sorted, func(a, b Repo) int {
-		return cloneOrder(a.dir, b.dir)
+		return dirOrder(a.dir, b.dir)
 	})
 	for i := 1; i < len(sorted); i++ {
 		if sorted[i].dir == sorted[i-1].dir {
@@ -76,9 +70,8 @@ func NewRepos(repos ...Repo) (Repos, error) {
 	return Repos{list: sorted}, nil
 }
 
-// cloneOrder sorts the root first and a directory before the ones inside
-// it, so a repository is cloned before repositories nested in it.
-func cloneOrder(a, b string) int {
+// dirOrder sorts the root first and a directory before the ones inside it.
+func dirOrder(a, b string) int {
 	switch {
 	case a == b:
 		return 0
@@ -90,7 +83,8 @@ func cloneOrder(a, b string) int {
 	return strings.Compare(a, b)
 }
 
-// List is the repositories in clone order.
+// List is the repositories, the root first and a directory before the
+// ones inside it.
 func (r Repos) List() []Repo {
 	return slices.Clone(r.list)
 }

@@ -74,7 +74,7 @@ var (
 	// ErrInvalidRepoDir is returned for a repository directory that isn't
 	// inside the project root.
 	ErrInvalidRepoDir = errors.New("repository directory must be relative to the project root and inside it")
-	// ErrEmptyRemote is returned when a repository has no remote to clone.
+	// ErrEmptyRemote is returned when a repository has no remote.
 	ErrEmptyRemote = errors.New("repository remote must not be empty")
 	// ErrDuplicateRepo is returned when two repositories share a directory.
 	ErrDuplicateRepo = errors.New("two repositories share a directory")

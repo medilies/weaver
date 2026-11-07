@@ -9,7 +9,7 @@ import (
 
 var (
 	// ErrMissingDirectory is returned when a pane's directory doesn't
-	// exist, and no repository would be cloned there.
+	// exist.
 	ErrMissingDirectory = errors.New("directory not found")
 	// ErrNoProjectAt is returned when no registered project's root
 	// contains a directory.
@@ -110,12 +110,8 @@ func (uc OpenProject) open(project domain.Project) error {
 	return uc.sessions.Attach(project.Name())
 }
 
-// start checks pane directories exist, once missing repositories are
-// cloned, before changing anything.
+// start checks pane directories exist before changing anything.
 func (uc OpenProject) start(project domain.Project) error {
-	if err := uc.cloneMissing(project); err != nil {
-		return err
-	}
 	plan := project.Plan()
 	if err := uc.checkDirs(plan); err != nil {
 		return err
@@ -137,23 +133,6 @@ func (uc OpenProject) restore(project domain.Project, session domain.RunningSess
 		}
 	}
 	return uc.sessions.Restore(project.Name(), placements)
-}
-
-func (uc OpenProject) cloneMissing(project domain.Project) error {
-	for _, repo := range project.Repos().List() {
-		dir := repo.Path(project.Root())
-		exists, err := uc.workspace.Exists(dir)
-		if err != nil {
-			return err
-		}
-		if exists {
-			continue
-		}
-		if err := uc.workspace.Clone(repo, dir); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (uc OpenProject) checkDirs(plan domain.SessionPlan) error {

@@ -43,12 +43,10 @@ func (s *fakeSessions) Attach(name domain.ProjectName) error {
 }
 
 // fakeWorkspace is an in-memory domain.Workspace: a set of existing
-// directories, which cloning adds to, and the programs that can be run.
+// directories, and the programs that can be run.
 type fakeWorkspace struct {
 	dirs     map[string]bool
 	programs map[string]bool
-	cloned   []string
-	cloneErr error
 }
 
 func (w *fakeWorkspace) Executable(program, _ string) bool {
@@ -57,15 +55,6 @@ func (w *fakeWorkspace) Executable(program, _ string) bool {
 
 func (w *fakeWorkspace) Exists(dir string) (bool, error) {
 	return w.dirs[dir], nil
-}
-
-func (w *fakeWorkspace) Clone(_ domain.Repo, dir string) error {
-	if w.cloneErr != nil {
-		return w.cloneErr
-	}
-	w.cloned = append(w.cloned, dir)
-	w.dirs[dir] = true
-	return nil
 }
 
 // shop is a project rooted at /srv/shop with a back and a front
@@ -194,37 +183,6 @@ func TestOpenProject(t *testing.T) {
 		if !errors.Is(err, app.ErrMissingDirectory) || len(sessions.restored)+len(sessions.attached) != 0 {
 			t.Fatalf("got %v, restored %q, attached %q; want ErrMissingDirectory and nothing done",
 				err, sessions.restored, sessions.attached)
-		}
-	})
-
-	t.Run("clones missing repositories before starting", func(t *testing.T) {
-		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/logs": true}}
-		if err := openShop(t, &fakeSessions{}, workspace); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if want := []string{"/srv/shop/back", "/srv/shop/front"}; !slices.Equal(workspace.cloned, want) {
-			t.Fatalf("got %q cloned, want %q", workspace.cloned, want)
-		}
-	})
-
-	t.Run("starts nothing when a clone fails", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/logs": true}, cloneErr: errors.New("no network")}
-		if err := openShop(t, sessions, workspace); err == nil {
-			t.Fatal("got no error, want the clone's failure")
-		}
-		if len(sessions.started) != 0 || len(sessions.attached) != 0 {
-			t.Fatalf("got started %q, attached %q; want nothing", sessions.started, sessions.attached)
-		}
-	})
-
-	t.Run("leaves existing repositories alone", func(t *testing.T) {
-		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/back": true, "/srv/shop/logs": true}}
-		if err := openShop(t, &fakeSessions{}, workspace); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if want := []string{"/srv/shop/front"}; !slices.Equal(workspace.cloned, want) {
-			t.Fatalf("got %q cloned, want %q", workspace.cloned, want)
 		}
 	})
 

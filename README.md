@@ -43,8 +43,8 @@ beside the selected one's config, under a summary: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a
 warning when it is gone; which repositories are cloned; what would
-likely fail in the panes enter creates (a directory missing
-that no clone creates, or a command whose program isn't on your `PATH`,
+likely fail in the panes enter creates (a directory missing, such as a
+repository not cloned yet, or a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it; aliases and shell functions show as not found); and
 the `before` commands and variables every pane starts with:
@@ -66,11 +66,13 @@ what happened.
 it switches to it, from a `display-popup` too). When the session isn't
 running, weaver first:
 
-1. clones the project's repositories that are missing;
-2. checks every pane's directory exists;
-3. builds the session, sized like your terminal so percentage splits
+1. checks every pane's directory exists;
+2. builds the session, sized like your terminal so percentage splits
    come out right, labels its panes in their top border, and types each
    pane's `before` commands, then its command, into its shell.
+
+weaver never clones: `repositories` records what a project expects, so
+the browser can show which are missing, and you clone them yourself.
 
 If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
 newer.
@@ -79,17 +81,14 @@ When weaver started the running session (an owned session) and you
 closed some of its windows, `weave <project>` puts them back where the
 config lists them before attaching; a window that fails to build is
 removed again. Windows you opened yourself stay as they are, and a
-session weaver didn't start is only attached. Putting windows back
-doesn't clone: a repository added to the config while the session runs
-is cloned the next time the session starts, and until then its panes'
-directories are reported missing.
+session weaver didn't start is only attached.
 
 ## Development
 
 ```sh
 go build ./...               # build everything
 go run ./cmd/weave show X    # run without building
-go test ./...                # run tests (the tmux and git adapters need tmux and git)
+go test ./...                # run tests (the tmux adapter's need tmux)
 golangci-lint run ./...      # format check, static analysis, layer boundaries
 ```
 
@@ -216,7 +215,7 @@ graph TD
         DP["ProjectRepository, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
+        A["FileProjectRepository + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
     end
 
     CLI --> UC

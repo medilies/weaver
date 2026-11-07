@@ -44,7 +44,7 @@ func wire() (application, error) {
 		pane = os.Getenv("TMUX_PANE")
 	}
 	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize})
-	workspace := infra.NewGitWorkspace(os.Stderr)
+	workspace := infra.NewLocalWorkspace()
 
 	forms := infra.NewHuhForms()
 

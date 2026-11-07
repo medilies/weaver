@@ -62,8 +62,8 @@ func (o ProjectOverview) RootExists() bool {
 	return o.rootExists
 }
 
-// Repos are the project's repositories, in clone order, and whether
-// each is cloned.
+// Repos are the project's repositories, the root first and a directory
+// before the ones inside it, and whether each is cloned.
 func (o ProjectOverview) Repos() []RepoStatus {
 	return slices.Clone(o.repos)
 }
@@ -81,9 +81,9 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 }
 
 // Warnings are what would likely go wrong in the panes opening the
-// project creates: a directory missing that no clone creates, wrapping
-// ErrMissingDirectory, or a command whose program can't be found,
-// wrapping ErrMissingProgram. Opening a project that isn't running
+// project creates: a directory missing, wrapping ErrMissingDirectory, or
+// a command whose program can't be found, wrapping ErrMissingProgram.
+// Opening a project that isn't running
 // creates every pane, an owned session the missing windows' panes, and a
 // session weaver didn't start none.
 func (o ProjectOverview) Warnings() []error {
@@ -230,7 +230,7 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	if status.Running() {
 		opening = uc.restoration(&overview)
 	}
-	overview.warnings, overview.problem = uc.warnings(overview, opening, !status.Running())
+	overview.warnings, overview.problem = uc.warnings(overview, opening)
 	return overview
 }
 
@@ -257,13 +257,11 @@ func (uc BrowseProjects) restoration(overview *ProjectOverview) []domain.WindowP
 	return opening
 }
 
-// warnings are what would likely go wrong in the panes of windows, once
-// overview's missing repositories are cloned when cloning, as starting a
-// session does (restoring windows doesn't clone). Directories under a missing
-// root aren't checked: the summary already says the root is gone. Nor are
-// the programs of panes whose before commands or PATH may change what
-// runs, as a version manager does.
-func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.WindowPlan, cloning bool) ([]error, error) {
+// warnings are what would likely go wrong in the panes of windows.
+// Directories under a missing root aren't checked: the summary already
+// says the root is gone. Nor are the programs of panes whose before
+// commands or PATH may change what runs, as a version manager does.
+func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.WindowPlan) ([]error, error) {
 	project := overview.project
 	seen := map[string]bool{}
 	var warnings []error
@@ -274,8 +272,7 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.Win
 				return nil, err
 			}
 			if !exists {
-				if !seen[pane.Dir()] && (!cloning || !overview.clones(pane.Dir())) &&
-					(overview.rootExists || !project.Root().Contains(pane.Dir())) {
+				if !seen[pane.Dir()] && (overview.rootExists || !project.Root().Contains(pane.Dir())) {
 					warnings = append(warnings, fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingDirectory, pane.Dir()))
 				}
 				seen[pane.Dir()] = true
@@ -296,17 +293,6 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.Win
 		}
 	}
 	return warnings, nil
-}
-
-// clones reports whether opening the project clones a repository dir is
-// in, which would create it.
-func (o ProjectOverview) clones(dir string) bool {
-	for _, status := range o.repos {
-		if !status.cloned && status.repo.Contains(o.project.Root(), dir) {
-			return true
-		}
-	}
-	return false
 }
 
 // runs is the program pane's command starts, run or left at the prompt,

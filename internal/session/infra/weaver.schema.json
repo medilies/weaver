@@ -12,7 +12,7 @@
       "pattern": "^(/|~/|~$)"
     },
     "repositories": {
-      "description": "Git repositories expected under root, cloned when missing: directory relative to root (\".\" is root itself) → remote.",
+      "description": "Git repositories expected under root, which weaver reports when missing but never clones: directory relative to root (\".\" is root itself) → remote.",
       "type": "object",
       "additionalProperties": {
         "type": "string",

@@ -46,30 +46,6 @@ func TestNewRepo(t *testing.T) {
 	})
 }
 
-func TestRepoContains(t *testing.T) {
-	root, err := domain.NewProjectRoot("/srv/shop")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	back := repo(t, "back", "git@host:back.git")
-
-	for _, dir := range []string{"/srv/shop/back", "/srv/shop/back/src"} {
-		t.Run("contains "+dir, func(t *testing.T) {
-			if !back.Contains(root, dir) {
-				t.Fatalf("got %s outside back, want inside", dir)
-			}
-		})
-	}
-
-	for _, dir := range []string{"/srv/shop", "/srv/shop/backend"} {
-		t.Run("doesn't contain "+dir, func(t *testing.T) {
-			if back.Contains(root, dir) {
-				t.Fatalf("got %s inside back, want outside", dir)
-			}
-		})
-	}
-}
-
 func TestNewRepos(t *testing.T) {
 	t.Run("orders the root first and parents before nested repositories", func(t *testing.T) {
 		repos, err := domain.NewRepos(
