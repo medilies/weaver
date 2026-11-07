@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -42,10 +43,14 @@ quotes and variables don't survive. Choose "Run it" to run it.`,
 			if err != nil {
 				return err
 			}
-			// The shell leaves the ~ of --root=~/dev/shop as typed.
+			// The shell leaves the ~ of --root=~/dev/shop as typed. As in a
+			// config, ~user isn't expanded, nor taken for a relative path.
 			expanded, err := infra.ExpandHome(root)
 			if err != nil {
 				return err
+			}
+			if strings.HasPrefix(expanded, "~") {
+				return fmt.Errorf("--root %s: only a leading ~/ stands for your home directory", root)
 			}
 			request := app.FreezeRequest{Name: name, Root: expanded, WorkingDir: dir}
 			if len(args) == 1 {

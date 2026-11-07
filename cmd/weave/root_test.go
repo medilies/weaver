@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -17,6 +18,17 @@ func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
 	root.SetErr(io.Discard)
 	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {
 		t.Fatalf("got %v, want ErrNoProjectAt from looking up the current directory", err)
+	}
+}
+
+// `weave freeze --root=~bob/x` would otherwise freeze <cwd>/~bob/x: only
+// ~/ is expanded, as in a config.
+func TestFreezeRejectsARootUnderAnotherUsersHome(t *testing.T) {
+	root := newRootCommand(application{})
+	root.SetArgs([]string{"freeze", "--root=~bob/x"})
+	root.SetErr(io.Discard)
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "only a leading ~/") {
+		t.Fatalf("got %v, want the ~bob root rejected", err)
 	}
 }
 
