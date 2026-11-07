@@ -25,7 +25,6 @@ Done against the project's aim of staying simple and small. macOS stays out of s
   - freezing under a symlinked root (Paths)
   - a hint in the error when a restored window's directory is missing (README)
   - the concepts missing from the glossary
-  - unquoted `~` in configs
   - the test gaps
 - **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency, the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, a tmux version check when weave runs, and where `requireTool` lives.
@@ -185,7 +184,6 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 ### Configs
 
 - **Left.** A config file named `shop .yml` or ` shop.yml` lists as `shop`, because `NewProjectName` trims (`file_project_repository.go:64`). `FindByName` then reads `shop.yml`, which is another file or none at all. With both files present, `Names()` lists `shop` twice. Skip, with a warning, any file whose stem isn't exactly the name.
-- **Open.** An unquoted `~` is YAML's null, which decodes as an empty string with no error. `dir: ~` silently means the root, not home, and `root: ~` reports an empty root, although the schema allows `~`. Saving is safe, since it writes `"~"`. Document the quotes, or reject a null `dir:` or `root:` with a hint.
 
 ### Browser
 

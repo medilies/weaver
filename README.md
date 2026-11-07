@@ -163,14 +163,14 @@ windows:
 
 | Field | Meaning |
 | --- | --- |
-| `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. |
+| `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. The home directory itself is `"~"`, in quotes: YAML reads a bare `~` as null. |
 | `env` | Variables for every pane. Values are literal. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
 | `windows[].panes` | Panes in creation order. None: one shell in `root`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes. |
-| `dir` | Where the pane's shell starts, relative to `root` (or absolute, or starting with `~/`). |
+| `dir` | Where the pane's shell starts, relative to `root` (or absolute, or starting with `~/`; `"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |

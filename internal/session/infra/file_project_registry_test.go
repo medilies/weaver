@@ -261,6 +261,28 @@ func TestFileProjectRegistryRejectsInvalidConfigs(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects a bare ~ as the root, which YAML reads as null", func(t *testing.T) {
+		_, err := load(t, "home", "root: ~\n")
+		if !errors.Is(err, infra.ErrUnquotedHome) {
+			t.Fatalf("got %v, want ErrUnquotedHome", err)
+		}
+	})
+
+	t.Run("rejects a bare ~ as a pane's dir, naming the pane", func(t *testing.T) {
+		_, err := load(t, "home", "root: /srv/home\nwindows: [{name: main, panes: [{name: dots, dir: ~}]}]\n")
+		if !errors.Is(err, infra.ErrUnquotedHome) || !strings.Contains(err.Error(), `window "main": pane "dots": dir:`) {
+			t.Fatalf("got %v, want ErrUnquotedHome naming the pane", err)
+		}
+	})
+
+	t.Run("reads a quoted ~ as the home directory", func(t *testing.T) {
+		project, err := load(t, "home", "root: \"~\"\n")
+		home, _ := os.UserHomeDir()
+		if err != nil || project.Root().String() != home {
+			t.Fatalf("got root %v (err %v), want %q", project.Root(), err, home)
+		}
+	})
+
 	t.Run("rejects a pane that both runs and prefills a command", func(t *testing.T) {
 		_, err := load(t, "both", `root: /srv/both
 windows:

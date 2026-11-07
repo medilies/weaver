@@ -23,6 +23,9 @@ var (
 	// ErrUnknownSplitTarget is returned when "split.of" names no pane of
 	// the window.
 	ErrUnknownSplitTarget = errors.New("split.of names no pane of this window")
+	// ErrUnquotedHome is returned for a root or dir written as a bare ~,
+	// which YAML reads as null rather than as the home directory.
+	ErrUnquotedHome = errors.New(`a bare ~ is YAML's null: write "~" in quotes for the home directory`)
 )
 
 // projectFile is the on-disk shape of a project config, e.g.
@@ -81,7 +84,46 @@ func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) 
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return domain.Project{}, ErrTrailingData
 	}
+	if err := file.bareHome(raw); err != nil {
+		return domain.Project{}, err
+	}
 	return file.toProject(name)
+}
+
+// homeFile holds the nodes of the paths in a config, which a bare ~ would
+// quietly leave empty: the root, not the home directory.
+type homeFile struct {
+	Root    yaml.Node `yaml:"root"`
+	Windows []struct {
+		Panes []struct {
+			Dir yaml.Node `yaml:"dir"`
+		} `yaml:"panes"`
+	} `yaml:"windows"`
+}
+
+// bareHome reports a root or pane dir written as a bare ~ in raw, the
+// config f was decoded from.
+func (f projectFile) bareHome(raw []byte) error {
+	var paths homeFile
+	if err := yaml.Unmarshal(raw, &paths); err != nil {
+		return nil // decodeProject already read raw strictly
+	}
+	if isBareHome(paths.Root) {
+		return fmt.Errorf("root: %w", ErrUnquotedHome)
+	}
+	for i, window := range paths.Windows {
+		for j, pane := range window.Panes {
+			if isBareHome(pane.Dir) {
+				w := f.Windows[i]
+				return fmt.Errorf("window %q: pane %s: dir: %w", w.Name, w.Panes[j].ref(j), ErrUnquotedHome)
+			}
+		}
+	}
+	return nil
+}
+
+func isBareHome(node yaml.Node) bool {
+	return node.Kind == yaml.ScalarNode && node.Tag == "!!null" && node.Value == "~"
 }
 
 func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) {
