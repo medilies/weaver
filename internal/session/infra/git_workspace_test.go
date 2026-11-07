@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/domain"
 	"github.com/medilies/weaver/internal/session/infra"
@@ -32,6 +33,7 @@ func bareRepository(t *testing.T) string {
 	requireTool(t, "git")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull) // also shuts out $XDG_CONFIG_HOME/git/config
 	remote := filepath.Join(t.TempDir(), "remote.git")
 	if out, err := exec.Command("git", "init", "--bare", "-q", remote).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, out)
@@ -200,6 +202,73 @@ func TestGitWorkspaceDetect(t *testing.T) {
 			t.Fatalf("got %q, want none", got)
 		}
 	})
+
+	t.Run("drops the credentials of an https remote", func(t *testing.T) {
+		root := t.TempDir()
+		gitInit(t, filepath.Join(root, "back"), "https://ghp_token@github.com/me/back.git")
+		gitInit(t, filepath.Join(root, "front"), "https://me:secret@github.com/me/front.git")
+
+		want := []string{"back https://github.com/me/back.git", "front https://github.com/me/front.git"}
+		if got := detect(t, root); !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("keeps the user of an ssh remote", func(t *testing.T) {
+		root := t.TempDir()
+		gitInit(t, root, "ssh://git@host/app.git")
+
+		if got, want := detect(t, root), []string{". ssh://git@host/app.git"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("skips a submodule, which its superproject brings", func(t *testing.T) {
+		t.Setenv("GIT_AUTHOR_NAME", "test")
+		t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+		t.Setenv("GIT_COMMITTER_NAME", "test")
+		t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+		lib := t.TempDir()
+		root := t.TempDir()
+		gitInit(t, lib, "")
+		gitInit(t, root, "git@host:app.git")
+		for _, args := range [][]string{
+			{"-C", lib, "commit", "-q", "--allow-empty", "-m", "lib"},
+			{"-C", root, "-c", "protocol.file.allow=always", "submodule", "add", "-q", lib, "lib"},
+		} {
+			if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+				t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+			}
+		}
+
+		if got, want := detect(t, root), []string{". git@host:app.git"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("finds a root that is itself a submodule", func(t *testing.T) {
+		t.Setenv("GIT_AUTHOR_NAME", "test")
+		t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+		t.Setenv("GIT_COMMITTER_NAME", "test")
+		t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+		proj := t.TempDir()
+		mono := t.TempDir()
+		gitInit(t, proj, "")
+		gitInit(t, mono, "git@host:mono.git")
+		for _, args := range [][]string{
+			{"-C", proj, "commit", "-q", "--allow-empty", "-m", "proj"},
+			{"-C", mono, "-c", "protocol.file.allow=always", "submodule", "add", "-q", proj, "proj"},
+		} {
+			if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+				t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+			}
+		}
+
+		// The submodule's origin is the repository it was added from.
+		if got, want := detect(t, filepath.Join(mono, "proj")), []string{". " + proj}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
 }
 
 func TestGitWorkspaceWorkingTree(t *testing.T) {
@@ -274,6 +343,24 @@ func TestGitWorkspaceWorkingTree(t *testing.T) {
 	t.Run("finds none outside a repository", func(t *testing.T) {
 		if _, ok := workspace.WorkingTree(t.TempDir()); ok {
 			t.Fatal("got a working tree, want none")
+		}
+	})
+
+	t.Run("gives up on time while git's children still run", func(t *testing.T) {
+		slow := t.TempDir()
+		gitInit(t, slow, "")
+		hook := filepath.Join(t.TempDir(), "fsmonitor")
+		if err := os.WriteFile(hook, []byte("#!/bin/sh\nsleep 5\n"), 0o700); err != nil {
+			t.Fatalf("writing hook: %v", err)
+		}
+		if out, err := exec.Command("git", "-C", slow, "config", "core.fsmonitor", hook).CombinedOutput(); err != nil {
+			t.Fatalf("git config: %v: %s", err, out)
+		}
+
+		start := time.Now()
+		workspace.WorkingTree(slow)
+		if took := time.Since(start); took > 3*time.Second {
+			t.Fatalf("took %s, want about a second", took)
 		}
 	})
 }

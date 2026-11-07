@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,8 +70,12 @@ const workingTreeTimeout = time.Second
 func (w GitWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), workingTreeTimeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", dir,
-		"status", "--porcelain=v2", "--branch").Output()
+	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", dir,
+		"status", "--porcelain=v2", "--branch")
+	// git's children, such as a submodule's status or an fsmonitor hook,
+	// inherit its pipes: once git is killed, don't wait for them too.
+	cmd.WaitDelay = 100 * time.Millisecond
+	out, err := cmd.Output()
 	if err != nil {
 		return domain.WorkingTree{}, false
 	}
@@ -103,7 +108,8 @@ func (w GitWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
 
 // Detect implements domain.RepoDetector. A directory counts only when
 // it is a repository's top level (a project's subdirectory inside its
-// repository isn't another repository) and has an origin remote.
+// repository isn't another repository), isn't a submodule, which its
+// root brings as their superproject, and has an origin remote.
 func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Repos, error) {
 	entries, err := os.ReadDir(root.String())
 	if errors.Is(err, os.ErrNotExist) {
@@ -118,9 +124,13 @@ func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Repos, error) {
 			dirs = append(dirs, entry.Name())
 		}
 	}
+	resolvedRoot, err := filepath.EvalSymlinks(root.String())
+	if err != nil {
+		return domain.Repos{}, err
+	}
 	var repos []domain.Repo
 	for _, dir := range dirs {
-		remote, ok := originOf(filepath.Join(root.String(), dir))
+		remote, ok := originOf(filepath.Join(root.String(), dir), resolvedRoot)
 		if !ok {
 			continue
 		}
@@ -133,19 +143,34 @@ func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Repos, error) {
 	return domain.NewRepos(repos...)
 }
 
-// originOf is the origin remote of the repository whose top level is dir.
-func originOf(dir string) (string, bool) {
-	top, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+// originOf is the origin remote of the repository whose top level is dir,
+// unless it is a submodule of root, which brings it. root is resolved.
+func originOf(dir, root string) (string, bool) {
+	// A second line is the superproject of a submodule.
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--show-toplevel", "--show-superproject-working-tree").Output()
 	if err != nil {
 		return "", false
 	}
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	resolved, err := filepath.EvalSymlinks(dir)
-	if err != nil || strings.TrimSpace(string(top)) != resolved {
+	if err != nil || lines[0] != resolved || len(lines) > 1 && lines[1] == root {
 		return "", false
 	}
 	remote, err := exec.Command("git", "-C", dir, "remote", "get-url", "origin").Output()
 	if err != nil {
 		return "", false
 	}
-	return strings.TrimSpace(string(remote)), true
+	return withoutCredentials(strings.TrimSpace(string(remote))), true
+}
+
+// withoutCredentials drops the user info of an http(s) remote, which
+// configs would otherwise keep: a token is often the user name. An ssh
+// user, such as git@, isn't a secret and stays.
+func withoutCredentials(remote string) string {
+	u, err := url.Parse(remote)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.User == nil {
+		return remote
+	}
+	u.User = nil
+	return u.String()
 }
