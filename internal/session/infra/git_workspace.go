@@ -76,7 +76,7 @@ func (w GitWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
 	// inherit its pipes: once git is killed, don't wait for them too.
 	cmd.WaitDelay = 100 * time.Millisecond
 	out, err := cmd.Output()
-	if err != nil {
+	if err != nil && !errors.Is(err, exec.ErrWaitDelay) { // git itself finished
 		return domain.WorkingTree{}, false
 	}
 	tree := domain.DetachedHead()
@@ -108,8 +108,8 @@ func (w GitWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
 
 // Detect implements domain.RepoDetector. A directory counts only when
 // it is a repository's top level (a project's subdirectory inside its
-// repository isn't another repository), isn't a submodule, which its
-// root brings as their superproject, and has an origin remote.
+// repository isn't another repository), isn't a submodule of the root,
+// which brings it, and has an origin remote.
 func (w GitWorkspace) Detect(root domain.ProjectRoot) (domain.Repos, error) {
 	entries, err := os.ReadDir(root.String())
 	if errors.Is(err, os.ErrNotExist) {
