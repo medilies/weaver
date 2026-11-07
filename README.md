@@ -20,7 +20,7 @@ go install github.com/medilies/weaver/cmd/weave@latest   # puts weave in ~/go/bi
 weave freeze          # register the project in the current directory, through forms
 weave freeze scratch  # same, starting from the windows, panes and commands of the running session scratch
 weave freeze .        # same, from the session you're in
-weave nimbus          # start or attach the nimbus session, from anywhere
+weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
 weave                 # browse the projects, to open, freeze, edit, kill or delete them
 weave edit nimbus     # edit its config in $VISUAL or $EDITOR; only a valid config is saved

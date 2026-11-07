@@ -28,9 +28,9 @@ func NewHuhForms() HuhForms {
 }
 
 // Confirm implements app.Confirmer, as a dialog in the middle of the
-// screen. Esc answers No, as every question asked so has No leave things
-// as they are. Declining to replace a registered project ends the freeze,
-// as Ctrl+C would.
+// screen. Esc answers No: for every question asked this way, No leaves
+// things as they are. Declining to replace a registered project ends the
+// freeze, as Ctrl+C would.
 func (HuhForms) Confirm(question string) (bool, error) {
 	yes := false
 	keys := huh.NewDefaultKeyMap()
@@ -339,7 +339,7 @@ type paneAnswers struct {
 	direction, size string
 	before          string // command lines
 	command         string
-	run             bool // run the command, rather than only type it
+	run             bool // run the command, rather than prefill it
 	note            string
 	env             string
 	another         bool // add another pane to the window

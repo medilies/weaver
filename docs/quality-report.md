@@ -2,7 +2,7 @@
 
 Date: 2026-11-06, on `main` at `cc4e803` plus the `Confirm` dialog change, since committed as `b4d0292`.
 
-Revised 2026-11-07. Every finding was re-checked against the code, which hasn't changed since `7f8a02f`:
+Revised 2026-11-07. Every finding was re-checked against the code at `7f8a02f`, and line numbers in the findings refer to that commit:
 
 - The old #4 was mostly wrong and its fix unsafe. It is now #14, with a new fix.
 - The `confirmHelp` item was out of date, and several other fixes changed.
@@ -12,7 +12,7 @@ On 2026-11-06, `go build ./...`, `go vet ./...`, `go test ./...` and `golangci-l
 
 ## Triage
 
-Done 2026-11-07, against the project's aim of staying simple and small. macOS stays out of scope until it has users, and so does making sure weave works on tmux 3.2 (see Tooling). Severity is High, Med or Low. Fix size is XS (a line or two), S (up to about 30 lines plus a test) or M (several layers, or guesswork). Each item is **Fixed**, **Deferred** (until the idea named, or the fix named), **Open** (worth doing, not done yet) or **Left** (not worth the code).
+Done 2026-11-07, against the project's aim of staying simple and small. macOS stays out of scope until it has users, and so do making sure weave works on tmux 3.2 (see Tooling) and the git edge cases the follow-up reviews found. Severity is High, Med or Low. Fix size is XS (a line or two), S (up to about 30 lines plus a test) or M (several layers, or guesswork). Each item is **Fixed**, **Deferred** (until the idea named, or the fix named), **Open** (worth doing, not done yet), **Left** (not worth the code) or **Ignored** (out of scope, as macOS).
 
 The fixes were checked with Go 1.26.10: `go build`, `go vet`, `go test` and `golangci-lint` pass. The freeze form, the browser's Esc and `weave kill` under `run-shell` were also checked by hand in a throwaway tmux server.
 
@@ -35,7 +35,7 @@ The fixes were checked with Go 1.26.10: `go build`, `go vet`, `go test` and `gol
 | 14 | `env:` and `note:` panes skip `default-command` | Low | M | **Deferred** to config idea #5 |
 | 15 | `weave kill` in a session named like a project | By design | — | **Deferred** to config idea #6 |
 | 12 | Unreachable server counts as not running | Low | S, but tied to tmux's error wording | **Left** |
-| 16 | macOS config location | — | — | Ignored |
+| 16 | macOS config location | — | — | **Ignored** |
 
 Corrections to the findings below:
 
@@ -46,15 +46,16 @@ Corrections to the findings below:
 
 ### Other sections
 
-- **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item, the `Problem` comment, `specs.md`, tests before releasing, the `Confirm` dialog items, and the marked minor items and test gaps.
-- **Open:** `#` in pane labels (`#{q/h:…}` works on tmux 3.4), the concepts missing from the glossary, the browser offering to kill a session that isn't running, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
+- **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item (but see restoring below), the `Problem` comment, `specs.md`, tests before releasing, the `Confirm` dialog items, and the marked minor items and test gaps.
+- **Open:** a hint in the error when a restored window's directory is missing, `#` in pane labels (`#{q/h:…}` works on tmux 3.4), the concepts missing from the glossary, the browser offering to kill a session that isn't running, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
+- **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency (as the report says), the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, and a tmux version check when weave runs.
 
 ### Fixes that wait for an idea
 
 | Fix | Waits for | Why |
 | --- | --- | --- |
-| #14 | config idea #5 secrets (and #7 `wait`) | All three change the end of the pane startup script (`shellCommand`). |
+| #14 | config idea #5 secrets (and #7 `wait`, if it waits in the script) | They change the end of the pane startup script (`shellCommand`). |
 | #15, and naming the `stop:` key | config idea #6 `start` and `stop` | #6 makes kill load the project, which settles what killing the session you're in means. The glossary bans "stop". |
 | #5, and `Capture`'s three calls per pane | config idea #4 | #4 adds a pane listing with process IDs. Keep `foreground` meaning "the shell is idle": #4 and #6's clean shutdown rely on it. |
 | Form logic moved to `domain` (`ProjectRoot.Relative`) | config idea #2 window `dir` | #2 reworks `PaneDir` and `dirOf`. |
@@ -63,9 +64,21 @@ Corrections to the findings below:
 
 Some fixes come before the ideas that build on them. #3 is groundwork for tasks in popups (config idea #10). #4 comes before focus (#3) and lazy windows (#9), which extend restoration.
 
+### From the follow-up reviews
+
+- **Fixed:**
+  - Esc on "Edit it again?" threw away the user's edits once Esc meant No. The question is now "Discard your changes?", so No and Esc edit again.
+  - A failed save also names the config, not only the temporary file.
+  - A working tree is still read when git finished but a child of it held its output open past `WaitDelay`.
+  - `weave freeze --root=~user/x` is rejected, as such a root is in a config, instead of being read as relative to the current directory.
+- **Ignored**, git edge cases, until a user runs into one:
+  - Freezing offers a linked `git worktree` under the root as a repository of its own.
+  - A root inside a superproject offers that superproject's other submodules.
+  - `withoutCredentials` keeps the credentials of a URL that `url.Parse` rejects, and re-escapes a path that mixes `%2F` with characters needing escapes.
+
 ## Bugs and edge cases
 
-Most severe first, then the ignored ones. Findings marked **Ignored** only affect macOS and are out of scope. They stay listed so they aren't reported again.
+Most severe first, then the ignored ones. Findings marked **Ignored** are out of scope: macOS, tmux 3.2 and git edge cases. They stay listed so they aren't reported again.
 
 ### 1. A `~` typed in the freeze form changes meaning once saved
 
@@ -224,7 +237,7 @@ Don't change `Exists`: pane directories are checked with it, and an empty pane d
 
 **Status:** **Left.**
 
-**Where:** `internal/session/infra/tmux.go:57-59` (`Find`), `:271-273` (`Running`), `:283-285` (`Kill`).
+**Where:** `internal/session/infra/tmux.go:57-59` (`Find`), `:271-273` (`Running`), `:283-285` (`Kill`), and since its fix, `Capture`, so `weave freeze <session>` on a server weave can't reach says the session isn't running.
 
 **Problem:** every exit error is read as "no such session, or no server". But tmux also exits 1 when it can't connect, for example to a socket it may not open. When that happens:
 
@@ -332,7 +345,7 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 ### README
 
 - **Fixed.** "If a step fails, nothing is left half-built" is written about starting a session, but reads as true of restoration too, which it isn't (bug #4). Fixing #4 makes it true for both.
-- **Fixed.** Restoring windows never clones. A repository added to the config while its owned session runs makes `weave <project>` fail with "directory not found" for its window. This is deliberate: `BrowseProjects.warnings` says so, and a test pins the warning. But the README doesn't say so, and the error gives no hint. Either clone the missing repositories that hold the restored panes' directories, or document the behaviour and add a hint to the error.
+- **Fixed** in the README; the error still gives no hint (**Open**). Restoring windows never clones. A repository added to the config while its owned session runs makes `weave <project>` fail with "directory not found" for its window. This is deliberate: `BrowseProjects.warnings` says so, and a test pins the warning. But the README doesn't say so, and the error gives no hint. Either clone the missing repositories that hold the restored panes' directories, or document the behaviour and add a hint to the error.
 - **Fixed.** The architecture diagram leaves out the `SessionFinder` and `SessionLocator` ports.
 - **Fixed.** The name rule (`README.md:99`) leaves out that a name starts with a letter or a digit.
 - **Fixed.** The `split` row doesn't say that `of` takes a pane's name, though the schema does.
@@ -346,13 +359,13 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 
 ## Tooling and release
 
-- **Fixed** with a `toolchain` line, not the fix proposed here; see the triage. `go.mod` says `go 1.26.0`, and setup-go installs exactly the patch it names. CI and release binaries are therefore built with Go 1.26.0, without any of the 1.26.x fixes. Writing `go 1.26` makes setup-go pick the latest 1.26.x, and go.mod stays the one source of the version.
+- **Fixed** with a `toolchain` line, not the fix proposed here; see the triage. `go.mod` says `go 1.26.0`, and setup-go installs exactly the patch it names. CI and release binaries were therefore built with Go 1.26.0, without any of the 1.26.x fixes. Writing `go 1.26` makes setup-go pick the latest 1.26.x, and go.mod stays the one source of the version.
 - **Fixed** for the tests: `release.yml` publishes without running the tests or the linter. It now runs the tests. The linter already runs on every push to `main`.
-- GoReleaser stamps `{{.Version}}` (`0.2.0`), while `go install …@v0.2.0` reports `v0.2.0`. Stamp `{{.Tag}}` to get one form, and update `TestReleaseBuildsReportTheStampedVersion`, which expects `0.2.0`.
-- The changelog filters (`^docs:`, `^test:`, `^chore:`) miss scoped and other types, so `build(deps): …`, `ci: …` and merge commits reach the release notes. If the intent is to drop those, use something like `^(docs|test|chore|ci|build)(\(.+\))?!?:` plus `^Merge`.
-- **Ignored**, tmux 3.2 only, until weave has users there: CI installs only Ubuntu's tmux (3.4). The README's "tmux 3.2 or newer" is untested, and weave doesn't check the version when it runs.
+- **Left.** GoReleaser stamps `{{.Version}}` (`0.2.0`), while `go install …@v0.2.0` reports `v0.2.0`. Stamp `{{.Tag}}` to get one form, and update `TestReleaseBuildsReportTheStampedVersion`, which expects `0.2.0`.
+- **Left.** The changelog filters (`^docs:`, `^test:`, `^chore:`) miss scoped and other types, so `build(deps): …`, `ci: …` and merge commits reach the release notes. If the intent is to drop those, use something like `^(docs|test|chore|ci|build)(\(.+\))?!?:` plus `^Merge`.
+- **Ignored**, tmux 3.2 only, until weave has users there: CI installed only Ubuntu's tmux (3.4), so the README's "tmux 3.2 or newer" was untested. Checking the version when weave runs is **Left**.
 
-  tmux's changelog shows nothing weaver uses that is newer than 3.2: `new-window -b`, which restoration needs, arrived in exactly 3.2. The changelog doesn't say whether 3.2 reads `#` in window names and directories as 3.4 does. A CI job on ubuntu-22.04 (tmux 3.2a) now runs the tests, but a failure there is a hint, not a bug, until a 3.2 user reports one. GitHub will likely retire that runner around April 2027.
+  tmux's changelog shows nothing weaver uses that is newer than 3.2: `new-window -b`, which restoration needs, arrived in exactly 3.2. The changelog doesn't say whether 3.2 reads `#` in window names and directories as 3.4 does. A CI job on ubuntu-22.04 (tmux 3.2a) now runs the tests with `continue-on-error`: a failure there is a hint, not a bug, until a 3.2 user reports one. GitHub will likely retire that runner around April 2027.
 - **Ignored**, macOS only: CI builds only for Linux, although darwin binaries ship.
 
 ## Test gaps
@@ -360,7 +373,7 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 - **Fixed.** No test that a clone failure in `OpenProject` stops the start, meaning `Start` is never called. There is no test for a failed `Restore` either.
 - `TestTmuxStartLeavesNothingWhenAStepFails` only fails inside the first window. A failure in a later window, where cleanup has to kill the session by ID, is not covered.
 - Decoding `~` is only tested for `root`, not for a pane's `dir:`. There is no save/reload test for a relative dir starting with `~` (bug #1).
-- **Fixed.** No test that `ReplaceDocument` and `Save` keep a symlink (bug #2).
+- **Fixed.** No test that `ReplaceDocument` and `Save` keep a symlink (bug #2). `ReplaceDocument` is tested; `Save` shares `writeFileAtomic`.
 - `Capture` isn't tested with a pane started with a command (bug #5) or a foreground job in another directory (#9). Names that differ only by spaces: **Fixed.**
 - `TestTmuxStartPassesTextVerbatim` covers a `#` in window names and directories, but not in pane labels.
 - Untested:
@@ -387,8 +400,8 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 ### `weave edit`
 
 - **Fixed.** An editor that exits non-zero (vim's `:cq`) shows "Error: running vi: exit status 1", without saying whether anything was saved. Reporting it is intentional and tested ("reports an editor that fails" in `editor_test.go`), and git does the same. Keep the error, but add that nothing was saved.
-- If the config is deleted while the editor is open, the edits are lost (`ErrProjectNotFound`).
-- Nothing protects against a lost update from a concurrent `weave freeze`.
+- **Left.** If the config is deleted while the editor is open, the edits are lost (`ErrProjectNotFound`).
+- **Left.** Nothing protects against a lost update from a concurrent `weave freeze`.
 
 ### Freeze and capture
 
@@ -398,7 +411,7 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 
 ### Configs
 
-- A config file named `shop .yml` or ` shop.yml` lists as `shop`, because `NewProjectName` trims (`file_project_repository.go:64`). `FindByName` then reads `shop.yml`, which is another file or none at all. With both files present, `Names()` lists `shop` twice. Skip, with a warning, any file whose stem isn't exactly the name.
+- **Left.** A config file named `shop .yml` or ` shop.yml` lists as `shop`, because `NewProjectName` trims (`file_project_repository.go:64`). `FindByName` then reads `shop.yml`, which is another file or none at all. With both files present, `Names()` lists `shop` twice. Skip, with a warning, any file whose stem isn't exactly the name.
 - An unquoted `~` is YAML's null, which decodes as an empty string with no error. `dir: ~` silently means the root, not home, and `root: ~` reports an empty root, although the schema allows `~`. Saving is safe, since it writes `"~"`. Document the quotes, or reject a null `dir:` or `root:` with a hint.
 - **Fixed.** `NewProjectRoot` (`internal/session/domain/project.go:58`) doesn't reject control characters, while pane dirs and repositories do (`oneLine`).
 - **Fixed.** `writeFileAtomic` doesn't `Sync` the temp file before renaming it. On filesystems without ext4's `auto_da_alloc`, such as XFS, a crash right after a save can leave an empty config.
@@ -409,13 +422,13 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 - **Fixed.** Config errors name Go types, such as "field comand not found in type infra.paneFile" or "cannot unmarshal !!str … into []string". They reach `weave edit`, `weave show` and the browser. Replace `projectFile`, `windowFile`, `paneFile` and `splitFile` with project, window, pane and split.
 - **Fixed.** `Command.Program` (`internal/session/domain/layout.go:278`) misses builtins such as `unsetopt`, `unalias`, `shopt`, `print` and `disown`. It also takes `#` for a program, so a prefill like `# run migrations` warns "program not found: #".
 - The browser asks "Kill X's session…?" for a project that isn't running, then shows "session not running". `BrowseProjects.act` could check `sessions.Find` before asking.
-- After a delete, the browser's cursor jumps to the top of the list, because `act` selects the deleted name. Select its neighbour instead.
+- **Deferred** to browser idea #3. After a delete, the browser's cursor jumps to the top of the list, because `act` selects the deleted name. Select its neighbour instead.
 
 ### Determinism and speed
 
 - **Fixed.** `toRepos` iterates over a map, so with several bad repositories the reported error changes from run to run. Iterate over the sorted keys.
-- The browser rebuilds every overview, one after another, before each view (`browse_projects.go:196`), running `git status` once per project with its own one-second bound. With many projects in large repositories, it takes seconds to appear, and again after each action. Build the overviews concurrently, or under one deadline (see also bug #10).
-- `Capture` runs three `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk.
+- **Deferred** to browser idea #2. The browser rebuilds every overview, one after another, before each view (`browse_projects.go:196`), running `git status` once per project with its own one-second bound. With many projects in large repositories, it takes seconds to appear, and again after each action. Build the overviews concurrently, or under one deadline (see also bug #10).
+- **Deferred** to config idea #4. `Capture` runs three `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing on its own: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk. #4's pane listing is the time to share one.
 
 ### Paths
 

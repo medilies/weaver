@@ -219,7 +219,7 @@ checks, so a failure leaves no session behind.
   `cloneMissing` and `checkDirs`, before `sessions.Start`. A failing
   command stops the open, and nothing is built (a clone already done
   stays, as today). Restoring windows and attaching don't run `start`.
-- `stop`, in `app`: `KillProject` only holds a `SessionKiller` today. It
+- `stop`, in `app`: `KillProject` holds a `SessionKiller` and a `SessionLocator` today. It
   would also load the project from the `ProjectRepository`. When the
   config can't be read, kill anyway, as now: you asked to kill it. When
   a `stop` command fails, still kill the session and report the failure.
