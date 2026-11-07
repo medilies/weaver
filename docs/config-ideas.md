@@ -23,6 +23,7 @@ idea, the section says so.
 | 9 | Lazy windows | `windows[].lazy` | domain, new use case, tmux, CLI, browser | L |
 | 10 | Tasks | `tasks` | all layers, plus tmux popups | L |
 | 11 | Worktree variants | per-variant env | all layers, plus git worktrees | XL |
+| 12 | Hooks and a git plugin | `hooks`, maybe | open use cases, `CommandRunner`, browser | M, plugin apart |
 
 ## 1. Window `env`
 
@@ -203,8 +204,8 @@ same. It does it worse:
 - It runs again each time restoring re-creates its window, and it takes
   up a pane.
 
-`start` runs before anything is built, like the clone and the directory
-checks, so a failure leaves no session behind.
+`start` runs before anything is built, like the directory checks, so a
+failure leaves no session behind.
 
 **Implementation:**
 
@@ -215,10 +216,11 @@ checks, so a failure leaves no session behind.
 - `before` commands don't apply to either list. They are typed into
   interactive shells (`nvm use` is a shell function), while these run in
   `sh`. The project's `env` does apply. Say so in the schema.
-- `start`, in `app`: `OpenProject.start` runs the commands after
-  `cloneMissing` and `checkDirs`, before `sessions.Start`. A failing
-  command stops the open, and nothing is built (a clone already done
-  stays, as today). Restoring windows and attaching don't run `start`.
+- `start`, in `app`: `OpenProject.start` runs the commands before
+  `checkDirs`, so a `start` command can create a pane's directory, as
+  cloning would, and before `sessions.Start`. A failing command stops the
+  open, and nothing is built. Restoring windows and attaching don't run
+  `start`.
 - `stop`, in `app`: `KillProject` holds a `SessionKiller` and a `SessionLocator` today. It
   would also load the project from the `ProjectRepository`. When the
   config can't be read, kill anyway, as now: you asked to kill it. When
@@ -409,8 +411,47 @@ session. This one is mostly open questions:
   another command or flag.
 - **Browser**: variants listed under their project, each with its own
   branch line.
-- **Touches**: `GitWorkspace` (worktree add and remove), tmux, the CLI,
-  completion and the browser.
+- **Touches**: worktree add and remove, tmux, the CLI, completion and
+  the browser. weaver no longer runs git (`0355ed1`), so the worktree half
+  belongs in the git plugin (#12), not in the core.
+
+## 12. Hooks and a git plugin
+
+weaver runs only what a config says, and its core knows nothing of git
+(`5e8f663`, `0355ed1`). What git did for it before (cloning missing
+repositories, the branch line in the browser) can come back without
+coming back into the core: weaver offers hooks, and a git plugin uses
+them.
+
+**Hooks**: commands weaver runs at named moments, written in the config
+like every other command. `start` and `stop` (#6) are the first two,
+built there; this idea only names the general shape. Other moments,
+when a need shows up: a command whose output is a line of the browser's
+summary, with a time limit.
+
+```yaml
+start:
+  - weaver-git clone   # clones the repositories that are missing
+```
+
+**The git plugin**: a separate program, `weaver-git`, not part of
+`weave`. It reads what it needs from the project, `repositories:`
+included, and does the git work: clone what's missing, report the branch,
+maybe add worktrees for #11. Nothing runs unless a config names it.
+
+Open questions:
+
+- What weaver hands a hook: the project's name, root and config path as
+  environment variables (`WEAVER_PROJECT`, `WEAVER_ROOT`)?
+  `weave show` already prints the config.
+- Whether `repositories:` stays in the core, as now (listed, checked, and
+  warned about), or moves to the plugin's own config.
+- Plugins as plain commands in hooks, or `weave git …` finding
+  `weave-git` on `PATH`, as git finds `git-foo`. The second adds
+  dispatch code to the core.
+- Whether hooks go under one `hooks:` key or stay top-level keys, as
+  `start` and `stop` are in #6.
+- *hook* and *plugin* need entries in the glossary before they get code.
 
 ## Left out
 
@@ -444,7 +485,7 @@ session. This one is mostly open questions:
 
 ## Shared groundwork
 
-- `CommandRunner` serves both halves of #6.
+- `CommandRunner` serves both halves of #6, and every hook in #12.
 - The idle-shell check (`foreground`) serves #4 and the clean shutdown
   in #6.
 - A second CLI argument serves #9 and #10: design both together.
