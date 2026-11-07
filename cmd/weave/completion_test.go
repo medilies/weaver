@@ -49,7 +49,7 @@ func (r running) Running() ([]string, error) {
 // being typed, and returns the suggestions.
 func complete(t *testing.T, args ...string) []string {
 	t.Helper()
-	weaver := application{listProjects: app.NewListProjects(registered{"bicyclette", "shop"}, running{"shop"})}
+	weaver := application{listProjects: app.NewListProjects(registered{"nimbus", "shop"}, running{"shop"})}
 	root := newRootCommand(weaver)
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -69,7 +69,7 @@ func complete(t *testing.T, args ...string) []string {
 func TestProjectNameCompletion(t *testing.T) {
 	t.Run("weave suggests projects, noting running ones, besides commands", func(t *testing.T) {
 		got := complete(t, "")
-		for _, want := range []string{"bicyclette", "shop\trunning", "list\tList registered projects and whether their session runs"} {
+		for _, want := range []string{"nimbus", "shop\trunning", "list\tList registered projects and whether their session runs"} {
 			if !slices.Contains(got, want) {
 				t.Fatalf("got %q, want it to contain %q", got, want)
 			}
@@ -78,7 +78,7 @@ func TestProjectNameCompletion(t *testing.T) {
 
 	for _, command := range []string{"kill", "show"} {
 		t.Run(command+" suggests projects only", func(t *testing.T) {
-			if got, want := complete(t, command, ""), []string{"bicyclette", "shop\trunning"}; !slices.Equal(got, want) {
+			if got, want := complete(t, command, ""), []string{"nimbus", "shop\trunning"}; !slices.Equal(got, want) {
 				t.Fatalf("got %q, want %q", got, want)
 			}
 		})
@@ -92,7 +92,7 @@ func TestProjectNameCompletion(t *testing.T) {
 }
 
 func TestListCommand(t *testing.T) {
-	weaver := application{listProjects: app.NewListProjects(registered{"bicyclette", "shop"}, running{"shop"})}
+	weaver := application{listProjects: app.NewListProjects(registered{"nimbus", "shop"}, running{"shop"})}
 	root := newRootCommand(weaver)
 	var out bytes.Buffer
 	root.SetOut(&out)
@@ -102,7 +102,7 @@ func TestListCommand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got, want := out.String(), "bicyclette  -\nshop        running\n"; got != want {
+	if got, want := out.String(), "nimbus  -\nshop        running\n"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }

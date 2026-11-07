@@ -17,8 +17,8 @@ func (r runningSessions) Running() ([]string, error) {
 
 func TestListProjects(t *testing.T) {
 	configs := inMemoryRepository{projects: map[string]domain.Project{
-		"shop":       shop(t),
-		"bicyclette": project(t, "bicyclette"),
+		"shop":   shop(t),
+		"nimbus": project(t, "nimbus"),
 	}}
 
 	statuses, err := app.NewListProjects(configs, runningSessions{"shop", "scratch"}).Handle()
@@ -34,7 +34,7 @@ func TestListProjects(t *testing.T) {
 		}
 		got = append(got, s.Name().String()+" "+state)
 	}
-	if want := []string{"bicyclette not running", "shop running"}; !slices.Equal(got, want) {
+	if want := []string{"nimbus not running", "shop running"}; !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }

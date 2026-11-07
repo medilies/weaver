@@ -54,7 +54,7 @@ func mustLoad(t *testing.T, name, doc string) domain.Project {
 func TestFileProjectRepositorySave(t *testing.T) {
 	t.Setenv("HOME", "/home/someone")
 
-	for _, fixture := range []string{"bicyclette", "shop"} {
+	for _, fixture := range []string{"nimbus", "shop"} {
 		t.Run("writes the "+fixture+" config back unchanged", func(t *testing.T) {
 			want, err := os.ReadFile(filepath.Join("testdata", fixture+".yml"))
 			if err != nil {
@@ -204,9 +204,9 @@ func TestJSONSchema(t *testing.T) {
 	schema := schemaFor(t)
 
 	saved := map[string]domain.Project{
-		"bicyclette": loadFixture(t, "bicyclette"),
-		"shop":       loadFixture(t, "shop"),
-		"grid":       mustLoad(t, "grid", gridDoc),
+		"nimbus": loadFixture(t, "nimbus"),
+		"shop":   loadFixture(t, "shop"),
+		"grid":   mustLoad(t, "grid", gridDoc),
 	}
 	for name, project := range saved {
 		t.Run("declares every field of the saved "+name+" config", func(t *testing.T) {

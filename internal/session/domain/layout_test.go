@@ -188,17 +188,17 @@ func TestPaneStartup(t *testing.T) {
 	})
 
 	t.Run("a prefilling pane leaves its command at the prompt", func(t *testing.T) {
-		startup := domain.NewPane().Prefilling(command(t, "bicyclette emulator")).Startup()
+		startup := domain.NewPane().Prefilling(command(t, "nimbus emulator")).Startup()
 		if startup.Submits() {
 			t.Fatal("got a submitted command, want it left at the prompt")
 		}
 	})
 
 	t.Run("the last of running and prefilling wins", func(t *testing.T) {
-		pane := domain.NewPane().Running(command(t, "task dev")).Prefilling(command(t, "bicyclette emulator"))
+		pane := domain.NewPane().Running(command(t, "task dev")).Prefilling(command(t, "nimbus emulator"))
 		cmd, _ := pane.Startup().Command()
-		if got := cmd.String(); got != "bicyclette emulator" {
-			t.Fatalf("got %q, want %q", got, "bicyclette emulator")
+		if got := cmd.String(); got != "nimbus emulator" {
+			t.Fatalf("got %q, want %q", got, "nimbus emulator")
 		}
 	})
 }

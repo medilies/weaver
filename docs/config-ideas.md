@@ -59,10 +59,10 @@ then the pane, the last one winning.
       - name: psql
         dir: .
         split: { direction: below }
-        command: bicyclette psql
+        command: nimbus psql
 ```
 
-The bicyclette example in the README sets `dir: api` and `dir: app` twice
+The nimbus example in the README sets `dir: api` and `dir: app` twice
 each. A pane's `dir` replaces its window's. Both are relative to `root`,
 not to each other, so a `dir` reads the same wherever it appears.
 
@@ -315,12 +315,12 @@ windows:
   - name: emulator
     lazy: true
     panes:
-      - prefill: bicyclette emulator
+      - prefill: nimbus emulator
 ```
 
-A lazy window is in the config, but `weave bicyclette` doesn't create
+A lazy window is in the config, but `weave nimbus` doesn't create
 it. Heavy things (an emulator, containers, a log tail) start only when
-you ask: `weave bicyclette emulator`, or from the browser.
+you ask: `weave nimbus emulator`, or from the browser.
 
 **Implementation:**
 

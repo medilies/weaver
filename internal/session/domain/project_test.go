@@ -26,7 +26,7 @@ func TestNewProjectName(t *testing.T) {
 		}
 	})
 
-	for _, valid := range []string{"bicyclette", "my-app_2", "2fa"} {
+	for _, valid := range []string{"nimbus", "my-app_2", "2fa"} {
 		t.Run("accepts "+valid, func(t *testing.T) {
 			if _, err := domain.NewProjectName(valid); err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -87,12 +87,12 @@ func TestNewProjectRoot(t *testing.T) {
 }
 
 func TestProjectWindows(t *testing.T) {
-	project := domain.NewProject(projectName(t, "didata"), projectRoot(t, "/home/ilies/dev/didata"))
+	project := domain.NewProject(projectName(t, "globex"), projectRoot(t, "/home/ilies/dev/globex"))
 
 	t.Run("opens one window named after the project by default", func(t *testing.T) {
 		windows := project.Windows()
-		if len(windows) != 1 || windows[0].Name().String() != "didata" {
-			t.Fatalf("got %d windows, want one named didata", len(windows))
+		if len(windows) != 1 || windows[0].Name().String() != "globex" {
+			t.Fatalf("got %d windows, want one named globex", len(windows))
 		}
 	})
 

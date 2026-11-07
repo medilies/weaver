@@ -1,8 +1,8 @@
 # Weaver
 
-Look how my tmux scripts work with didata and bicyclette
+Look how my tmux scripts work with globex and nimbus
 
-I should be able to call `weaver didata` or `weaver bicyclette` from anywhere and start or attach to their tmux session like the current behavior
+I should be able to call `weaver globex` or `weaver nimbus` from anywhere and start or attach to their tmux session like the current behavior
 
 I should be to config json per project. The JSON will contain:
 

@@ -96,11 +96,11 @@ func TestFileProjectRepositoryFindByName(t *testing.T) {
 }
 
 func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
-	bicyclette := loadFixture(t, "bicyclette")
+	nimbus := loadFixture(t, "nimbus")
 
 	t.Run("reads windows in order", func(t *testing.T) {
 		var names []string
-		for _, w := range bicyclette.Windows() {
+		for _, w := range nimbus.Windows() {
 			names = append(names, w.Name().String())
 		}
 		if want := []string{"api", "app", "repo"}; !slices.Equal(names, want) {
@@ -110,7 +110,7 @@ func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
 
 	t.Run("reads panes in creation order", func(t *testing.T) {
 		var names []string
-		for _, p := range bicyclette.Windows()[0].Panes() {
+		for _, p := range nimbus.Windows()[0].Panes() {
 			names = append(names, p.Name().String())
 		}
 		if want := []string{"api shell", "task dev", "psql"}; !slices.Equal(names, want) {
@@ -119,27 +119,27 @@ func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
 	})
 
 	t.Run("reads pane directories", func(t *testing.T) {
-		if got := paneNamed(t, bicyclette, "api", "api shell").Dir().String(); got != "api" {
+		if got := paneNamed(t, nimbus, "api", "api shell").Dir().String(); got != "api" {
 			t.Fatalf("got %q, want %q", got, "api")
 		}
 	})
 
 	t.Run("reads a split's direction and size", func(t *testing.T) {
-		split, _ := paneNamed(t, bicyclette, "api", "task dev").Split()
+		split, _ := paneNamed(t, nimbus, "api", "task dev").Split()
 		if split.Direction() != domain.Right || split.Size().String() != "40%" {
 			t.Fatalf("got %v %q, want right 40%%", split.Direction(), split.Size().String())
 		}
 	})
 
 	t.Run("defaults a split's target to the previous pane", func(t *testing.T) {
-		split, _ := paneNamed(t, bicyclette, "api", "psql").Split()
+		split, _ := paneNamed(t, nimbus, "api", "psql").Split()
 		if split.Of() != 1 {
 			t.Fatalf("got pane #%d, want #2 (task dev)", split.Of()+1)
 		}
 	})
 
 	t.Run("reads a command to run", func(t *testing.T) {
-		startup := paneNamed(t, bicyclette, "api", "task dev").Startup()
+		startup := paneNamed(t, nimbus, "api", "task dev").Startup()
 		cmd, _ := startup.Command()
 		if cmd.String() != "task dev" || !startup.Submits() {
 			t.Fatalf("got %q (submits: %v), want task dev submitted", cmd.String(), startup.Submits())
@@ -147,15 +147,15 @@ func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
 	})
 
 	t.Run("reads a command to leave at the prompt", func(t *testing.T) {
-		startup := paneNamed(t, bicyclette, "app", "emulator").Startup()
+		startup := paneNamed(t, nimbus, "app", "emulator").Startup()
 		cmd, _ := startup.Command()
-		if cmd.String() != "bicyclette emulator" || startup.Submits() {
-			t.Fatalf("got %q (submits: %v), want bicyclette emulator not submitted", cmd.String(), startup.Submits())
+		if cmd.String() != "nimbus emulator" || startup.Submits() {
+			t.Fatalf("got %q (submits: %v), want nimbus emulator not submitted", cmd.String(), startup.Submits())
 		}
 	})
 
 	t.Run("gives a window without panes one shell in the root", func(t *testing.T) {
-		panes := bicyclette.Windows()[2].Panes()
+		panes := nimbus.Windows()[2].Panes()
 		if len(panes) != 1 || !panes[0].Dir().IsRoot() {
 			t.Fatalf("got %d panes, want one shell in the root", len(panes))
 		}
@@ -332,7 +332,7 @@ func writeConfigs(t *testing.T, files ...string) string {
 func TestFileProjectRepositoryNames(t *testing.T) {
 	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
 		dir := t.TempDir()
-		for _, file := range []string{"shop.yml", "bicyclette.yml", "a-b.yml", "a.yml", "weaver.schema.json", "notes.txt", "old.json", "blog.yaml", "show.yml"} {
+		for _, file := range []string{"shop.yml", "nimbus.yml", "a-b.yml", "a.yml", "weaver.schema.json", "notes.txt", "old.json", "blog.yaml", "show.yml"} {
 			if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
 				t.Fatalf("writing fixture: %v", err)
 			}
@@ -349,7 +349,7 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 		for _, name := range names {
 			got = append(got, name.String())
 		}
-		if want := []string{"a", "a-b", "bicyclette", "shop"}; !slices.Equal(got, want) {
+		if want := []string{"a", "a-b", "nimbus", "shop"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})

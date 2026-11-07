@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=./weaver.schema.json
-root: ~/dev/bicyclette
+root: ~/dev/nimbus
 repositories:
-  .: https://github.com/medilies/bicyclette.git
+  .: https://github.com/medilies/nimbus.git
 windows:
   - name: api
     panes:
@@ -16,7 +16,7 @@ windows:
       - name: psql
         split:
           direction: below
-        command: bicyclette psql
+        command: nimbus psql
   - name: app
     panes:
       - name: app shell
@@ -26,10 +26,10 @@ windows:
         split:
           direction: right
           size: 40%
-        command: bicyclette app
+        command: nimbus app
       - name: emulator
         split:
           direction: below
           size: 30%
-        prefill: bicyclette emulator
+        prefill: nimbus emulator
   - name: repo

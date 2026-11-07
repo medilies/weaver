@@ -20,14 +20,14 @@ go install github.com/medilies/weaver/cmd/weave@latest   # puts weave in ~/go/bi
 weave freeze          # register the project in the current directory, through forms
 weave freeze scratch  # same, starting from the windows, panes and commands of the running session scratch
 weave freeze .        # same, from the session you're in
-weave bicyclette      # start or attach the bicyclette session, from anywhere
+weave nimbus          # start or attach the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
 weave                 # browse the projects, to open, freeze, edit, kill or delete them
-weave edit bicyclette # edit its config in $VISUAL or $EDITOR; only a valid config is saved
-weave kill bicyclette # kill the session and everything running in it
+weave edit nimbus     # edit its config in $VISUAL or $EDITOR; only a valid config is saved
+weave kill nimbus     # kill the session and everything running in it
 weave kill            # same, for the session you're in
 weave list            # registered projects, and which sessions run
-weave show bicyclette # print its config file
+weave show nimbus     # print its config file
 ```
 
 To complete project names with Tab, load weave's completion in your
@@ -108,9 +108,9 @@ root: ~/dev/weaver
 A fuller one, with three windows:
 
 ```yaml
-root: ~/dev/bicyclette
+root: ~/dev/nimbus
 repositories:
-  .: https://github.com/medilies/bicyclette.git
+  .: https://github.com/medilies/nimbus.git
 windows:
   - name: api
     panes:
@@ -122,7 +122,7 @@ windows:
         command: task dev
       - name: psql
         split: { direction: below }
-        command: bicyclette psql
+        command: nimbus psql
   - name: app
     panes:
       - name: app shell
@@ -130,10 +130,10 @@ windows:
       - name: flutter run
         dir: app
         split: { direction: right, size: 40% }
-        command: bicyclette app
+        command: nimbus app
       - name: emulator
         split: { direction: below, size: 30% }
-        prefill: bicyclette emulator
+        prefill: nimbus emulator
   - name: repo
 ```
 
