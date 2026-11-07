@@ -201,6 +201,15 @@ func TestOpenProject(t *testing.T) {
 		}
 	})
 
+	t.Run("says how to fix a missing directory", func(t *testing.T) {
+		workspace := everything()
+		delete(workspace.dirs, "/srv/shop/logs")
+		err := openShop(t, &fakeSessions{}, workspace)
+		if err == nil || !strings.HasSuffix(err.Error(), "/srv/shop/logs (create it, or change it with weave edit shop)") {
+			t.Fatalf("got %v, want a hint to create it or edit shop", err)
+		}
+	})
+
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		configs := inMemoryRegistry{projects: map[string]domain.Project{}}
 		err := app.NewOpenProject(configs, &fakeSessions{}, everything()).Handle("shop")

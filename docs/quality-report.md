@@ -20,9 +20,7 @@ Done against the project's aim of staying simple and small. macOS stays out of s
 
 ### Other sections
 
-- **Open:**
-  - a hint in the error when a restored window's directory is missing (README)
-  - the test gaps
+- **Open:** the test gaps.
 - **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency, the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, a tmux version check when weave runs, and where `requireTool` lives.
 
@@ -134,10 +132,6 @@ Don't ask for confirmation, so `weave kill` stays usable in scripts. Leave `weav
 - `ParseDirection` and the root accept surrounding whitespace, and the schema doesn't.
 
 A schema stricter than the parser is the safe way round: the editor warns, and weave still loads the config. Tightening the parsers could reject configs in the released format that load today, and every other value object trims its input (`oneLine`).
-
-### README
-
-- **Open.** A pane directory added to the config while its owned session runs makes `weave <project>` fail with "directory not found" for the restored window. This is deliberate, and the README and the browser's warnings say so. The error itself could hint that the directory has to be created first.
 
 ## Tooling and release
 

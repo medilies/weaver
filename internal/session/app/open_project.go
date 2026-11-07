@@ -148,7 +148,7 @@ func (uc OpenProject) open(project domain.Project) error {
 // start checks pane directories exist before changing anything.
 func (uc OpenProject) start(project domain.Project) error {
 	plan := project.Plan()
-	if err := uc.checkDirs(plan); err != nil {
+	if err := uc.checkDirs(project.Name(), plan); err != nil {
 		return err
 	}
 	return uc.sessions.Start(plan)
@@ -163,30 +163,33 @@ func (uc OpenProject) restore(project domain.Project, session domain.RunningSess
 		return nil
 	}
 	for _, placement := range placements {
-		if err := uc.checkWindowDirs(placement.Window()); err != nil {
+		if err := uc.checkWindowDirs(project.Name(), placement.Window()); err != nil {
 			return err
 		}
 	}
 	return uc.sessions.Restore(project.Name(), placements)
 }
 
-func (uc OpenProject) checkDirs(plan domain.SessionPlan) error {
+func (uc OpenProject) checkDirs(project domain.ProjectName, plan domain.SessionPlan) error {
 	for _, window := range plan.Windows() {
-		if err := uc.checkWindowDirs(window); err != nil {
+		if err := uc.checkWindowDirs(project, window); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (uc OpenProject) checkWindowDirs(window domain.WindowPlan) error {
+// checkWindowDirs checks the window's pane directories exist. Its error
+// says how to fix a missing one, since weaver creates none.
+func (uc OpenProject) checkWindowDirs(project domain.ProjectName, window domain.WindowPlan) error {
 	for _, pane := range window.Panes() {
 		exists, err := uc.workspace.Exists(pane.Dir())
 		if err != nil {
 			return err
 		}
 		if !exists {
-			return fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingDirectory, pane.Dir())
+			return fmt.Errorf("%s: %w: %s (create it, or change it with weave edit %s)",
+				where(window, pane), ErrMissingDirectory, pane.Dir(), project)
 		}
 	}
 	return nil
