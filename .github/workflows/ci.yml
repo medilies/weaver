@@ -22,7 +22,11 @@ jobs:
           version: v2.14.0
 
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 22.04 ships tmux 3.2a, the oldest the README supports.
+        os: [ubuntu-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

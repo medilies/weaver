@@ -17,6 +17,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # Nothing is published that fails the tests.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux
+      - run: go test ./...
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
