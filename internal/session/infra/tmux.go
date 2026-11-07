@@ -150,7 +150,9 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // its window or session gets a number. The job in the foreground of a
 // pane's terminal, if any, is typed at its prompt but not run: ps rebuilds
 // it from its arguments, losing quotes, pipes and variables, so the user
-// checks it first. The pane weaver runs in gets none: its job is weaver.
+// checks it first. The pane then keeps the shell's directory, where the
+// job runs from, not the job's, where /proc tells them apart. The pane weaver runs in gets none: its job
+// is weaver.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} #{window_name}")
 	if _, exited := errors.AsType[*exec.ExitError](err); exited {
@@ -202,13 +204,18 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 			return nil, err
 		}
 		pane := domain.NewPane()
-		if dir, err := domain.NewPaneDir(path); err == nil {
-			pane = pane.In(dir)
-		}
 		if target != t.opts.Pane {
 			if cmd, ok := foreground(pid); ok {
 				pane = pane.Prefilling(cmd)
+				// tmux reports the job's directory, but the prefill runs
+				// from the shell's.
+				if cwd, err := os.Readlink("/proc/" + pid + "/cwd"); err == nil {
+					path = cwd
+				}
 			}
+		}
+		if dir, err := domain.NewPaneDir(path); err == nil {
+			pane = pane.In(dir)
 		}
 		label = strings.TrimSpace(label)
 		if _, err := domain.NewPaneName(label); err != nil && len(order) > 1 {

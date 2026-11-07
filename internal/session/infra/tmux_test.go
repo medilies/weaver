@@ -582,6 +582,20 @@ func TestTmuxCapture(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps the directory of the shell a job left", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "moved", "-c", root)
+		server.query(t, "send-keys", "-t", "moved:", "(cd api && exec sleep 300)", "Enter")
+		server.busy(t, "moved", "sleep")
+
+		windows, err := server.tmux().Capture("moved")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := windows[0].Panes()[0].Dir(); got.String() != root {
+			t.Fatalf("got dir %q, want the shell's %q", got, root)
+		}
+	})
+
 	t.Run("gives the pane weaver runs in no command", func(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "self")
 		pane := server.query(t, "display-message", "-p", "-t", "self:", "#{pane_id}")

@@ -31,7 +31,7 @@ The fixes were checked with Go 1.26.10: `go build`, `go vet`, `go test` and `gol
 | 10 | `WorkingTree` outlives its bound | Low | XS | **Removed** with the working tree |
 | 11 | 0x0 terminal size | Low | XS | **Fixed** |
 | 13 | Submodules offered as repositories | Low | XS | **Removed**: freezing finds no repositories |
-| 9 | Pane directory from the foreground job | Low | S | **Open**, optional |
+| 9 | Pane directory from the foreground job | Low | S | **Fixed** |
 | 5 | Pane started with a command frozen as a shell | Low | M | **Deferred** to config idea #4 |
 | 7 | Empty directory counts as cloned | Low | S | **Removed** with `repositories:` |
 | 14 | `env:` and `note:` panes skip `default-command` | Low | M | **Deferred** to config idea #5 |
@@ -210,7 +210,7 @@ Don't change `Exists`: pane directories are checked with it, and an empty pane d
 
 ### 9. Freezing takes a pane's directory from its foreground job, not its shell
 
-**Status:** **Open**, optional.
+**Status:** **Fixed.** Without `/proc`, as on macOS, the job's directory is still used.
 
 **Where:** `internal/session/infra/tmux.go:184` and `:197-199` (`#{pane_current_path}`).
 
@@ -387,7 +387,7 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 - `TestTmuxStartLeavesNothingWhenAStepFails` only fails inside the first window. A failure in a later window, where cleanup has to kill the session by ID, is not covered.
 - Decoding `~` is only tested for `root`, not for a pane's `dir:`. There is no save/reload test for a relative dir starting with `~` (bug #1).
 - **Fixed.** No test that `ReplaceDocument` and `Save` keep a symlink (bug #2). `ReplaceDocument` is tested; `Save` shares `writeFileAtomic`.
-- `Capture` isn't tested with a pane started with a command (bug #5) or a foreground job in another directory (#9). Names that differ only by spaces: **Fixed.**
+- `Capture` isn't tested with a pane started with a command (bug #5). A foreground job in another directory (#9) and names that differ only by spaces: **Fixed.**
 - **Fixed.** `TestTmuxStartPassesTextVerbatim` covers a `#` in window names and directories, but not in pane labels. It now reads a pane label as drawn, through a client attached from a second private server.
 - Untested:
   - a `Size` of 0x0 (#11)
@@ -446,6 +446,7 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 
 ### Paths
 
+- Freezing a project whose root is written through a symlink records its panes' directories outside the root. tmux and `/proc` both report resolved directories, and the form and `dirOf` make them relative to the root as written. Same cure as `HandleDir`: compare after `filepath.EvalSymlinks`.
 - `HandleDir` compares `os.Getwd()`, which keeps a symlink the user changed directory through, with roots as written. When one goes through a symlink and the other doesn't, no project is found. This is not only macOS's `/tmp`: any symlinked directory does it. Compare both after `filepath.EvalSymlinks`.
 
 ### macOS (ignored)
