@@ -359,6 +359,18 @@ func TestTmuxRunning(t *testing.T) {
 			t.Fatalf("got %q, want %q", sessions, want)
 		}
 	})
+
+	t.Run("lists a session with a dollar so it can be captured", func(t *testing.T) {
+		server := newTmuxServer(t)
+		server.query(t, "new-session", "-d", "-s", "a$b") // tmux names it a\$b
+		sessions, err := server.tmux().Running()
+		if err != nil || len(sessions) != 1 {
+			t.Fatalf("got %q (%v), want one session", sessions, err)
+		}
+		if _, err := server.tmux().Capture(sessions[0]); err != nil {
+			t.Fatalf("capturing %q: %v", sessions[0], err)
+		}
+	})
 }
 
 func TestTmuxFind(t *testing.T) {
@@ -394,6 +406,20 @@ func TestTmuxFind(t *testing.T) {
 		}
 		if want := []string{"api", "app"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("reads a window name with a dollar as written", func(t *testing.T) {
+		if err := server.tmux().Start(planOf(t, "dollar", fmt.Sprintf(`{"root": %q, "windows": [{"name": "run $HOME ${X}"}]}`, t.TempDir()))); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		dollar, _ := domain.NewProjectName("dollar")
+		session, _, err := server.tmux().Find(dollar)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := session.Windows(); len(got) != 1 || got[0].String() != "run $HOME ${X}" {
+			t.Fatalf("got %q, want %q", got, "run $HOME ${X}")
 		}
 	})
 
@@ -464,6 +490,32 @@ func TestTmuxRestore(t *testing.T) {
 	t.Run("lays out and starts a restored window's panes", func(t *testing.T) {
 		server, _ := restore(t, "b")
 		server.waitFor(t, server.paneLabelled(t, "restore", "right"), "restored-42")
+	})
+
+	t.Run("puts a window back between ones named with a dollar", func(t *testing.T) {
+		server := newTmuxServer(t)
+		project, err := load(t, "dollar", fmt.Sprintf(`{"root": %q, "windows": [{"name": "$a"}, {"name": "b"}, {"name": "$c"}]}`, t.TempDir()))
+		if err != nil {
+			t.Fatalf("loading: %v", err)
+		}
+		if err := server.tmux().Start(project.Plan()); err != nil {
+			t.Fatalf("starting: %v", err)
+		}
+		server.query(t, "kill-window", "-t", "dollar:b")
+		server.query(t, "new-window", "-d", "-a", "-t", "dollar:$c", "-n", "manual")
+
+		session, _, err := server.tmux().Find(project.Name())
+		if err != nil {
+			t.Fatalf("finding: %v", err)
+		}
+		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		// tmux 3.4 prints a "\" before each "$" here.
+		got := strings.ReplaceAll(server.query(t, "list-windows", "-t", "=dollar", "-F", "#{window_name}"), `\$`, "$")
+		if want := "$a\nb\n$c\nmanual"; got != want {
+			t.Fatalf("got windows %q, want %q", got, want)
+		}
 	})
 
 	t.Run("removes a window it fails to lay out", func(t *testing.T) {
@@ -569,6 +621,22 @@ func TestTmuxCapture(t *testing.T) {
 		}
 		if got, want := layoutOf(windows, root)[0], "pane 1@ | pane 2@app right of #1 25%"; !strings.HasSuffix(got, want) {
 			t.Fatalf("got %q, want it to end with %q", got, want)
+		}
+	})
+
+	t.Run("reads names and directories with a dollar as written", func(t *testing.T) {
+		dir := filepath.Join(root, "d $HOME")
+		mkdir(t, dir)
+		server.query(t, "new-session", "-d", "-s", "dollar", "-n", "w ${X}", "-c", dir)
+		server.query(t, "set-option", "-p", "-t", "dollar:", "@label", "run $HOME")
+		server.waitFor(t, "dollar:", "$") // the shell is in its directory
+
+		windows, err := server.tmux().Capture("dollar")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := layoutOf(windows, root), []string{"w ${X}: run $HOME@d $HOME"}; !slices.Equal(got, want) {
+			t.Fatalf("got  %q\nwant %q", got, want)
 		}
 	})
 
@@ -705,6 +773,23 @@ func TestTmuxCurrent(t *testing.T) {
 		}
 		if got != "first" {
 			t.Fatalf("got %q, want first", got)
+		}
+	})
+
+	t.Run("names a session with a dollar so it can be captured", func(t *testing.T) {
+		tmux := infra.NewTmux(infra.TmuxOptions{
+			Global: server.global,
+			Env:    server.env,
+			Pane:   server.query(t, "new-session", "-d", "-s", "a$b", "-P", "-F", "#{pane_id}"),
+		})
+
+		// tmux itself names the session a\$b.
+		got, err := tmux.Current()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := tmux.Capture(got); err != nil {
+			t.Fatalf("capturing %q: %v", got, err)
 		}
 	})
 

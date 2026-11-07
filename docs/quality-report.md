@@ -21,7 +21,6 @@ Done against the project's aim of staying simple and small. macOS stays out of s
 ### Other sections
 
 - **Open:**
-  - `$` in captured names (Freeze and capture)
   - freezing under a symlinked root (Paths)
   - a hint in the error when a restored window's directory is missing (README)
   - the test gaps
@@ -172,7 +171,6 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 
 ### Freeze and capture
 
-- **Open.** `Capture` reads labels with `display-message -p` (`capturePanes` in `tmux.go`), and tmux 3.4 escapes a `$` followed by a name or `{` in its output. A pane named `run $HOME` is frozen as `run \$HOME`. Window names read the same way would be too.
 - **Left.** A pane with a job is frozen in its shell's directory, read from `/proc` since `f65e161`: `make -C sub dev` from the root is frozen with `dir:` the root, so its prefill finds `sub`. A subshell that changes directory first loses that directory instead: `(cd api && exec sleep 300)` is frozen with `dir:` the root and the prefill `sleep 300`. ps can't give back the `cd`, and commands like `make -C` are the more common case. A shell a wrapper forks, as a `default-command` of `sh -c 'bash -i; true'` does, is taken for a job, so the pane gets the wrapper's directory and its shell as a prefill: bug #5's guesswork about telling shells apart.
 - **Deferred** to config idea #4. `Capture` runs three `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing on its own: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk. #4's pane listing is the time to share one.
 

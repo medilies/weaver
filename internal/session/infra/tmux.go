@@ -55,7 +55,7 @@ func NewTmux(opts TmuxOptions) Tmux {
 func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
 	// A window's format sees its session's options too. "/" can't be in a
 	// project name, so it ends the session's tag.
-	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{@weaver_project}/#{@weaver_window}")
+	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{@weaver_project}/"+sized("@weaver_window"))
 	if _, exited := errors.AsType[*exec.ExitError](err); exited {
 		return domain.RunningSession{}, false, nil // no such session, or no server at all
 	}
@@ -67,7 +67,7 @@ func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error)
 	for line := range strings.Lines(out) {
 		project, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), "/")
 		owned = owned || project == name.String()
-		if window, err := domain.NewWindowName(tag); err == nil {
+		if window, err := domain.NewWindowName(verbatim(tag)); err == nil {
 			windows = append(windows, window)
 		}
 	}
@@ -105,7 +105,7 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 // Restore implements domain.SessionLauncher. A window whose anchor is
 // gone too goes at the end.
 func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlacement) error {
-	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{window_id} #{@weaver_window}")
+	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{window_id} "+sized("@weaver_window"))
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 	var last string
 	for line := range strings.Lines(out) {
 		id, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
-		if tag != "" {
+		if tag = verbatim(tag); tag != "" {
 			ids[tag] = id
 		}
 		last = id
@@ -155,7 +155,7 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // command will run from, rather than the job's, when /proc tells them
 // apart.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
-	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} #{window_name}")
+	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} "+sized("window_name"))
 	if _, exited := errors.AsType[*exec.ExitError](err); exited {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, session)
 	}
@@ -166,6 +166,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	var windows []domain.Window
 	for line := range strings.Lines(out) {
 		layout, rawName, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		rawName = verbatim(rawName)
 		cell, err := parseLayout(layout)
 		if err != nil {
 			return nil, err
@@ -192,14 +193,16 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 	panes := make([]domain.Pane, 0, len(order))
 	for i, p := range order {
 		target := "%" + strconv.Itoa(p.pane)
-		path, err := t.run("display-message", "-p", "-t", target, "#{pane_current_path}")
+		path, err := t.run("display-message", "-p", "-t", target, sized("pane_current_path"))
 		if err != nil {
 			return nil, err
 		}
-		label, err := t.run("display-message", "-p", "-t", target, "#{@label}")
+		path = verbatim(path)
+		label, err := t.run("display-message", "-p", "-t", target, sized("@label"))
 		if err != nil {
 			return nil, err
 		}
+		label = verbatim(label)
 		pid, err := t.run("display-message", "-p", "-t", target, "#{pane_pid}")
 		if err != nil {
 			return nil, err
@@ -265,13 +268,15 @@ func foreground(pid string) (domain.Command, bool) {
 // in a popup or run-shell, it is the session tmux finds current: the most
 // recently active one, which the key that ran weaver just made so.
 func (t Tmux) Current() (string, error) {
+	args := []string{"display-message", "-p"}
 	switch {
 	case t.opts.Pane != "":
-		return t.run("display-message", "-p", "-t", t.opts.Pane, "#{session_name}")
-	case t.opts.Inside:
-		return t.run("display-message", "-p", "#{session_name}")
+		args = append(args, "-t", t.opts.Pane)
+	case !t.opts.Inside:
+		return "", domain.ErrNotInsideTmux
 	}
-	return "", domain.ErrNotInsideTmux
+	out, err := t.run(append(args, sized("session_name"))...)
+	return verbatim(out), err
 }
 
 // unique is name, or name with the first free number added, and marks
@@ -290,14 +295,18 @@ func unique(name string, taken map[string]bool) string {
 
 // Running implements domain.SessionLister.
 func (t Tmux) Running() ([]string, error) {
-	out, err := t.run("list-sessions", "-F", "#{session_name}")
+	out, err := t.run("list-sessions", "-F", sized("session_name"))
 	if _, exited := errors.AsType[*exec.ExitError](err); exited {
 		return nil, nil // no server, so no sessions
 	}
 	if err != nil || out == "" {
 		return nil, err
 	}
-	return strings.Split(out, "\n"), nil
+	var sessions []string
+	for line := range strings.Lines(out) {
+		sessions = append(sessions, verbatim(strings.TrimSuffix(line, "\n")))
+	}
+	return sessions, nil
 }
 
 // Kill implements domain.SessionKiller.
@@ -472,6 +481,40 @@ func (t Tmux) runIDs(n int, args ...string) ([]string, error) {
 		return nil, fmt.Errorf("tmux %s: unexpected output %q", args[0], out)
 	}
 	return ids, nil
+}
+
+// sized is a format printing variable's size in bytes, a space and its
+// value, for verbatim to read once whatever the format prints before it
+// is cut off.
+func sized(variable string) string {
+	return "#{n:" + variable + "} #{" + variable + "}"
+}
+
+// verbatim reads a value printed by sized as tmux holds it. tmux 3.4
+// prints a "\" before each "$" that a letter, "_" or "{" follows, though
+// it doesn't hold one, so a value printed longer than its size has them
+// taken out. One printed at its size, as by a tmux that doesn't add them,
+// is read as is. A client without UTF-8 prints each multibyte character
+// as one "_", which can hide the added "\"; such a value is lost anyway.
+func verbatim(printed string) string {
+	size, value, _ := strings.Cut(printed, " ")
+	if n, err := strconv.Atoi(size); err != nil || len(value) <= n {
+		return value
+	}
+	var b strings.Builder
+	for i := 0; i < len(value); i++ {
+		if value[i] == '\\' && i+2 < len(value) && value[i+1] == '$' && startsName(value[i+2]) {
+			continue
+		}
+		b.WriteByte(value[i])
+	}
+	return b.String()
+}
+
+// startsName reports whether c, after a "$", makes tmux 3.4 print a "\"
+// before the "$".
+func startsName(c byte) bool {
+	return c == '_' || c == '{' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
 }
 
 // argument protects a trailing ";", which tmux reads as a command
