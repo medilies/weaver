@@ -42,27 +42,6 @@ func parseEnv(text string) (domain.Env, error) {
 	return domain.NewEnv(vars)
 }
 
-// parseRepos reads "dir = remote" lines, skipping blank ones.
-func parseRepos(text string) ([]domain.Repo, error) {
-	var repos []domain.Repo
-	for line := range strings.Lines(text) {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		dir, remote, ok := strings.Cut(line, "=")
-		if !ok {
-			return nil, fmt.Errorf("%q: want directory = remote", line)
-		}
-		repo, err := domain.NewRepo(strings.TrimSpace(dir), strings.TrimSpace(remote))
-		if err != nil {
-			return nil, err
-		}
-		repos = append(repos, repo)
-	}
-	return repos, nil
-}
-
 // parseCommands reads one command per line, skipping blank ones.
 func parseCommands(text string) ([]domain.Command, error) {
 	var cmds []domain.Command

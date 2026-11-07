@@ -22,7 +22,6 @@ type ProjectOverview struct {
 	problem    error
 	project    domain.Project
 	rootExists bool
-	repos      []RepoStatus
 	session    domain.RunningSession
 	found      bool
 	missing    []domain.WindowName
@@ -62,12 +61,6 @@ func (o ProjectOverview) RootExists() bool {
 	return o.rootExists
 }
 
-// Repos are the project's repositories, the root first and a directory
-// before the ones inside it, and whether each is cloned.
-func (o ProjectOverview) Repos() []RepoStatus {
-	return slices.Clone(o.repos)
-}
-
 // Session is the project's running session, or false when none runs.
 func (o ProjectOverview) Session() (domain.RunningSession, bool) {
 	return o.session, o.found
@@ -99,21 +92,6 @@ func (o ProjectOverview) WindowCount() (present, configured int) {
 	}
 	configured = len(o.project.Windows())
 	return configured - len(o.missing), configured
-}
-
-// RepoStatus is a project's repository and whether it is cloned.
-type RepoStatus struct {
-	repo   domain.Repo
-	cloned bool
-}
-
-func (s RepoStatus) Repo() domain.Repo {
-	return s.repo
-}
-
-// Cloned reports whether the repository's directory exists.
-func (s RepoStatus) Cloned() bool {
-	return s.cloned
 }
 
 // BrowseProjects lets the user act on the registered projects from a
@@ -216,16 +194,7 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 		overview.problem = err
 		return overview
 	}
-	var repos []RepoStatus
-	for _, repo := range project.Repos().List() {
-		cloned, err := uc.workspace.Exists(repo.Path(project.Root()))
-		if err != nil {
-			overview.problem = err
-			return overview
-		}
-		repos = append(repos, RepoStatus{repo: repo, cloned: cloned})
-	}
-	overview.project, overview.rootExists, overview.repos = project, rootExists, repos
+	overview.project, overview.rootExists = project, rootExists
 	opening := project.Plan().Windows()
 	if status.Running() {
 		opening = uc.restoration(&overview)

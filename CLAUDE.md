@@ -6,7 +6,7 @@
 - Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, the local filesystem, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
-- Minimal and explicit in what weaver executes: it runs only what the user wrote in a config, and does nothing on their behalf, such as cloning repositories. Users add commands for that themselves.
+- Minimal and explicit in what weaver executes: it runs only what the user wrote in a config, and does nothing on their behalf. It knows nothing of git: no cloning, no repository status. Users add commands for that themselves.
 
 ## Ubiquitous language
 
@@ -18,8 +18,6 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | config | A project's YAML file | `weave show`, `weave edit` | `ProjectRepository`, `ConfigDocument` |
 | registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRepository.Names()` |
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
-| repository | A git repository expected under the root; the browser shows whether it is cloned, weaver never clones it | `repositories:` | `Repo`, `Repos`, `RepoStatus` |
-| remote | The URL a repository is cloned from | value in `repositories:` | `Repo.Remote()` |
 | window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
 | dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |

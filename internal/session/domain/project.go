@@ -49,7 +49,7 @@ func (n ProjectName) String() string {
 }
 
 // ProjectRoot is the absolute directory a project's panes and windows are
-// rooted at, e.g. where the repository is cloned.
+// rooted at.
 type ProjectRoot struct {
 	path string
 }
@@ -94,12 +94,10 @@ func (r ProjectRoot) Resolve(dir PaneDir) string {
 }
 
 // Project is a registered dev project: a name, the directory its session
-// is rooted at, the repositories expected in it, and the windows its
-// session opens.
+// is rooted at, and the windows its session opens.
 type Project struct {
 	name    ProjectName
 	root    ProjectRoot
-	repos   Repos
 	env     Env
 	before  []Command
 	windows []Window
@@ -131,12 +129,6 @@ func (p Project) WithWindows(windows ...Window) (Project, error) {
 	return p, nil
 }
 
-// WithRepos sets the repositories expected in the project root.
-func (p Project) WithRepos(repos Repos) Project {
-	p.repos = repos
-	return p
-}
-
 // WithEnv sets variables for every pane of the project.
 func (p Project) WithEnv(env Env) Project {
 	p.env = env
@@ -160,10 +152,6 @@ func (p Project) Name() ProjectName {
 
 func (p Project) Root() ProjectRoot {
 	return p.root
-}
-
-func (p Project) Repos() Repos {
-	return p.repos
 }
 
 // Env is the variables every pane gets, unless the pane overrides them.

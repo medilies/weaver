@@ -159,22 +159,6 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("shows whether each of a project's repositories is cloned", func(t *testing.T) {
-		s := newBrowseSetup(t)
-		delete(s.workspace.dirs, "/srv/shop/front")
-		if err := s.browse(answer(true)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		shop, _ := s.browser.last().overview("shop")
-		var got []string
-		for _, status := range shop.Repos() {
-			got = append(got, fmt.Sprintf("%s %v", status.Repo().Dir(), status.Cloned()))
-		}
-		if want := []string{"back true", "front false"}; !slices.Equal(got, want) {
-			t.Fatalf("got %q, want %q", got, want)
-		}
-	})
-
 	t.Run("shows when a project's root is gone", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		delete(s.workspace.dirs, "/srv/blog")
@@ -276,19 +260,6 @@ func TestBrowseProjects(t *testing.T) {
 		if got := blog.Warnings(); len(got) != 1 || !errors.Is(got[0], app.ErrMissingDirectory) ||
 			!strings.Contains(got[0].Error(), "/srv/blog/docs") {
 			t.Fatalf("got %v, want /srv/blog/docs missing", got)
-		}
-	})
-
-	t.Run("warns about a pane directory in a repository not cloned", func(t *testing.T) {
-		s := newBrowseSetup(t)
-		delete(s.sessions.running, "shop")
-		delete(s.workspace.dirs, "/srv/shop/front")
-		if err := s.browse(answer(true)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		shop, _ := s.browser.last().overview("shop")
-		if got := shop.Warnings(); len(got) != 1 || !strings.Contains(got[0].Error(), "/srv/shop/front") {
-			t.Fatalf("got %v, want /srv/shop/front missing", got)
 		}
 	})
 

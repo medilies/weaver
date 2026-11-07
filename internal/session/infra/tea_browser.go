@@ -51,7 +51,6 @@ var (
 	titleStyle   = lipgloss.NewStyle().Bold(true)
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	clonedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 )
 
@@ -166,7 +165,7 @@ func (m browser) details() string {
 }
 
 // summary is where the project stands: its running session against its
-// config, its root, its repositories, what would likely go wrong opening
+// config, its root, what would likely go wrong opening
 // it, and what every pane starts with.
 func summary(project app.ProjectOverview) string {
 	var lines []string
@@ -179,21 +178,6 @@ func summary(project app.ProjectOverview) string {
 	}
 	lines = append(lines, root)
 
-	var repos []string
-	for _, status := range project.Repos() {
-		dir := status.Repo().Dir()
-		if dir == "." {
-			dir = "root"
-		}
-		if status.Cloned() {
-			repos = append(repos, dir+" "+clonedStyle.Render("✓ cloned"))
-		} else {
-			repos = append(repos, dir+" "+problemStyle.Render("✗ missing"))
-		}
-	}
-	if len(repos) > 0 {
-		lines = append(lines, strings.Join(repos, " · "))
-	}
 	for _, warning := range project.Warnings() {
 		lines = append(lines, warningStyle.Render("⚠ "+warning.Error()))
 	}

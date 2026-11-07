@@ -11,14 +11,6 @@
       "type": "string",
       "pattern": "^(/|~/|~$)"
     },
-    "repositories": {
-      "description": "Git repositories expected under root, which weaver reports when missing but never clones: directory relative to root (\".\" is root itself) → remote.",
-      "type": "object",
-      "additionalProperties": {
-        "type": "string",
-        "minLength": 1
-      }
-    },
     "env": {
       "$ref": "#/definitions/env"
     },

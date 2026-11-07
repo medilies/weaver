@@ -42,9 +42,8 @@ source <(weave completion bash)
 beside the selected one's config, under a summary: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a
-warning when it is gone; which repositories are cloned; what would
-likely fail in the panes enter creates (a directory missing, such as a
-repository not cloned yet, or a command whose program isn't on your `PATH`,
+warning when it is gone; what would likely fail in the panes enter
+creates (a directory missing, or a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it; aliases and shell functions show as not found); and
 the `before` commands and variables every pane starts with:
@@ -71,8 +70,8 @@ running, weaver first:
    come out right, labels its panes in their top border, and types each
    pane's `before` commands, then its command, into its shell.
 
-weaver never clones: `repositories` records what a project expects, so
-the browser can show which are missing, and you clone them yourself.
+weaver doesn't know git and clones nothing: clone what a project needs
+yourself before opening it.
 
 If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
 newer.
@@ -112,8 +111,6 @@ A fuller one, with three windows:
 
 ```yaml
 root: ~/dev/nimbus
-repositories:
-  .: https://github.com/medilies/nimbus.git
 windows:
   - name: api
     panes:
@@ -140,17 +137,14 @@ windows:
   - name: repo
 ```
 
-A back end and a front end, each its own repository, on different
-toolchain versions. weaver knows no toolchain: `before` types whatever
-commands set one up into the pane's shell, as you would. An alias only
+A back end and a front end on different toolchain versions. weaver
+knows no toolchain: `before` types whatever commands set one up into the
+pane's shell, as you would. An alias only
 changes what you type: tools that run `php` themselves, such as
 `composer`, need a `php` first on `PATH` instead:
 
 ```yaml
 root: ~/dev/shop
-repositories:
-  back: git@bitbucket.org:acme/shop-back.git
-  front: git@bitbucket.org:acme/shop-front.git
 windows:
   - name: shop
     panes:
@@ -170,7 +164,6 @@ windows:
 | Field | Meaning |
 | --- | --- |
 | `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. |
-| `repositories` | Directory (relative to `root`; `.` is `root`) → git remote. |
 | `env` | Variables for every pane. Values are literal. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
@@ -187,6 +180,10 @@ windows:
 
 Unknown fields are errors: they are usually typos. Comments are kept by
 `weave edit`, but not when `weave freeze` replaces a config.
+
+Configs from v0.1.0 may still have `repositories:`, which weaver no
+longer reads: delete it with `weave edit <project>`. Saving also
+refreshes `weaver.schema.json`, which until then still allows it.
 
 When weaver saves a config, it writes `weaver.schema.json` next to it
 and points the config at it with a first line of
@@ -211,7 +208,7 @@ graph TD
         AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]
-        M["Project, Window, Pane, Split, Command, Env, Repos<br/>SessionPlan, WindowPlacement"]
+        M["Project, Window, Pane, Split, Command, Env<br/>SessionPlan, WindowPlacement"]
         DP["ProjectRepository, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]

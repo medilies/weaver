@@ -1,6 +1,6 @@
 # Config ideas
 
-Today's fields (`root`, `repositories`, `env`, `before`, `windows`,
+Today's fields (`root`, `env`, `before`, `windows`,
 `panes`, `dir`, `split`, `command`, `prefill`, `note`) describe how a
 session looks when it opens. These ideas fill in what is missing: when
 things run (setup, start order, shutdown), which windows or copies open,
@@ -393,10 +393,10 @@ Review a PR or try a fix without stopping what runs in the main
 session. This one is mostly open questions:
 
 - **Where**: a parallel root, such as `~/dev/shop@fix-123/`, with one
-  `git worktree` per repository in `repositories`. With several
-  repositories (back, front), which ones get the branch? Those that
-  have it, the others staying on their default branch? A root that
-  isn't a repository and has no `repositories` can't have variants.
+  `git worktree` per repository the git plugin (#12) knows of. With
+  several repositories (back, front), which ones get the branch? Those
+  that have it, the others staying on their default branch? A root that
+  holds no repository can't have variants.
 - **Ports**: two copies of `task dev` both want port 8000. Each variant
   needs its own values, either through a variable weaver exports
   (`WEAVER_VARIANT=1`, with `PORT=$((8000 + WEAVER_VARIANT))` in the
@@ -418,10 +418,10 @@ session. This one is mostly open questions:
 ## 12. Hooks and a git plugin
 
 weaver runs only what a config says, and its core knows nothing of git
-(`5e8f663`, `0355ed1`). What git did for it before (cloning missing
-repositories, the branch line in the browser) can come back without
-coming back into the core: weaver offers hooks, and a git plugin uses
-them.
+(`5e8f663`, `0355ed1`, then `repositories:` removed). What git did for
+it before (cloning missing repositories, the branch line in the browser)
+can come back without coming back into the core: weaver offers hooks,
+and a git plugin uses them.
 
 **Hooks**: commands weaver runs at named moments, written in the config
 like every other command. `start` and `stop` (#6) are the first two,
@@ -435,17 +435,15 @@ start:
 ```
 
 **The git plugin**: a separate program, `weaver-git`, not part of
-`weave`. It reads what it needs from the project, `repositories:`
-included, and does the git work: clone what's missing, report the branch,
-maybe add worktrees for #11. Nothing runs unless a config names it.
+`weave`. It keeps its own list of repositories and remotes, outside the
+project's config, and does the git work: clone what's missing, report
+the branch, maybe add worktrees for #11. Nothing runs unless a config names it.
 
 Open questions:
 
 - What weaver hands a hook: the project's name, root and config path as
   environment variables (`WEAVER_PROJECT`, `WEAVER_ROOT`)?
   `weave show` already prints the config.
-- Whether `repositories:` stays in the core, as now (listed, checked, and
-  warned about), or moves to the plugin's own config.
 - Plugins as plain commands in hooks, or `weave git …` finding
   `weave-git` on `PATH`, as git finds `git-foo`. The second adds
   dispatch code to the core.

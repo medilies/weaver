@@ -58,8 +58,8 @@ func (w *fakeWorkspace) Exists(dir string) (bool, error) {
 }
 
 // shop is a project rooted at /srv/shop with a back and a front
-// repository, each opened in a pane of the first window, and a logs
-// window in a plain directory.
+// directory, each opened in a pane of the first window, and a logs
+// window.
 func shop(t *testing.T) domain.Project {
 	t.Helper()
 	must := func(err error) {
@@ -71,12 +71,6 @@ func shop(t *testing.T) domain.Project {
 	name, err := domain.NewProjectName("shop")
 	must(err)
 	root, err := domain.NewProjectRoot("/srv/shop")
-	must(err)
-	backRepo, err := domain.NewRepo("back", "git@host:back.git")
-	must(err)
-	frontRepo, err := domain.NewRepo("front", "git@host:front.git")
-	must(err)
-	repos, err := domain.NewRepos(backRepo, frontRepo)
 	must(err)
 	backName, err := domain.NewPaneName("back")
 	must(err)
@@ -101,7 +95,7 @@ func shop(t *testing.T) domain.Project {
 	must(err)
 	logs, err := domain.NewWindow(logsName, domain.NewPane().In(logsDir))
 	must(err)
-	project, err := domain.NewProject(name, root).WithRepos(repos).WithWindows(window, logs)
+	project, err := domain.NewProject(name, root).WithWindows(window, logs)
 	must(err)
 	return project
 }

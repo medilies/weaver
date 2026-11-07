@@ -1,7 +1,5 @@
 # yaml-language-server: $schema=./weaver.schema.json
 root: ~/dev/nimbus
-repositories:
-  .: https://github.com/medilies/nimbus.git
 windows:
   - name: api
     panes:

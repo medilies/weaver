@@ -1,7 +1,7 @@
 # Browser details pane: ideas
 
 The browser's details pane shows the selected project's summary (root,
-repositories, session comparison, warnings), then its raw
+session comparison, warnings), then its raw
 YAML (`infra/tea_browser.go`, `details()`). The YAML says little at a
 glance, and `e` already opens the file. The domain knows much more than
 the file shows: splits with direction and size, startup commands and
@@ -79,9 +79,8 @@ behind a toggle (`y`).
 
 ## Suggested order
 
-The `ProjectOverview` read model already carries repository states, root
-existence, the session comparison and the warnings;
-the browser only draws them.
+The `ProjectOverview` read model already carries root existence, the
+session comparison and the warnings; the browser only draws them.
 
 1. **#1**: the layout renderer, from `Project.Plan()`. Then drop the YAML
    (see above).
@@ -94,6 +93,6 @@ flowchart LR
     Repo[ProjectRepository] --> Read[app: ProjectOverview read model]
     Tmux[tmux: running sessions] --> Read
     WS[Workspace: dirs, programs] --> Read
-    Read -->|Plan, missing windows, repository states, warnings| Browser[infra: TeaBrowser]
+    Read -->|Plan, missing windows, warnings| Browser[infra: TeaBrowser]
     Browser --> Layout[layout renderer]
 ```

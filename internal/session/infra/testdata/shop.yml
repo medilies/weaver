@@ -1,8 +1,5 @@
 # yaml-language-server: $schema=./weaver.schema.json
 root: ~/dev/shop
-repositories:
-  back: git@bitbucket.org:acme/shop-back.git
-  front: git@bitbucket.org:acme/shop-front.git
 env:
   APP_ENV: local
 before:

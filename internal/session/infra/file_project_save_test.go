@@ -181,7 +181,7 @@ func undeclared(schema, node map[string]any, value any, path string) []string {
 		properties, declares := node["properties"].(map[string]any)
 		for key, child := range v {
 			if !declares {
-				continue // a map of names, e.g. env or repositories
+				continue // a map of names, e.g. env
 			}
 			childNode, ok := properties[key].(map[string]any)
 			if !ok {

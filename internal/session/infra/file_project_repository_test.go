@@ -165,17 +165,6 @@ func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
 func TestFileProjectRepositoryReadsEnvironments(t *testing.T) {
 	shop := loadFixture(t, "shop")
 
-	t.Run("reads repositories by directory", func(t *testing.T) {
-		var got []string
-		for _, r := range shop.Repos().List() {
-			got = append(got, r.Dir()+" "+r.Remote())
-		}
-		want := []string{"back git@bitbucket.org:acme/shop-back.git", "front git@bitbucket.org:acme/shop-front.git"}
-		if !slices.Equal(got, want) {
-			t.Fatalf("got %q, want %q", got, want)
-		}
-	})
-
 	t.Run("reads project env", func(t *testing.T) {
 		vars := shop.Env().Vars()
 		if len(vars) != 1 || vars[0].Name() != "APP_ENV" || vars[0].Value() != "local" {
@@ -234,6 +223,13 @@ func TestFileProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
 		_, err := load(t, "typo", "root: /srv/typo\nwindos: []\n")
 		if !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "windos") {
 			t.Fatalf("got %v, want an invalid config naming windos", err)
+		}
+	})
+
+	t.Run("rejects repositories, which weaver no longer reads", func(t *testing.T) {
+		_, err := load(t, "old", "root: /srv/old\nrepositories: {.: git@host:old.git}\n")
+		if !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "repositories") {
+			t.Fatalf("got %v, want an invalid config naming repositories", err)
 		}
 	})
 

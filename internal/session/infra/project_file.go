@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -30,11 +28,10 @@ var (
 // projectFile is the on-disk shape of a project config, e.g.
 // ~/.config/weaver/projects/<name>.yml; the README documents it.
 type projectFile struct {
-	Root         string            `yaml:"root"`
-	Repositories map[string]string `yaml:"repositories,omitempty"`
-	Env          map[string]string `yaml:"env,omitempty"`
-	Before       []string          `yaml:"before,omitempty"`
-	Windows      []windowFile      `yaml:"windows,omitempty"`
+	Root    string            `yaml:"root"`
+	Env     map[string]string `yaml:"env,omitempty"`
+	Before  []string          `yaml:"before,omitempty"`
+	Windows []windowFile      `yaml:"windows,omitempty"`
 }
 
 type windowFile struct {
@@ -92,10 +89,6 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, err
 	}
-	repos, err := toRepos(f.Repositories)
-	if err != nil {
-		return domain.Project{}, fmt.Errorf("repositories: %w", err)
-	}
 	env, err := domain.NewEnv(f.Env)
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("env: %w", err)
@@ -113,24 +106,9 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 		windows = append(windows, window)
 	}
 	return domain.NewProject(name, root).
-		WithRepos(repos).
 		WithEnv(env).
 		RunningFirst(before...).
 		WithWindows(windows...)
-}
-
-// toRepos reads the repositories in directory order, so the same config
-// always reports the same error.
-func toRepos(repositories map[string]string) (domain.Repos, error) {
-	repos := make([]domain.Repo, 0, len(repositories))
-	for _, dir := range slices.Sorted(maps.Keys(repositories)) {
-		repo, err := domain.NewRepo(dir, repositories[dir])
-		if err != nil {
-			return domain.Repos{}, err
-		}
-		repos = append(repos, repo)
-	}
-	return domain.NewRepos(repos...)
 }
 
 func toCommands(lines []string) ([]domain.Command, error) {
@@ -284,12 +262,6 @@ func encodeProject(project domain.Project) ([]byte, error) {
 		Root:   contractHome(root.String()),
 		Env:    envMap(project.Env()),
 		Before: lines(project.Before()),
-	}
-	for _, repo := range project.Repos().List() {
-		if file.Repositories == nil {
-			file.Repositories = make(map[string]string)
-		}
-		file.Repositories[repo.Dir()] = repo.Remote()
 	}
 	if windows := project.Windows(); !onlyDefaultWindow(project.Name(), windows) {
 		for _, window := range windows {

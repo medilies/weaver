@@ -8,7 +8,7 @@ Revised 2026-11-07. Every finding was re-checked against the code at `7f8a02f`, 
 - The `confirmHelp` item was out of date, and several other fixes changed.
 - Two fresh reviews, one of `infra` and one of the other layers and the tooling, added bugs #3, #5, #6 and #8–#13, the "Tooling and release" section, and new items in the other sections.
 
-Revised again 2026-11-07, after weaver stopped running git. `5e8f663` dropped the browser's working tree (branch, changes, ahead and behind) and the repositories freezing found under the root. `0355ed1` stopped cloning: `repositories:` now only records what a project expects, and the browser reports the missing ones. Findings about that code are marked **Removed**, and the ones it changed are updated. The rest still refer to `7f8a02f`.
+Revised again 2026-11-07, after weaver stopped running git. `5e8f663` dropped the browser's working tree (branch, changes, ahead and behind) and the repositories freezing found under the root. `0355ed1` stopped cloning: `repositories:` now only records what a project expects, and the browser reports the missing ones. Then `repositories:` itself went, with `Repo`, `Repos`, `RepoStatus`, the form's Repositories field and the browser's cloned line: weaver knows nothing of git. A config that still has the key is rejected as an unknown field. Findings about that code are marked **Removed**, and the ones it changed are updated. The rest still refer to `7f8a02f`.
 
 On 2026-11-06, `go build ./...`, `go vet ./...`, `go test ./...` and `golangci-lint run ./...` all passed with 0 issues. The revision ran without a Go toolchain. Findings marked **Reproduced** or **Tested** were actually run, with tmux experiments on private tmux 3.4 servers. The rest were checked by reading the code.
 
@@ -23,17 +23,17 @@ The fixes were checked with Go 1.26.10: `go build`, `go vet`, `go test` and `gol
 | # | Bug | Severity | Fix | Status |
 | --- | --- | --- | --- | --- |
 | 3 | weave in a popup or `run-shell` | High, for popup bindings | S | **Fixed** |
-| 8 | Credentials copied from remotes | Med–High | XS | **Removed**: remotes are only typed now |
+| 8 | Credentials copied from remotes | Med–High | XS | **Removed**: weaver has no remotes |
 | 2 | Saving replaces a symlinked config | Med | S | **Fixed**, with `Sync` |
 | 1 | `~` in the form's root and `--root=` | Low | S | **Fixed** |
 | 4 | Half-built restored window | Low | XS | **Fixed** |
-| 6 | Repository typed twice ends the freeze | Low | S | **Fixed**, again after `5e8f663` broke it |
+| 6 | Repository typed twice ends the freeze | Low | S | **Removed** with `repositories:` |
 | 10 | `WorkingTree` outlives its bound | Low | XS | **Removed** with the working tree |
 | 11 | 0x0 terminal size | Low | XS | **Fixed** |
 | 13 | Submodules offered as repositories | Low | XS | **Removed**: freezing finds no repositories |
 | 9 | Pane directory from the foreground job | Low | S | **Open**, optional |
 | 5 | Pane started with a command frozen as a shell | Low | M | **Deferred** to config idea #4 |
-| 7 | Empty directory counts as cloned | Low | S | **Open**: only the browser's status is left |
+| 7 | Empty directory counts as cloned | Low | S | **Removed** with `repositories:` |
 | 14 | `env:` and `note:` panes skip `default-command` | Low | M | **Deferred** to config idea #5 |
 | 15 | `weave kill` in a session named like a project | By design | — | **Deferred** to config idea #6 |
 | 12 | Unreachable server counts as not running | Low | S, but tied to tmux's error wording | **Left** |
@@ -81,10 +81,8 @@ Some fixes come before the ideas that build on them. #3 is groundwork for tasks 
 ### From the review of `0355ed1`
 
 - **Fixed:** the infra package doc and the README's test note still named git.
-- **Open:** opening fails with a bare "directory not found" for a repository that isn't cloned (see README below).
+- **Removed** with `repositories:`: the bare "directory not found" for a repository not cloned (a pane directory missing is all weaver knows now), a repository shown twice in the browser, and `NewRepos`' clone order.
 - **Left**, until someone asks:
-  - A repository not cloned yet shows twice in the browser: "✗ missing" on its line, and a warning for each pane directory in it. It is accurate. Grouping the warnings by repository would add code.
-  - `NewRepos` still sorts the root first and a directory before the ones inside it, which only mattered for clone order. Plain lexical order would do, but the saving is a few lines.
   - `requireTool` lives in `local_workspace_test.go`, though the tmux tests use it too.
 
 ## Bugs and edge cases
@@ -174,7 +172,7 @@ Prefilling them every time would be wrong: an idle pane would get `-bash`, and a
 
 ### 6. A repository typed twice in the freeze form ends the freeze
 
-**Status:** **Fixed.**
+**Status:** **Removed** with `repositories:`: the form has no Repositories field.
 
 **Where:** `internal/session/infra/huh_forms.go:157` (the validator only runs `parseRepos`), `:195` (`project()` calls `domain.NewRepos`).
 
@@ -188,7 +186,7 @@ Keep the check in `project()` too, since the user can go back and tick a box aga
 
 ### 7. A repository counts as cloned as soon as its directory exists
 
-**Status:** **Open**, low. It no longer waits for #13, which was removed.
+**Status:** **Removed** with `repositories:` and the browser's cloned line.
 
 **Where:** `BrowseProjects.overview` sets `RepoStatus.Cloned` from `Workspace.Exists` (`LocalWorkspace` in `infra/local_workspace.go`).
 
@@ -200,7 +198,7 @@ Don't change `Exists`: pane directories are checked with it, and an empty pane d
 
 ### 8. Freezing copies credentials from remote URLs into the config
 
-**Status:** **Fixed**, then **Removed** in `5e8f663`: freezing no longer reads remotes, and the user types them.
+**Status:** **Fixed**, then **Removed** in `5e8f663`: freezing no longer reads remotes, and since `repositories:` went weaver has none.
 
 **Where:** `internal/session/infra/git_workspace.go:146-150` (`originOf`).
 
@@ -334,7 +332,7 @@ Don't ask for confirmation, so `weave kill` stays usable in scripts. Leave `weav
 
 ### Concepts missing from the glossary
 
-`Workspace`, `ProjectDraft`, `ProjectStatus` (`RepoStatus` is now under *repository*), capture (`SessionCapturer`), program (`ErrMissingProgram`), and the browser's "summary" and "notice" have no glossary entries. CLAUDE.md says a new concept gets an entry before it gets code.
+`Workspace`, `ProjectDraft`, `ProjectStatus`, capture (`SessionCapturer`), program (`ErrMissingProgram`), and the browser's "summary" and "notice" have no glossary entries. CLAUDE.md says a new concept gets an entry before it gets code.
 
 ### Logic in the forms, against the layer rule
 
@@ -358,9 +356,9 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 ### README
 
 - **Fixed.** "If a step fails, nothing is left half-built" is written about starting a session, but reads as true of restoration too, which it isn't (bug #4). Fixing #4 makes it true for both.
-- **Fixed** in the README; the error still gives no hint (**Open**). Restoring windows never clones. A repository added to the config while its owned session runs makes `weave <project>` fail with "directory not found" for its window. This is deliberate: `BrowseProjects.warnings` says so, and a test pins the warning. But the README doesn't say so, and the error gives no hint. Either clone the missing repositories that hold the restored panes' directories, or document the behaviour and add a hint to the error.
+- **Fixed** in the README; a hint in the error is still **Open**. A pane directory added to the config while its owned session runs makes `weave <project>` fail with "directory not found" for the restored window. This is deliberate: `BrowseProjects.warnings` says so, and a test pins the warning. The error could hint that the directory has to be created first.
 
-  Since `0355ed1` weaver never clones, and the README says so. The missing hint now shows on every first open of a project whose repositories aren't cloned, not only on restoration. The error could name the repository and its remote.
+  Since `0355ed1` weaver never clones, and the README says so. With `repositories:` gone, the error only names the missing pane directory.
 - **Fixed.** The architecture diagram leaves out the `SessionFinder` and `SessionLocator` ports.
 - **Fixed.** The name rule (`README.md:99`) leaves out that a name starts with a letter or a digit.
 - **Fixed.** The `split` row doesn't say that `of` takes a pane's name, though the schema does.
