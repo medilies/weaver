@@ -182,14 +182,28 @@ func (r FileProjectRepository) writeSchema() error {
 }
 
 // writeFileAtomic replaces path with data, readable by its owner only,
-// so a reader never sees half a file.
+// so a reader never sees half a file. A symbolic link, as dotfiles
+// managers make, stays: the file it points to is replaced.
 func writeFileAtomic(path string, data []byte) error {
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		target, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return fmt.Errorf("%s is a broken link: %w", path, err)
+		}
+		path = target
+	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
 	if err != nil {
 		return err
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }() // fails harmlessly once renamed
 	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	// Some filesystems, such as XFS, may otherwise rename an empty file
+	// into place if the machine crashes.
+	if err := tmp.Sync(); err != nil {
 		_ = tmp.Close()
 		return err
 	}

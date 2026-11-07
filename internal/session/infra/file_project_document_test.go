@@ -57,6 +57,28 @@ func TestFileProjectRepositoryDocuments(t *testing.T) {
 		}
 	})
 
+	t.Run("stores through a link to the config, keeping the link", func(t *testing.T) {
+		configs, dir, name := setup(t)
+		target := filepath.Join(t.TempDir(), "dotfiles-shop.yml")
+		if err := os.Rename(filepath.Join(dir, "shop.yml"), target); err != nil {
+			t.Fatalf("moving fixture: %v", err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "shop.yml")); err != nil {
+			t.Fatalf("linking fixture: %v", err)
+		}
+		edited := "root: /srv/shop\nenv: {A: 1}\n"
+
+		if err := configs.ReplaceDocument(name, []byte(edited)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := read(t, target); got != edited {
+			t.Fatalf("got the link's target holding %q, want the edit", got)
+		}
+		if info, err := os.Lstat(filepath.Join(dir, "shop.yml")); err != nil || info.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("got %v (%v), want shop.yml still a link", info, err)
+		}
+	})
+
 	t.Run("keeps the stored config when the new one is invalid", func(t *testing.T) {
 		configs, dir, name := setup(t)
 		err := configs.ReplaceDocument(name, []byte("root: relative/shop\n"))
