@@ -12,7 +12,7 @@ On 2026-11-06, `go build ./...`, `go vet ./...`, `go test ./...` and `golangci-l
 
 ## Triage
 
-Done 2026-11-07, against the project's aim of staying simple and small. macOS stays out of scope until it has users. Severity is High, Med or Low. Fix size is XS (a line or two), S (up to about 30 lines plus a test) or M (several layers, or guesswork). Each item is **Fixed**, **Deferred** (until the idea named, or the fix named), **Open** (worth doing, not done yet) or **Left** (not worth the code).
+Done 2026-11-07, against the project's aim of staying simple and small. macOS stays out of scope until it has users, and so does making sure weave works on tmux 3.2 (see Tooling). Severity is High, Med or Low. Fix size is XS (a line or two), S (up to about 30 lines plus a test) or M (several layers, or guesswork). Each item is **Fixed**, **Deferred** (until the idea named, or the fix named), **Open** (worth doing, not done yet) or **Left** (not worth the code).
 
 The fixes were checked with Go 1.26.10: `go build`, `go vet`, `go test` and `golangci-lint` pass. The freeze form, the browser's Esc and `weave kill` under `run-shell` were also checked by hand in a throwaway tmux server.
 
@@ -46,8 +46,8 @@ Corrections to the findings below:
 
 ### Other sections
 
-- **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item, the `Problem` comment, `specs.md`, tests before releasing, a CI job on tmux 3.2a (ubuntu-22.04), the `Confirm` dialog items, and the marked minor items and test gaps.
-- **Open:** the concepts missing from the glossary, the browser offering to kill a session that isn't running, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
+- **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item, the `Problem` comment, `specs.md`, tests before releasing, the `Confirm` dialog items, and the marked minor items and test gaps.
+- **Open:** `#` in pane labels (`#{q/h:…}` works on tmux 3.4), the concepts missing from the glossary, the browser offering to kill a session that isn't running, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
 - **Left:** schema leniency (as the report says), the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, and a tmux version check when weave runs.
 
 ### Fixes that wait for an idea
@@ -60,7 +60,6 @@ Corrections to the findings below:
 | Form logic moved to `domain` (`ProjectRoot.Relative`) | config idea #2 window `dir` | #2 reworks `PaneDir` and `dirOf`. |
 | Building overviews concurrently | browser idea #2 live preview | Its refresh loop changes how overviews are built. #10 covers the worst case. |
 | Cursor after a delete | browser idea #3 better list | Filtering changes how the selection works. |
-| `#` in pane labels | the tmux 3.2 CI job's first run | `#{q/h:…}` needs confirming on tmux 3.2. |
 
 Some fixes come before the ideas that build on them. #3 is groundwork for tasks in popups (config idea #10). #4 comes before focus (#3) and lazy windows (#9), which extend restoration.
 
@@ -351,7 +350,9 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 - **Fixed** for the tests: `release.yml` publishes without running the tests or the linter. It now runs the tests. The linter already runs on every push to `main`.
 - GoReleaser stamps `{{.Version}}` (`0.2.0`), while `go install …@v0.2.0` reports `v0.2.0`. Stamp `{{.Tag}}` to get one form, and update `TestReleaseBuildsReportTheStampedVersion`, which expects `0.2.0`.
 - The changelog filters (`^docs:`, `^test:`, `^chore:`) miss scoped and other types, so `build(deps): …`, `ci: …` and merge commits reach the release notes. If the intent is to drop those, use something like `^(docs|test|chore|ci|build)(\(.+\))?!?:` plus `^Merge`.
-- **Fixed.** CI installs only Ubuntu's tmux (3.4). The README's "tmux 3.2 or newer" is untested, and weave doesn't check the version when it runs.
+- **Ignored**, tmux 3.2 only, until weave has users there: CI installs only Ubuntu's tmux (3.4). The README's "tmux 3.2 or newer" is untested, and weave doesn't check the version when it runs.
+
+  tmux's changelog shows nothing weaver uses that is newer than 3.2: `new-window -b`, which restoration needs, arrived in exactly 3.2. The changelog doesn't say whether 3.2 reads `#` in window names and directories as 3.4 does. A CI job on ubuntu-22.04 (tmux 3.2a) now runs the tests, but a failure there is a hint, not a bug, until a 3.2 user reports one. GitHub will likely retire that runner around April 2027.
 - **Ignored**, macOS only: CI builds only for Linux, although darwin binaries ship.
 
 ## Test gaps
