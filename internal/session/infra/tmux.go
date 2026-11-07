@@ -209,9 +209,10 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 			if cmd, ok := foreground(pid); ok {
 				pane = pane.Prefilling(cmd)
 				// tmux reports the job's directory, but the prefill runs
-				// from the shell's.
+				// from the shell's. Linux marks a removed one, and tmux
+				// drops the mark, so it is dropped here too.
 				if cwd, err := os.Readlink("/proc/" + pid + "/cwd"); err == nil {
-					path = cwd
+					path = strings.TrimSuffix(cwd, " (deleted)")
 				}
 			}
 		}

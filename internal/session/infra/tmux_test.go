@@ -596,6 +596,25 @@ func TestTmuxCapture(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps the directory of a busy shell as written once removed", func(t *testing.T) {
+		gone := filepath.Join(root, "gone")
+		mkdir(t, gone)
+		server.query(t, "new-session", "-d", "-s", "gone", "-c", gone)
+		server.query(t, "send-keys", "-t", "gone:", "sleep 300", "Enter")
+		server.busy(t, "gone", "sleep")
+		if err := os.Remove(gone); err != nil {
+			t.Fatalf("removing %s: %v", gone, err)
+		}
+
+		windows, err := server.tmux().Capture("gone")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := windows[0].Panes()[0].Dir(); got.String() != gone {
+			t.Fatalf("got dir %q, want %q", got, gone)
+		}
+	})
+
 	t.Run("gives the pane weaver runs in no command", func(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "self")
 		pane := server.query(t, "display-message", "-p", "-t", "self:", "#{pane_id}")
