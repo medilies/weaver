@@ -21,12 +21,13 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | remote | The URL a repository is cloned from | value in `repositories:` | `Repo.Remote()` |
 | working tree | Where the root's git checkout stands: branch, changes, commits ahead or behind | browser summary | `WorkingTree` |
 | window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
+| pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
 | dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |
 | env | Environment variables, a pane's overriding the project's | `env:` | `Env`, `WithEnv` |
 | before commands | Commands typed and run in a pane before its own | `before:` | `Project`, `Window` and `Pane.Before()`, `RunningFirst` |
 | command / prefill | What a pane runs, or types without running | `command:` / `prefill:` | `Startup`, `Pane.Running`, `Pane.Prefilling` |
 | note | Lines printed in a pane before its shell starts | `note:` | `Pane.WithNote` |
-| session | The tmux session named after a project | | `RunningSession`, `Session*` ports |
+| session | A tmux session; a project's session is named after it | `weave freeze [session]` | `RunningSession`, `Session*` ports |
 | running / not running | Whether a project's session exists | ● in the browser | `ProjectStatus.Running()` |
 | owned session | A session weaver started; only those are restored | | `RunningSession.Owned()` |
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |

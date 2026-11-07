@@ -1,5 +1,7 @@
 # Weaver
 
+> Historical: the first brief for weaver, kept as written. The README and the glossary in CLAUDE.md describe weaver as released.
+
 Look how my tmux scripts work with globex and nimbus
 
 I should be able to call `weaver globex` or `weaver nimbus` from anywhere and start or attach to their tmux session like the current behavior

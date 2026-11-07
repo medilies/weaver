@@ -46,8 +46,8 @@ with the branch it is on (`main* ↑2`: changes not committed, two commits
 not pushed) or a warning when it is gone; which repositories are cloned;
 what would likely fail in the panes enter creates (a directory missing
 that no clone creates, or a command whose program isn't on your `PATH`,
-unchecked in panes with `before` commands, which may provide it; aliases
-and shell functions show as not found); and
+unchecked in panes with `before` commands or an `env` setting `PATH`,
+which may provide it; aliases and shell functions show as not found); and
 the `before` commands and variables every pane starts with:
 
 | Key | Does |
@@ -58,13 +58,14 @@ the `before` commands and variables every pane starts with:
 | e | edit its config, like `weave edit <project>` |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
-| q | quit |
+| q or esc | quit |
 
 After freezing, editing, killing or deleting, the list comes back with
 what happened.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
-it switches to it). When the session isn't running, weaver first:
+it switches to it, from a `display-popup` too). When the session isn't
+running, weaver first:
 
 1. clones the project's repositories that are missing;
 2. checks every pane's directory exists;
@@ -77,8 +78,12 @@ newer.
 
 When weaver started the running session (an owned session) and you
 closed some of its windows, `weave <project>` puts them back where the
-config lists them before attaching. Windows you opened yourself stay as
-they are, and a session weaver didn't start is only attached.
+config lists them before attaching; a window that fails to build is
+removed again. Windows you opened yourself stay as they are, and a
+session weaver didn't start is only attached. Putting windows back
+doesn't clone: a repository added to the config while the session runs
+is cloned the next time the session starts, and until then its panes'
+directories are reported missing.
 
 ## Development
 
@@ -97,7 +102,7 @@ sockets; they never touch your sessions.
 A project is one config file at `~/.config/weaver/projects/<name>.yml`
 (`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
 the project's name and its tmux session's name: letters, digits, `-` and
-`_`, and not one of weave's commands.
+`_`, starting with a letter or a digit, and not one of weave's commands.
 
 The smallest config opens one window with one shell in the root:
 
@@ -174,8 +179,8 @@ windows:
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
 | `windows[].panes` | Panes in creation order. None: one shell in `root`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes. |
-| `dir` | Where the pane's shell starts, relative to `root` (or absolute). |
-| `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the pane it splits; default the previous one). |
+| `dir` | Where the pane's shell starts, relative to `root` (or absolute, or starting with `~/`). |
+| `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
@@ -209,7 +214,7 @@ graph TD
     end
     subgraph domain["internal/session/domain"]
         M["Project, Window, Pane, Split, Command, Env, Repos<br/>SessionPlan, WindowPlacement"]
-        DP["ProjectRepository, SessionLauncher, SessionLister,<br/>SessionKiller, SessionCapturer,<br/>Workspace, RepoDetector (ports)"]
+        DP["ProjectRepository, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace, RepoDetector (ports)"]
     end
     subgraph infra["internal/session/infra"]
         A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
