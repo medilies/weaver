@@ -84,6 +84,13 @@ func TestNewProjectRoot(t *testing.T) {
 			t.Fatalf("got %v, want ErrRelativeProjectRoot", err)
 		}
 	})
+
+	t.Run("rejects control characters", func(t *testing.T) {
+		_, err := domain.NewProjectRoot("/home/ilies/dev\nweaver")
+		if !errors.Is(err, domain.ErrControlCharacters) {
+			t.Fatalf("got %v, want ErrControlCharacters", err)
+		}
+	})
 }
 
 func TestProjectWindows(t *testing.T) {

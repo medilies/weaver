@@ -164,6 +164,8 @@ func TestCommandProgram(t *testing.T) {
 		"a quoted executable": `"my tool" --flag`,
 		"an escaped value":    `FOO=a\ b npm start`,
 		"a limit builtin":     "ulimit -n 4096 && ./server",
+		"a zsh builtin":       "unsetopt correct",
+		"a comment":           "# run migrations",
 	} {
 		t.Run("leaves "+reason+" to the shell", func(t *testing.T) {
 			if got, ok := command(t, raw).Program(); ok {
@@ -199,6 +201,9 @@ func TestPaneStartup(t *testing.T) {
 		cmd, _ := pane.Startup().Command()
 		if got := cmd.String(); got != "nimbus emulator" {
 			t.Fatalf("got %q, want %q", got, "nimbus emulator")
+		}
+		if pane.Startup().Submits() {
+			t.Fatal("got the command run, want it only prefilled")
 		}
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -117,6 +118,13 @@ func TestEditProject(t *testing.T) {
 		_, err := edit(storedDocuments{"shop": "old"}, &scriptedEditor{err: errors.New("vi: not found")}, confirm)
 		if err == nil || confirm.asked != 0 {
 			t.Fatalf("got %v after %d questions, want the editor's error and none", err, confirm.asked)
+		}
+	})
+
+	t.Run("says nothing was saved when the editor fails", func(t *testing.T) {
+		_, err := edit(storedDocuments{"shop": "old"}, &scriptedEditor{err: errors.New("exit status 1")}, &countingConfirmer{})
+		if err == nil || !strings.Contains(err.Error(), "nothing was saved") {
+			t.Fatalf("got %v, want it to say nothing was saved", err)
 		}
 	})
 

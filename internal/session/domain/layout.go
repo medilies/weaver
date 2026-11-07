@@ -264,20 +264,20 @@ var assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
 // on PATH, or not as the first word.
 var shellWords = []string{
 	"!", ".", ":", "alias", "autoload", "bg", "builtin", "case", "cd", "command", "coproc",
-	"declare", "eval", "exec", "exit", "export", "fg", "for", "function", "hash", "history",
-	"if", "jobs", "let", "local", "noglob", "nocorrect", "popd", "pushd", "read", "readonly",
-	"return", "select", "set", "setopt", "shift", "source", "time", "trap", "type", "typeset",
-	"ulimit", "umask", "unset", "until", "wait", "while",
+	"declare", "disown", "eval", "exec", "exit", "export", "fg", "for", "function", "hash", "history",
+	"if", "jobs", "let", "local", "noglob", "nocorrect", "popd", "print", "pushd", "read", "readonly",
+	"return", "select", "set", "setopt", "shift", "shopt", "source", "time", "trap", "type", "typeset",
+	"ulimit", "umask", "unalias", "unset", "unsetopt", "until", "wait", "while",
 }
 
 // Program is the program the command line starts, e.g. "npm" for
 // "NODE_ENV=dev npm run dev", or false when the shell decides what runs:
 // a builtin, a keyword, or a word it expands or quotes, even in a
-// variable's value. Aliases and shell functions can't be told apart from
-// programs.
+// variable's value. A comment starts none. Aliases and shell functions
+// can't be told apart from programs.
 func (c Command) Program() (string, bool) {
 	for _, word := range strings.Fields(c.text) {
-		if strings.ContainsAny(word, "$`'\"\\(){}[]*?~;&|<>") || slices.Contains(shellWords, word) {
+		if strings.HasPrefix(word, "#") || strings.ContainsAny(word, "$`'\"\\(){}[]*?~;&|<>") || slices.Contains(shellWords, word) {
 			return "", false
 		}
 		if assignment.MatchString(word) {

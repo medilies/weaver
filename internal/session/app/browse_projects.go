@@ -47,9 +47,9 @@ func (o ProjectOverview) Config() ConfigDocument {
 	return o.config
 }
 
-// Problem is why the project's config can't be read or isn't valid, if
-// so; the rest of the overview is then empty, except Config when it
-// could be read.
+// Problem is why the project's config can't be read or isn't valid, or
+// why its directories couldn't be checked, if so. In the first two cases
+// the rest of the overview is empty, except Config when it could be read.
 func (o ProjectOverview) Problem() error {
 	return o.problem
 }

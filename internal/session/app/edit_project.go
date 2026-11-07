@@ -37,7 +37,7 @@ func (uc EditProject) Handle(rawName string) (bool, error) {
 	for {
 		edited, err := uc.editor.Edit(document)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("%w; nothing was saved", err)
 		}
 		if bytes.Equal(edited, stored.Content) {
 			return false, nil

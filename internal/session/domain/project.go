@@ -56,7 +56,10 @@ type ProjectRoot struct {
 
 // NewProjectRoot validates and constructs a ProjectRoot.
 func NewProjectRoot(path string) (ProjectRoot, error) {
-	trimmed := strings.TrimSpace(path)
+	trimmed, err := oneLine(path)
+	if err != nil {
+		return ProjectRoot{}, err
+	}
 	if trimmed == "" {
 		return ProjectRoot{}, ErrEmptyProjectRoot
 	}
