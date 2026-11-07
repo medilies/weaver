@@ -77,6 +77,7 @@ func TestNewRepos(t *testing.T) {
 			repo(t, "back", "git@host:back.git"),
 			repo(t, "front", "git@host:front.git"),
 			repo(t, ".", "git@host:root.git"),
+			repo(t, "-old", "git@host:old.git"), // sorts before "."
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -85,7 +86,7 @@ func TestNewRepos(t *testing.T) {
 		for _, r := range repos.List() {
 			dirs = append(dirs, r.Dir())
 		}
-		if want := []string{".", "back", "front", "front/docs"}; !slices.Equal(dirs, want) {
+		if want := []string{".", "-old", "back", "front", "front/docs"}; !slices.Equal(dirs, want) {
 			t.Fatalf("got %q, want %q", dirs, want)
 		}
 	})

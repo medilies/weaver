@@ -6,7 +6,9 @@ import "runtime/debug"
 var version string
 
 // buildVersion is weave's version: the one stamped at release builds, else
-// the module version `go install …@v1.2.3` recorded, else "dev".
+// the module version Go recorded (`go install …@v1.2.3`, or since Go 1.24
+// a pseudo-version for `go build` in a git checkout), else "dev", as
+// without version control information (-buildvcs=false).
 func buildVersion() string {
 	info, _ := debug.ReadBuildInfo()
 	return resolveVersion(version, info)

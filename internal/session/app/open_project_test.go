@@ -50,6 +50,7 @@ type fakeWorkspace struct {
 	trees    map[string]domain.WorkingTree
 	programs map[string]bool
 	cloned   []string
+	cloneErr error
 }
 
 func (w *fakeWorkspace) Executable(program, _ string) bool {
@@ -66,6 +67,9 @@ func (w *fakeWorkspace) Exists(dir string) (bool, error) {
 }
 
 func (w *fakeWorkspace) Clone(_ domain.Repo, dir string) error {
+	if w.cloneErr != nil {
+		return w.cloneErr
+	}
 	w.cloned = append(w.cloned, dir)
 	w.dirs[dir] = true
 	return nil
@@ -210,6 +214,17 @@ func TestOpenProject(t *testing.T) {
 		}
 	})
 
+	t.Run("starts nothing when a clone fails", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/logs": true}, cloneErr: errors.New("no network")}
+		if err := openShop(t, sessions, workspace); err == nil {
+			t.Fatal("got no error, want the clone's failure")
+		}
+		if len(sessions.started) != 0 || len(sessions.attached) != 0 {
+			t.Fatalf("got started %q, attached %q; want nothing", sessions.started, sessions.attached)
+		}
+	})
+
 	t.Run("leaves existing repositories alone", func(t *testing.T) {
 		workspace := &fakeWorkspace{dirs: map[string]bool{"/srv/shop": true, "/srv/shop/back": true, "/srv/shop/logs": true}}
 		if err := openShop(t, &fakeSessions{}, workspace); err != nil {
@@ -305,11 +320,12 @@ func TestOpenProjectHandleDir(t *testing.T) {
 
 	t.Run("prefers the innermost root when roots nest", func(t *testing.T) {
 		sessions := &fakeSessions{}
-		if err := open(t, sessions, "/srv/shop/back/app", shop(t), rootedAt(t, "back", "/srv/shop/back")); err != nil {
+		// shop-back sorts after shop, so the first root found isn't it.
+		if err := open(t, sessions, "/srv/shop/back/app", shop(t), rootedAt(t, "shop-back", "/srv/shop/back")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if !slices.Equal(sessions.attached, []string{"back"}) {
-			t.Fatalf("got %q attached, want back", sessions.attached)
+		if !slices.Equal(sessions.attached, []string{"shop-back"}) {
+			t.Fatalf("got %q attached, want shop-back", sessions.attached)
 		}
 	})
 

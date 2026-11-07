@@ -19,7 +19,7 @@ func TestGoInstallBuildsReportTheModuleVersion(t *testing.T) {
 	}
 }
 
-func TestLocalBuildsReportDev(t *testing.T) {
+func TestBuildsWithoutAVersionReportDev(t *testing.T) {
 	info := &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}
 	if got := resolveVersion("", info); got != "dev" {
 		t.Fatalf("got %q, want dev", got)
