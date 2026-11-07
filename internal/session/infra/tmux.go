@@ -150,9 +150,10 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // its window or session gets a number. The job in the foreground of a
 // pane's terminal, if any, is typed at its prompt but not run: ps rebuilds
 // it from its arguments, losing quotes, pipes and variables, so the user
-// checks it first. The pane then keeps the shell's directory, where the
-// job runs from, not the job's, where /proc tells them apart. The pane weaver runs in gets none: its job
-// is weaver.
+// checks it first. The pane weaver runs in gets no command: its job is
+// weaver. A pane with a job keeps its shell's directory, which the typed
+// command will run from, rather than the job's, when /proc tells them
+// apart.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} #{window_name}")
 	if _, exited := errors.AsType[*exec.ExitError](err); exited {

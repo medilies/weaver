@@ -178,7 +178,8 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 
 ### Freeze and capture
 
-- **Open.** `Capture` reads labels with `display-message -p` (`tmux.go:196`), and tmux 3.4 escapes a `$` followed by a name or `{` in its output. A pane named `run $HOME` is frozen as `run \$HOME`. Window names read the same way would be too.
+- **Open.** `Capture` reads labels with `display-message -p` (`capturePanes` in `tmux.go`), and tmux 3.4 escapes a `$` followed by a name or `{` in its output. A pane named `run $HOME` is frozen as `run \$HOME`. Window names read the same way would be too.
+- **Left.** A pane with a job is frozen in its shell's directory, read from `/proc` since `b0f8719`: `make -C sub dev` from the root is frozen with `dir:` the root, so its prefill finds `sub`. A subshell that changes directory first loses that directory instead: `(cd api && exec sleep 300)` is frozen with `dir:` the root and the prefill `sleep 300`. ps can't give back the `cd`, and commands like `make -C` are the more common case.
 - **Deferred** to config idea #4. `Capture` runs three `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing on its own: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk. #4's pane listing is the time to share one.
 
 ### Configs

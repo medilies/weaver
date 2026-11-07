@@ -41,8 +41,8 @@ func (LocalWorkspace) Executable(program, dir string) bool {
 
 // RealPath implements domain.Workspace.
 func (LocalWorkspace) RealPath(path string) string {
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		return real
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
 	}
 	return path
 }

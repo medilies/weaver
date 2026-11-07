@@ -74,6 +74,13 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 	return domain.RunningSession{}, false, s.err
 }
 
+// unkillableSessions is a domain.SessionKiller that fails.
+type unkillableSessions struct{ err error }
+
+func (s unkillableSessions) Kill(domain.ProjectName) error {
+	return s.err
+}
+
 // browseSetup is blog, not running, and shop, running in a session weaver
 // didn't start, with their configs stored as YAML.
 type browseSetup struct {
@@ -449,7 +456,23 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("still asks to kill a session it couldn't find", func(t *testing.T) {
+	t.Run("shows why a session couldn't be killed once confirmed", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		server := tmuxServer{s.sessions}
+		err := app.NewBrowseProjects(
+			s.browser, answer(true), s.configs, s.documents, s.workspace, server,
+			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
+			app.NewKillProject(unkillableSessions{errors.New("tmux kill-session: lost server")}, capturedSessions{}),
+		).Handle("/srv/new")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if notice := s.browser.last().notice; !strings.Contains(notice, "tmux kill-session: lost server") {
+			t.Fatalf("got notice %q, want the kill's error", notice)
+		}
+	})
+
+	t.Run("still asks to kill a session when looking it up fails", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
 		confirm := &countingConfirmer{answer: true}
 		server := tmuxServer{s.sessions}

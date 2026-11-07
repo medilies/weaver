@@ -51,8 +51,8 @@ type fakeWorkspace struct {
 }
 
 func (w *fakeWorkspace) RealPath(path string) string {
-	if real, ok := w.links[path]; ok {
-		return real
+	if target, ok := w.links[path]; ok {
+		return target
 	}
 	return path
 }
@@ -321,6 +321,32 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		}
 	})
 
+	t.Run("opens the project a symlink inside it leads out of", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		workspace := everything()
+		workspace.links = map[string]string{"/srv/shop/vendor": "/opt/vendor"}
+		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace).HandleDir("/srv/shop/vendor"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got %q attached, want shop", sessions.attached)
+		}
+	})
+
+	t.Run("opens the project a symlink leads into over the one it is in", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		workspace := everything()
+		workspace.links = map[string]string{"/srv/shop/data": "/srv/big/data"}
+		workspace.dirs["/srv/big"] = true
+		configs := registry(shop(t), rootedAt(t, "big", "/srv/big"))
+		if err := app.NewOpenProject(configs, sessions, workspace).HandleDir("/srv/shop/data"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"big"}) {
+			t.Fatalf("got %q attached, want big", sessions.attached)
+		}
+	})
+
 	t.Run("reports a directory no project contains", func(t *testing.T) {
 		err := open(t, &fakeSessions{}, "/home/me", shop(t))
 		if !errors.Is(err, app.ErrNoProjectAt) {
@@ -342,6 +368,16 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		err := openPastBroken(t, &fakeSessions{}, "/home/me", shop(t))
 		if !errors.Is(err, app.ErrNoProjectAt) || !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "broken.yml") {
 			t.Fatalf("got %v, want ErrNoProjectAt naming broken.yml", err)
+		}
+	})
+
+	t.Run("names each root as written when projects share one through a symlink", func(t *testing.T) {
+		workspace := everything()
+		workspace.links = map[string]string{"/home/me/blog": "/srv/blog"}
+		configs := registry(rootedAt(t, "blog", "/home/me/blog"), rootedAt(t, "notes", "/srv/blog"))
+		err := app.NewOpenProject(configs, &fakeSessions{}, workspace).HandleDir("/srv/blog")
+		if !errors.Is(err, app.ErrAmbiguousProject) || !strings.Contains(err.Error(), "blog, rooted at /home/me/blog, and notes, rooted at /srv/blog") {
+			t.Fatalf("got %v, want each project named with its own root", err)
 		}
 	})
 

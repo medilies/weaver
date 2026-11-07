@@ -52,10 +52,12 @@ func (uc OpenProject) Handle(rawName string) error {
 
 // HandleDir opens the project whose root contains dir; when roots nest,
 // the innermost one. Roots and dir are compared with their symlinks
-// resolved, and as written only when no root contains dir that way, as
-// when dir is reached through a link inside a root that leads out of it.
-// Invalid configs are skipped, so one broken project doesn't block the
-// others, and named only when no project matches.
+// resolved, as they are on disk, and as written only when no root
+// contains dir that way, as when dir is reached through a link inside a
+// root that leads out of every root. So a link inside one root that leads
+// into another opens the other. Invalid configs are skipped, so one
+// broken project doesn't block the others, and named only when no
+// project matches.
 func (uc OpenProject) HandleDir(dir string) error {
 	names, err := uc.projects.Names()
 	if err != nil {
@@ -74,10 +76,10 @@ func (uc OpenProject) HandleDir(dir string) error {
 			return err
 		}
 		root := project.Root()
-		real, err := domain.NewProjectRoot(uc.workspace.RealPath(root.String()))
+		resolvedRoot, err := domain.NewProjectRoot(uc.workspace.RealPath(root.String()))
 		switch {
-		case err == nil && real.Contains(realDir):
-			resolved = append(resolved, rootMatch{project: project, root: real.String()})
+		case err == nil && resolvedRoot.Contains(realDir):
+			resolved = append(resolved, rootMatch{project: project, root: resolvedRoot.String()})
 		case root.Contains(dir):
 			written = append(written, rootMatch{project: project, root: root.String()})
 		}
@@ -96,8 +98,12 @@ func (uc OpenProject) HandleDir(dir string) error {
 	case 1:
 		return uc.open(found[0].project)
 	}
-	return fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject,
-		found[0].project.Name(), found[1].project.Name(), found[0].root)
+	first, second := found[0].project, found[1].project
+	if first.Root().String() != second.Root().String() {
+		return fmt.Errorf("%w: %s, rooted at %s, and %s, rooted at %s, share a root", ErrAmbiguousProject,
+			first.Name(), first.Root(), second.Name(), second.Root())
+	}
+	return fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject, first.Name(), second.Name(), first.Root())
 }
 
 // rootMatch is a project whose root, in one form, contains a directory.

@@ -107,9 +107,9 @@ func (s tmuxServer) busy(t *testing.T, session, program string) domain.Startup {
 	}
 }
 
-// attached is a pane of another private server, holding a client
-// attached to session, and that server. capture-pane leaves out pane
-// borders: reading that pane shows what tmux draws, borders included.
+// attached is another private server, and a pane of it holding a client
+// attached to session. capture-pane leaves out pane borders: reading that
+// pane shows what tmux draws, borders included.
 func (s tmuxServer) attached(t *testing.T, session string) (tmuxServer, string) {
 	t.Helper()
 	viewer := newTmuxServer(t)
