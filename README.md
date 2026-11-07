@@ -65,7 +65,9 @@ what happened.
 it switches to it, from a `display-popup` too). When the session isn't
 running, weaver first:
 
-1. checks every pane's directory exists;
+1. checks every pane's directory exists, and stops if one is missing,
+   saying to create it or change it with `weave edit`: weaver creates
+   none;
 2. builds the session, sized like your terminal so percentage splits
    come out right, labels its panes in their top border, and types each
    pane's `before` commands, then its command, into its shell.
@@ -78,9 +80,17 @@ newer.
 
 When weaver started the running session (an owned session) and you
 closed some of its windows, `weave <project>` puts them back where the
-config lists them before attaching; a window that fails to build is
-removed again. Windows you opened yourself stay as they are, and a
-session weaver didn't start is only attached.
+config lists them before attaching, once it has checked their panes'
+directories exist; a window that fails to build is removed again.
+Windows you opened yourself stay as they are, and a session weaver
+didn't start is only attached.
+
+`weave freeze <session>` starts its forms from the session as it runs:
+its windows and panes, laid out as they are, each in its directory,
+written relative to the root even when you reached the root through a
+symlink. The command in a pane's foreground is typed at its prompt but
+not run, from the directory of the shell that started it. Check it
+before you run it: pipes, quotes and variables don't survive.
 
 ## Development
 
