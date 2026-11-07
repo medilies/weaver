@@ -45,7 +45,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 ## Environment
 
 - No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weave`.
-- Go version is `1.26` everywhere. `go.mod`'s `go` directive is the source of truth; CI reads it via `go-version-file`. Change it in one place.
+- Go version is `1.26` everywhere, and `go.mod` is the source of truth: its `go` directive (`1.26.0`, which the `go` command insists on) sets the language version, and its `toolchain` directive the exact Go that CI and releases build with, read by setup-go's `go-version-file`. Bump `toolchain` when a 1.26.x patch ships.
 - No database: project configs are plain YAML files (`<name>.yml`, one per project) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRepository` port and the `infra.FileProjectRepository` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
 
 ## Tests

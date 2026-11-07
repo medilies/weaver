@@ -42,7 +42,7 @@ Corrections to the findings below:
 - #1: a `~/x` pane directory typed in the form was already saved as `dir: ~/x`, which loads as `$HOME/x`: what the user meant. Only the root and `--root=` needed fixing, plus the docs.
 - #5: the proposed fix would also prefill a pane started as `zsh` or `bash` with its shell. A fix has to tell shells apart, which is guesswork.
 - #6: only the project screen's answers were lost. The window screens come after it.
-- `go 1.26` (Tooling): Go 1.26's `go` command rejects it. The build asks for `go mod tidy`, which writes `go 1.26.0` back. **Open**: the alternative is a `toolchain go1.26.N` line, which setup-go reads but has to be bumped by hand. That changes the one-place rule in CLAUDE.md, so it is your call.
+- `go 1.26` (Tooling): Go 1.26's `go` command rejects it. The build asks for `go mod tidy`, which writes `go 1.26.0` back. **Fixed** instead with `toolchain go1.26.10` in `go.mod`, which setup-go's `go-version-file` reads before the `go` line. It has to be bumped when a 1.26.x patch ships; CLAUDE.md says so.
 
 ### Other sections
 
@@ -347,7 +347,7 @@ These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
 
 ## Tooling and release
 
-- **Open:** the fix proposed here doesn't hold; see the triage. `go.mod` says `go 1.26.0`, and setup-go installs exactly the patch it names. CI and release binaries are therefore built with Go 1.26.0, without any of the 1.26.x fixes. Writing `go 1.26` makes setup-go pick the latest 1.26.x, and go.mod stays the one source of the version.
+- **Fixed** with a `toolchain` line, not the fix proposed here; see the triage. `go.mod` says `go 1.26.0`, and setup-go installs exactly the patch it names. CI and release binaries are therefore built with Go 1.26.0, without any of the 1.26.x fixes. Writing `go 1.26` makes setup-go pick the latest 1.26.x, and go.mod stays the one source of the version.
 - **Fixed** for the tests: `release.yml` publishes without running the tests or the linter. It now runs the tests. The linter already runs on every push to `main`.
 - GoReleaser stamps `{{.Version}}` (`0.2.0`), while `go install …@v0.2.0` reports `v0.2.0`. Stamp `{{.Tag}}` to get one form, and update `TestReleaseBuildsReportTheStampedVersion`, which expects `0.2.0`.
 - The changelog filters (`^docs:`, `^test:`, `^chore:`) miss scoped and other types, so `build(deps): …`, `ci: …` and merge commits reach the release notes. If the intent is to drop those, use something like `^(docs|test|chore|ci|build)(\(.+\))?!?:` plus `^Merge`.
