@@ -29,13 +29,6 @@ func (a answer) Confirm(string) (bool, error) {
 	return bool(a), nil
 }
 
-// foundRepos is a fake domain.RepoDetector.
-type foundRepos struct{ repos domain.Repos }
-
-func (f foundRepos) Detect(domain.ProjectRoot) (domain.Repos, error) {
-	return f.repos, nil
-}
-
 // capturedSessions is a fake domain.SessionCapturer: running sessions'
 // windows, and the session weaver runs in, if any.
 type capturedSessions struct {
@@ -61,24 +54,14 @@ func (c capturedSessions) Current() (string, error) {
 type freezeSetup struct {
 	configs inMemoryRepository
 	form    *fakeForm
-	found   domain.Repos
 	current string // the session weaver runs in; none outside tmux
 }
 
 func newFreezeSetup(t *testing.T) freezeSetup {
 	t.Helper()
-	backRepo, err := domain.NewRepo("back", "git@host:back.git")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	found, err := domain.NewRepos(backRepo)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 	return freezeSetup{
 		configs: inMemoryRepository{projects: map[string]domain.Project{}},
 		form:    &fakeForm{project: shop(t)},
-		found:   found,
 	}
 }
 
@@ -88,7 +71,7 @@ func (s freezeSetup) freeze(t *testing.T, confirm app.Confirmer, request app.Fre
 		windows: map[string][]domain.Window{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()},
 		current: s.current,
 	}
-	return app.NewFreezeProject(s.configs, foundRepos{s.found}, sessions, s.form, confirm).Handle(request)
+	return app.NewFreezeProject(s.configs, sessions, s.form, confirm).Handle(request)
 }
 
 func TestFreezeProject(t *testing.T) {
@@ -119,16 +102,6 @@ func TestFreezeProject(t *testing.T) {
 		}
 		if s.form.draft.Name != "store" {
 			t.Fatalf("got name %q, want store", s.form.draft.Name)
-		}
-	})
-
-	t.Run("offers the repositories found under the root", func(t *testing.T) {
-		s := newFreezeSetup(t)
-		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if list := s.form.draft.Repos.List(); len(list) != 1 || list[0].Dir() != "back" {
-			t.Fatalf("got %v, want the back repository", list)
 		}
 	})
 

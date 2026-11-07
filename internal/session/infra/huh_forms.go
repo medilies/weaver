@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -86,13 +85,10 @@ func (d dialog) View() tea.View {
 // running session come first, pre-filled.
 func (HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	answers := projectAnswers{name: draft.Name, root: draft.Root}
-	for _, repo := range draft.Repos.List() {
-		answers.keep = append(answers.keep, repo.Dir())
-	}
-	if err := show(answers.groups(draft.Repos)...); err != nil {
+	if err := show(answers.groups()...); err != nil {
 		return domain.Project{}, err
 	}
-	project, err := answers.project(draft.Repos)
+	project, err := answers.project()
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -145,52 +141,32 @@ func fullScreen(view tea.View) tea.View {
 // projectAnswers are the project screen's fields.
 type projectAnswers struct {
 	name, root string
-	keep       []string // directories of the found repositories to keep
-	more       string   // "dir = remote" lines
-	before     string   // command lines
-	env        string   // "NAME=value" lines
+	repos      string // "dir = remote" lines
+	before     string // command lines
+	env        string // "NAME=value" lines
 }
 
-func (a *projectAnswers) groups(found domain.Repos) []*huh.Group {
-	groups := []*huh.Group{huh.NewGroup(
-		huh.NewInput().Title("Project name").
-			Description("Used as `weave <name>` and as the tmux session name.").
-			Value(&a.name).Validate(func(s string) error { _, err := domain.NewProjectName(s); return err }),
-		huh.NewInput().Title("Root").
-			Description("The project's directory: absolute, or starting with ~/.").
-			Value(&a.root).Validate(func(s string) error { _, err := parseRoot(s); return err }),
-	).Title("New project")}
-
-	// The found repositories come first in the group, so the ones kept are
-	// known when the typed ones are checked.
-	checkRepos := func(s string) error {
-		a.more = s
-		_, err := a.repos(found)
-		return err
+func (a *projectAnswers) groups() []*huh.Group {
+	return []*huh.Group{
+		huh.NewGroup(
+			huh.NewInput().Title("Project name").
+				Description("Used as `weave <name>` and as the tmux session name.").
+				Value(&a.name).Validate(func(s string) error { _, err := domain.NewProjectName(s); return err }),
+			huh.NewInput().Title("Root").
+				Description("The project's directory: absolute, or starting with ~/.").
+				Value(&a.root).Validate(func(s string) error { _, err := parseRoot(s); return err }),
+		).Title("New project"),
+		huh.NewGroup(huh.NewText().Title("Repositories").
+			Description("Cloned when missing. One per line: directory = remote, e.g. back = git@host:back.git").
+			Value(&a.repos).Validate(func(s string) error { _, err := parseRepos(s); return err })).Title("Repositories"),
+		huh.NewGroup(
+			beforeField("Before commands for every pane", &a.before),
+			envField("Environment for every pane", &a.env),
+		).Title("Every pane"),
 	}
-	repositories := []huh.Field{huh.NewText().Title("Other repositories").
-		Description("Cloned when missing. One per line: directory = remote, e.g. back = git@host:back.git").
-		Value(&a.more).Validate(checkRepos)}
-	if list := found.List(); len(list) > 0 {
-		options := make([]huh.Option[string], 0, len(list))
-		for _, repo := range list {
-			options = append(options, huh.NewOption(repo.Dir()+"  "+repo.Remote(), repo.Dir()))
-		}
-		repositories = append([]huh.Field{huh.NewMultiSelect[string]().Title("Repositories found").
-			Description("Cloned when missing, e.g. on a new machine.").
-			// Without a height, huh takes the title and description out of
-			// the options' rows and shows none of a short list.
-			Options(options...).Height(len(options) + 2).Value(&a.keep)}, repositories...)
-	}
-	groups = append(groups, huh.NewGroup(repositories...).Title("Repositories"))
-
-	return append(groups, huh.NewGroup(
-		beforeField("Before commands for every pane", &a.before),
-		envField("Environment for every pane", &a.env),
-	).Title("Every pane"))
 }
 
-func (a projectAnswers) project(found domain.Repos) (domain.Project, error) {
+func (a projectAnswers) project() (domain.Project, error) {
 	name, err := domain.NewProjectName(a.name)
 	if err != nil {
 		return domain.Project{}, err
@@ -199,8 +175,11 @@ func (a projectAnswers) project(found domain.Repos) (domain.Project, error) {
 	if err != nil {
 		return domain.Project{}, err
 	}
-	// Checked again: going back, the user may tick a found one typed too.
-	kept, err := a.repos(found)
+	parsed, err := parseRepos(a.repos)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	repos, err := domain.NewRepos(parsed...)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -212,22 +191,7 @@ func (a projectAnswers) project(found domain.Repos) (domain.Project, error) {
 	if err != nil {
 		return domain.Project{}, err
 	}
-	return domain.NewProject(name, root).WithRepos(kept).WithEnv(env).RunningFirst(before...), nil
-}
-
-// repos are the repositories typed and the found ones kept, checked
-// together: a directory typed and ticked too is one too many.
-func (a *projectAnswers) repos(found domain.Repos) (domain.Repos, error) {
-	repos, err := parseRepos(a.more)
-	if err != nil {
-		return domain.Repos{}, err
-	}
-	for _, repo := range found.List() {
-		if slices.Contains(a.keep, repo.Dir()) {
-			repos = append(repos, repo)
-		}
-	}
-	return domain.NewRepos(repos...)
+	return domain.NewProject(name, root).WithRepos(repos).WithEnv(env).RunningFirst(before...), nil
 }
 
 // askWindow asks for a window's name, then for its panes one by one. A

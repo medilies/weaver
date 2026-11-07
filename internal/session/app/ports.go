@@ -19,7 +19,6 @@ var ErrAborted = errors.New("aborted")
 type ProjectDraft struct {
 	Name    string
 	Root    string
-	Repos   domain.Repos    // found under Root, offered for cloning
 	Windows []domain.Window // a running session's, to start from; none to start blank
 }
 

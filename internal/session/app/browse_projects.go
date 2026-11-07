@@ -23,8 +23,6 @@ type ProjectOverview struct {
 	project    domain.Project
 	rootExists bool
 	repos      []RepoStatus
-	tree       domain.WorkingTree
-	inGit      bool
 	session    domain.RunningSession
 	found      bool
 	missing    []domain.WindowName
@@ -68,12 +66,6 @@ func (o ProjectOverview) RootExists() bool {
 // each is cloned.
 func (o ProjectOverview) Repos() []RepoStatus {
 	return slices.Clone(o.repos)
-}
-
-// WorkingTree is where the git repository the root is in stands, or
-// false when it isn't in one.
-func (o ProjectOverview) WorkingTree() (domain.WorkingTree, bool) {
-	return o.tree, o.inGit
 }
 
 // Session is the project's running session, or false when none runs.
@@ -234,9 +226,6 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 		repos = append(repos, RepoStatus{repo: repo, cloned: cloned})
 	}
 	overview.project, overview.rootExists, overview.repos = project, rootExists, repos
-	if rootExists {
-		overview.tree, overview.inGit = uc.workspace.WorkingTree(project.Root().String())
-	}
 	opening := project.Plan().Windows()
 	if status.Running() {
 		opening = uc.restoration(&overview)

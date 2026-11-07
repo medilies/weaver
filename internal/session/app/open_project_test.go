@@ -43,11 +43,9 @@ func (s *fakeSessions) Attach(name domain.ProjectName) error {
 }
 
 // fakeWorkspace is an in-memory domain.Workspace: a set of existing
-// directories, which cloning adds to, the git working trees some are
-// in, and the programs that can be run.
+// directories, which cloning adds to, and the programs that can be run.
 type fakeWorkspace struct {
 	dirs     map[string]bool
-	trees    map[string]domain.WorkingTree
 	programs map[string]bool
 	cloned   []string
 	cloneErr error
@@ -55,11 +53,6 @@ type fakeWorkspace struct {
 
 func (w *fakeWorkspace) Executable(program, _ string) bool {
 	return w.programs[program]
-}
-
-func (w *fakeWorkspace) WorkingTree(dir string) (domain.WorkingTree, bool) {
-	tree, ok := w.trees[dir]
-	return tree, ok
 }
 
 func (w *fakeWorkspace) Exists(dir string) (bool, error) {

@@ -41,10 +41,9 @@ source <(weave completion bash)
 `weave` alone lists the projects, a ● marking those whose session runs,
 beside the selected one's config, under a summary: how many of the
 configured windows a running session still has and which ones enter
-restores (a session weaver didn't start is left as it is); the root,
-with the branch it is on (`main* ↑2`: changes not committed, two commits
-not pushed) or a warning when it is gone; which repositories are cloned;
-what would likely fail in the panes enter creates (a directory missing
+restores (a session weaver didn't start is left as it is); the root, or a
+warning when it is gone; which repositories are cloned; what would
+likely fail in the panes enter creates (a directory missing
 that no clone creates, or a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it; aliases and shell functions show as not found); and
@@ -214,7 +213,7 @@ graph TD
     end
     subgraph domain["internal/session/domain"]
         M["Project, Window, Pane, Split, Command, Env, Repos<br/>SessionPlan, WindowPlacement"]
-        DP["ProjectRepository, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace, RepoDetector (ports)"]
+        DP["ProjectRepository, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]
         A["FileProjectRepository + schema, Tmux,<br/>GitWorkspace, Editor,<br/>HuhForms, TeaBrowser"]

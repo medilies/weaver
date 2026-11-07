@@ -107,7 +107,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		s.browser, confirm, s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace),
-		app.NewFreezeProject(s.configs, foundRepos{}, capturedSessions{}, s.form, confirm),
+		app.NewFreezeProject(s.configs, capturedSessions{}, s.form, confirm),
 		app.NewEditProject(s.documents, s.editor, confirm),
 		app.NewKillProject(server, capturedSessions{}),
 	).Handle("/srv/new")
@@ -183,29 +183,6 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if blog, _ := s.browser.last().overview("blog"); blog.RootExists() {
 			t.Fatal("got blog's root existing, want it gone")
-		}
-	})
-
-	t.Run("shows the working tree a project's root is in", func(t *testing.T) {
-		s := newBrowseSetup(t)
-		s.workspace.trees = map[string]domain.WorkingTree{"/srv/shop": domain.OnBranch("main").WithChanges()}
-		if err := s.browse(answer(true)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		shop, _ := s.browser.last().overview("shop")
-		if tree, ok := shop.WorkingTree(); !ok || tree.Branch() != "main" || !tree.Dirty() {
-			t.Fatalf("got %+v (%v), want main with changes", tree, ok)
-		}
-	})
-
-	t.Run("shows no working tree for a root outside git", func(t *testing.T) {
-		s := newBrowseSetup(t)
-		if err := s.browse(answer(true)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		blog, _ := s.browser.last().overview("blog")
-		if _, ok := blog.WorkingTree(); ok {
-			t.Fatal("got a working tree for blog, want none")
 		}
 	})
 

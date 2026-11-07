@@ -166,8 +166,8 @@ func (m browser) details() string {
 }
 
 // summary is where the project stands: its running session against its
-// config, its root and the working tree it is in, its repositories, what
-// would likely go wrong opening it, and what every pane starts with.
+// config, its root, its repositories, what would likely go wrong opening
+// it, and what every pane starts with.
 func summary(project app.ProjectOverview) string {
 	var lines []string
 	if session, ok := project.Session(); ok {
@@ -176,8 +176,6 @@ func summary(project app.ProjectOverview) string {
 	root := contractHome(project.Project().Root().String())
 	if !project.RootExists() {
 		root += " " + problemStyle.Render("✗ missing")
-	} else if tree, ok := project.WorkingTree(); ok {
-		root += "  " + workingTree(tree)
 	}
 	lines = append(lines, root)
 
@@ -240,23 +238,4 @@ func sessionLine(project app.ProjectOverview, session domain.RunningSession) str
 		pronoun = "them"
 	}
 	return line + " · " + warningStyle.Render(strings.Join(names, ", ")+" missing, enter restores "+pronoun)
-}
-
-// workingTree reads like a shell prompt's: "main* ↑2 ↓1", the star for
-// changes not committed.
-func workingTree(tree domain.WorkingTree) string {
-	text := tree.Branch()
-	if tree.Detached() {
-		text = "(detached)"
-	}
-	if tree.Dirty() {
-		text += "*"
-	}
-	if tree.Ahead() > 0 {
-		text += fmt.Sprintf(" ↑%d", tree.Ahead())
-	}
-	if tree.Behind() > 0 {
-		text += fmt.Sprintf(" ↓%d", tree.Behind())
-	}
-	return text
 }

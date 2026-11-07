@@ -29,11 +29,9 @@ type FreezeRequest struct {
 const CurrentSession = "."
 
 // FreezeProject registers a project the user describes in a form, started
-// from what weaver finds: the repositories under its root, and the layout
-// and commands of a running session if asked.
+// from the layout and commands of a running session if asked.
 type FreezeProject struct {
 	projects domain.ProjectRepository
-	detector domain.RepoDetector
 	capturer domain.SessionCapturer
 	form     ProjectForm
 	confirm  Confirmer
@@ -42,13 +40,12 @@ type FreezeProject struct {
 // NewFreezeProject constructs the use case against its ports.
 func NewFreezeProject(
 	projects domain.ProjectRepository,
-	detector domain.RepoDetector,
 	capturer domain.SessionCapturer,
 	form ProjectForm,
 	confirm Confirmer,
 ) FreezeProject {
 	return FreezeProject{
-		projects: projects, detector: detector, capturer: capturer, form: form, confirm: confirm,
+		projects: projects, capturer: capturer, form: form, confirm: confirm,
 	}
 }
 
@@ -109,13 +106,6 @@ func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {
 	}
 	if draft.Name == "" {
 		draft.Name = filepath.Base(draft.Root)
-	}
-	projectRoot, err := domain.NewProjectRoot(draft.Root)
-	if err != nil {
-		return ProjectDraft{}, err
-	}
-	if draft.Repos, err = uc.detector.Detect(projectRoot); err != nil {
-		return ProjectDraft{}, err
 	}
 	return draft, nil
 }
