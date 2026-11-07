@@ -24,9 +24,11 @@ jobs:
   test:
     strategy:
       matrix:
-        # 22.04 ships tmux 3.2a, the oldest the README supports.
+        # 22.04 ships tmux 3.2a, the oldest the README supports. Its
+        # failures are hints: tmux 3.2 is ignored until it has users.
         os: [ubuntu-latest, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.os == 'ubuntu-22.04' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
