@@ -24,7 +24,6 @@ Done against the project's aim of staying simple and small. macOS stays out of s
   - `$` in captured names (Freeze and capture)
   - freezing under a symlinked root (Paths)
   - a hint in the error when a restored window's directory is missing (README)
-  - the concepts missing from the glossary
   - the test gaps
 - **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency, the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, a tmux version check when weave runs, and where `requireTool` lives.
@@ -46,7 +45,7 @@ Done against the project's aim of staying simple and small. macOS stays out of s
 
 **Status:** **Deferred** to config idea #4.
 
-**Where:** `internal/session/infra/tmux.go:231-244` (`foreground`), called at `:200-204`.
+**Where:** `foreground` in `internal/session/infra/tmux.go`, called from `capturePanes`.
 
 **Problem:** a pane started with a command, such as `tmux new-window 'npm run dev'` or a script's `split-window 'htop'`, runs the program as the pane's own process. The terminal's foreground process group is then that process, which `foreground` reads as a shell idle at its prompt. The frozen pane becomes a bare shell. This breaks the `SessionCapturer.Capture` contract ("the commands running in them typed at their prompts").
 
@@ -120,10 +119,6 @@ Don't ask for confirmation, so `weave kill` stays usable in scripts. Leave `weav
 
 - `docs/config-ideas.md:177-238` proposes a `stop:` config key and "stop" commands. These are teardown commands run before a kill, a new concept rather than another word for kill, but the glossary rules out "stop". Give the concept another name and a glossary entry before it gets code.
 
-### Concepts missing from the glossary
-
-`Workspace`, `ProjectDraft`, `ProjectStatus`, capture (`SessionCapturer`), program (`ErrMissingProgram`), and the browser's "summary" and "notice" have no glossary entries. CLAUDE.md says a new concept gets an entry before it gets code.
-
 ### Logic in the forms, against the layer rule
 
 **Deferred** to config idea #2. These rules sit in `internal/session/infra/huh_forms.go` but belong in `domain`:
@@ -178,7 +173,7 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 ### Freeze and capture
 
 - **Open.** `Capture` reads labels with `display-message -p` (`capturePanes` in `tmux.go`), and tmux 3.4 escapes a `$` followed by a name or `{` in its output. A pane named `run $HOME` is frozen as `run \$HOME`. Window names read the same way would be too.
-- **Left.** A pane with a job is frozen in its shell's directory, read from `/proc` since `b0f8719`: `make -C sub dev` from the root is frozen with `dir:` the root, so its prefill finds `sub`. A subshell that changes directory first loses that directory instead: `(cd api && exec sleep 300)` is frozen with `dir:` the root and the prefill `sleep 300`. ps can't give back the `cd`, and commands like `make -C` are the more common case.
+- **Left.** A pane with a job is frozen in its shell's directory, read from `/proc` since `f65e161`: `make -C sub dev` from the root is frozen with `dir:` the root, so its prefill finds `sub`. A subshell that changes directory first loses that directory instead: `(cd api && exec sleep 300)` is frozen with `dir:` the root and the prefill `sleep 300`. ps can't give back the `cd`, and commands like `make -C` are the more common case. A shell a wrapper forks, as a `default-command` of `sh -c 'bash -i; true'` does, is taken for a job, so the pane gets the wrapper's directory and its shell as a prefill: bug #5's guesswork about telling shells apart.
 - **Deferred** to config idea #4. `Capture` runs three `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing on its own: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk. #4's pane listing is the time to share one.
 
 ### Configs

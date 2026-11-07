@@ -18,6 +18,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | config | A project's YAML file | `weave show`, `weave edit` | `ProjectRegistry`, `ConfigDocument` |
 | registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRegistry.Names()` |
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
+| workspace | The filesystem projects live in: their directories, and the programs on PATH | | `Workspace` |
 | window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
 | dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |
@@ -28,15 +29,20 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | session | A tmux session; a project's session is named after it | `weave freeze [session]` | `RunningSession`, `Session*` ports |
 | running / not running | Whether a project's session exists | ● in the browser | `ProjectStatus.Running()` |
 | owned session | A session weaver started; only those are restored | | `RunningSession.Owned()` |
+| capture | Reading a running session's windows and panes, for freeze to start from | `weave freeze [session]` | `SessionCapturer.Capture` |
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |
 | restoration | Putting back the configured windows an owned session lost | | `Project.Restoration`, `WindowPlacement` |
 | freeze | Register a project through forms, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
+| draft | What the freeze form starts from: a name, a root, and the captured windows if any | | `ProjectDraft` |
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
 | edit | Change a config in the editor, keeping it only if valid | `weave edit`, key `e` | `EditProject`, `ActionEdit` |
 | kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
 | delete | Remove a config; a running session keeps running | key `d` | `ProjectRegistry.Delete`, `ActionDelete` |
 | browser | The project list `weave` shows without arguments | `weave` | `BrowseProjects`, `ProjectBrowser`, `ProjectOverview` |
+| summary | Where the selected project stands, at the top of the browser's details | browser | `summary` in `tea_browser.go` |
+| notice | The browser's status line: what the last action did, or why it failed | browser | the `notice` passed to `ProjectBrowser.Browse` |
 | warning | Something opening would likely fail on | browser summary | `ProjectOverview.Warnings()` |
+| program | The program a command starts, `npm` in `NODE_ENV=dev npm run dev`, checked to warn when missing | browser summary | `Command.Program`, `ErrMissingProgram` |
 
 ## Environment
 
