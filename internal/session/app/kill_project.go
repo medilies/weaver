@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/medilies/weaver/internal/session/domain"
@@ -32,6 +33,9 @@ func (uc KillProject) Handle(rawName string) error {
 // left running.
 func (uc KillProject) HandleCurrent() error {
 	current, err := uc.locator.Current()
+	if errors.Is(err, domain.ErrNotInsideTmux) {
+		return fmt.Errorf("%w; name a project", err)
+	}
 	if err != nil {
 		return err
 	}

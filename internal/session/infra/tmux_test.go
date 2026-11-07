@@ -85,9 +85,10 @@ func (s tmuxServer) waitFor(t *testing.T, pane, text string) string {
 	}
 }
 
-// busy waits until the first pane of session runs a command, as Capture
-// sees it from outside tmux, and returns its startup.
-func (s tmuxServer) busy(t *testing.T, session string) domain.Startup {
+// busy waits until the first pane of session runs a command starting
+// with program, as Capture sees it from outside tmux, and returns its
+// startup. A login shell may run others first, such as update-motd.
+func (s tmuxServer) busy(t *testing.T, session, program string) domain.Startup {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -96,11 +97,11 @@ func (s tmuxServer) busy(t *testing.T, session string) domain.Startup {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		startup := windows[0].Panes()[0].Startup()
-		if _, ok := startup.Command(); ok {
+		if cmd, ok := startup.Command(); ok && strings.HasPrefix(cmd.String(), program) {
 			return startup
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("session %s never ran a command", session)
+			t.Fatalf("session %s never ran %s", session, program)
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -444,6 +445,35 @@ func TestTmuxRestore(t *testing.T) {
 		server, _ := restore(t, "b")
 		server.waitFor(t, server.paneLabelled(t, "restore", "right"), "restored-42")
 	})
+
+	t.Run("removes a window it fails to lay out", func(t *testing.T) {
+		server := newTmuxServer(t)
+		root := t.TempDir()
+		if err := server.tmux().Start(planOf(t, "shrunk", fmt.Sprintf(`{"root": %q, "windows": [{"name": "a"}]}`, root))); err != nil {
+			t.Fatalf("starting: %v", err)
+		}
+		// Halving a 50-line pane twelve times runs out of lines.
+		panes := []string{`{"name": "p0"}`}
+		for i := 1; i <= 12; i++ {
+			panes = append(panes, fmt.Sprintf(`{"name": "p%d", "split": {"direction": "below"}}`, i))
+		}
+		project, err := load(t, "shrunk", fmt.Sprintf(`{"root": %q, "windows": [{"name": "a"}, {"name": "tall", "panes": [%s]}]}`,
+			root, strings.Join(panes, ",")))
+		if err != nil {
+			t.Fatalf("loading: %v", err)
+		}
+		session, _, err := server.tmux().Find(project.Name())
+		if err != nil {
+			t.Fatalf("finding: %v", err)
+		}
+
+		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err == nil {
+			t.Fatal("got no error, want a split to run out of space")
+		}
+		if got := server.query(t, "list-windows", "-t", "=shrunk", "-F", "#{window_name}"); got != "a" {
+			t.Fatalf("got windows %q, want only a", got)
+		}
+	})
 }
 
 // running reports whether a session named after the project runs.
@@ -526,7 +556,7 @@ func TestTmuxCapture(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "busy")
 		server.query(t, "send-keys", "-t", "busy:", "sleep 300", "Enter")
 
-		startup := server.busy(t, "busy")
+		startup := server.busy(t, "busy", "sleep")
 		if cmd, _ := startup.Command(); cmd.String() != "sleep 300" || startup.Submits() {
 			t.Fatalf("got command %q (run: %t), want sleep 300 only typed", cmd, startup.Submits())
 		}
@@ -536,7 +566,7 @@ func TestTmuxCapture(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "self")
 		pane := server.query(t, "display-message", "-p", "-t", "self:", "#{pane_id}")
 		server.query(t, "send-keys", "-t", pane, "sleep 300", "Enter")
-		server.busy(t, "self")
+		server.busy(t, "self", "sleep")
 		tmux := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Pane: pane})
 
 		windows, err := tmux.Capture("self")
@@ -558,6 +588,31 @@ func TestTmuxCapture(t *testing.T) {
 		}
 		if cmd, ok := windows[0].Panes()[0].Startup().Command(); ok {
 			t.Fatalf("got command %q, want none", cmd)
+		}
+	})
+
+	t.Run("reports a session that isn't running", func(t *testing.T) {
+		if _, err := server.tmux().Capture("nosuch"); !errors.Is(err, domain.ErrSessionNotRunning) {
+			t.Fatalf("got %v, want ErrSessionNotRunning", err)
+		}
+	})
+
+	t.Run("numbers pane names that differ only by spaces", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "spaced")
+		server.query(t, "split-window", "-d", "-h", "-t", "spaced:")
+		server.query(t, "set-option", "-p", "-t", "spaced:.0", "@label", "x")
+		server.query(t, "set-option", "-p", "-t", "spaced:.1", "@label", "x ")
+
+		windows, err := server.tmux().Capture("spaced")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var names []string
+		for _, p := range windows[0].Panes() {
+			names = append(names, p.Name().String())
+		}
+		if want := []string{"x", "x 2"}; !slices.Equal(names, want) {
+			t.Fatalf("got %q, want %q", names, want)
 		}
 	})
 
@@ -597,6 +652,20 @@ func TestTmuxCurrent(t *testing.T) {
 		}
 		if got != "first" {
 			t.Fatalf("got %q, want first", got)
+		}
+	})
+
+	t.Run("names the most recently active session without a pane, as in a popup", func(t *testing.T) {
+		server := newTmuxServer(t)
+		server.query(t, "new-session", "-d", "-s", "only")
+		tmux := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true})
+
+		got, err := tmux.Current()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "only" {
+			t.Fatalf("got %q, want only", got)
 		}
 	})
 

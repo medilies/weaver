@@ -36,12 +36,14 @@ func wire() (application, error) {
 
 	projects := infra.NewFileProjectRepository(filepath.Join(configDir, "weaver", "projects")).WithWarnings(os.Stderr)
 	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
-	// counts with $TMUX, which names the server it belongs to.
+	// counts with $TMUX, which names the server it belongs to. A popup or
+	// run-shell has $TMUX but no pane.
+	inside := os.Getenv("TMUX") != ""
 	var pane string
-	if os.Getenv("TMUX") != "" {
+	if inside {
 		pane = os.Getenv("TMUX_PANE")
 	}
-	tmux := infra.NewTmux(infra.TmuxOptions{Pane: pane, Size: infra.TerminalSize})
+	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize})
 	workspace := infra.NewGitWorkspace(os.Stderr)
 
 	forms := infra.NewHuhForms()

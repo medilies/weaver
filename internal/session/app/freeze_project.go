@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -89,7 +90,11 @@ func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {
 	if session := request.Session; session != "" {
 		if session == CurrentSession {
 			var err error
-			if session, err = uc.capturer.Current(); err != nil {
+			session, err = uc.capturer.Current()
+			if errors.Is(err, domain.ErrNotInsideTmux) {
+				return ProjectDraft{}, fmt.Errorf("%w; name a session", err)
+			}
+			if err != nil {
 				return ProjectDraft{}, err
 			}
 		}

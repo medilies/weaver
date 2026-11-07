@@ -21,9 +21,11 @@ type TmuxOptions struct {
 	Global []string
 	// Env is the environment tmux runs with; nil inherits weaver's.
 	Env []string
-	// Pane is the pane weaver runs in ($TMUX_PANE), empty outside tmux.
-	// Inside tmux, attaching switches the current client to the session
-	// instead.
+	// Inside reports whether weaver runs inside tmux ($TMUX): attaching
+	// then switches the current client to the session instead.
+	Inside bool
+	// Pane is the pane weaver runs in ($TMUX_PANE): empty outside tmux,
+	// and inside a popup or run-shell, which have no pane of their own.
 	Pane string
 	// Size reports the terminal's size in cells. A new session starts that
 	// big, so its percentage splits come out as they will be seen; without
@@ -127,7 +129,10 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 		}
 		windowID, paneID, err := t.newWindow(target, window)
 		if err == nil {
-			err = t.fill(windowID, paneID, window)
+			if err = t.fill(windowID, paneID, window); err != nil {
+				// Tagged already, it would count as restored.
+				_, _ = t.run("kill-window", "-t", windowID)
+			}
 		}
 		if err != nil {
 			return err
@@ -148,6 +153,9 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // checks it first. The pane weaver runs in gets none: its job is weaver.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} #{window_name}")
+	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, session)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +171,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 		if err != nil {
 			return nil, err
 		}
-		name, err := domain.NewWindowName(unique(rawName, taken))
+		name, err := domain.NewWindowName(unique(strings.TrimSpace(rawName), taken))
 		if err != nil {
 			name, _ = domain.NewWindowName(unique("window "+strconv.Itoa(len(windows)+1), taken))
 		}
@@ -202,6 +210,7 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 				pane = pane.Prefilling(cmd)
 			}
 		}
+		label = strings.TrimSpace(label)
 		if _, err := domain.NewPaneName(label); err != nil && len(order) > 1 {
 			label = domain.DefaultPaneName(i).String()
 		}
@@ -243,12 +252,17 @@ func foreground(pid string) (domain.Command, bool) {
 	return cmd, err == nil
 }
 
-// Current implements domain.SessionLocator.
+// Current implements domain.SessionLocator. Without a pane of its own, as
+// in a popup or run-shell, it is the session tmux finds current: the most
+// recently active one, which the key that ran weaver just made so.
 func (t Tmux) Current() (string, error) {
-	if t.opts.Pane == "" {
-		return "", domain.ErrNotInsideTmux
+	switch {
+	case t.opts.Pane != "":
+		return t.run("display-message", "-p", "-t", t.opts.Pane, "#{session_name}")
+	case t.opts.Inside:
+		return t.run("display-message", "-p", "#{session_name}")
 	}
-	return t.run("display-message", "-p", "-t", t.opts.Pane, "#{session_name}")
+	return "", domain.ErrNotInsideTmux
 }
 
 // unique is name, or name with the first free number added, and marks
@@ -290,7 +304,7 @@ func (t Tmux) Kill(name domain.ProjectName) error {
 // weaver with `tmux attach-session`, like the shell scripts it replaces.
 func (t Tmux) Attach(name domain.ProjectName) error {
 	target := "=" + name.String()
-	if t.opts.Pane != "" {
+	if t.opts.Inside {
 		_, err := t.run("switch-client", "-t", target)
 		return err
 	}
