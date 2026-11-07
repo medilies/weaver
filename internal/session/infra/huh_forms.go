@@ -158,7 +158,7 @@ func (a *projectAnswers) groups() []*huh.Group {
 		).Title("New project"),
 		huh.NewGroup(huh.NewText().Title("Repositories").
 			Description("Expected under the root, reported when missing. One per line: directory = remote, e.g. back = git@host:back.git").
-			Value(&a.repos).Validate(func(s string) error { _, err := parseRepos(s); return err })).Title("Repositories"),
+			Value(&a.repos).Validate(func(s string) error { _, err := reposOf(s); return err })).Title("Repositories"),
 		huh.NewGroup(
 			beforeField("Before commands for every pane", &a.before),
 			envField("Environment for every pane", &a.env),
@@ -175,11 +175,7 @@ func (a projectAnswers) project() (domain.Project, error) {
 	if err != nil {
 		return domain.Project{}, err
 	}
-	parsed, err := parseRepos(a.repos)
-	if err != nil {
-		return domain.Project{}, err
-	}
-	repos, err := domain.NewRepos(parsed...)
+	repos, err := reposOf(a.repos)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -192,6 +188,17 @@ func (a projectAnswers) project() (domain.Project, error) {
 		return domain.Project{}, err
 	}
 	return domain.NewProject(name, root).WithRepos(repos).WithEnv(env).RunningFirst(before...), nil
+}
+
+// reposOf is the repositories typed, checked together as the field is
+// typed, so a directory typed twice shows there rather than ending the
+// freeze.
+func reposOf(text string) (domain.Repos, error) {
+	repos, err := parseRepos(text)
+	if err != nil {
+		return domain.Repos{}, err
+	}
+	return domain.NewRepos(repos...)
 }
 
 // askWindow asks for a window's name, then for its panes one by one. A
