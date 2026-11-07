@@ -51,14 +51,18 @@ func (uc OpenProject) Handle(rawName string) error {
 }
 
 // HandleDir opens the project whose root contains dir; when roots nest,
-// the innermost one. Invalid configs are skipped, so one broken project
-// doesn't block the others, and named only when no project matches.
+// the innermost one. Roots and dir are compared with their symlinks
+// resolved, and as written only when no root contains dir that way, as
+// when dir is reached through a link inside a root that leads out of it.
+// Invalid configs are skipped, so one broken project doesn't block the
+// others, and named only when no project matches.
 func (uc OpenProject) HandleDir(dir string) error {
 	names, err := uc.projects.Names()
 	if err != nil {
 		return err
 	}
-	var found []domain.Project
+	realDir := uc.workspace.RealPath(dir)
+	var resolved, written []rootMatch
 	var invalid []error
 	for _, name := range names {
 		project, err := uc.projects.FindByName(name)
@@ -69,16 +73,19 @@ func (uc OpenProject) HandleDir(dir string) error {
 		if err != nil {
 			return err
 		}
-		if !project.Root().Contains(dir) {
-			continue
-		}
+		root := project.Root()
+		real, err := domain.NewProjectRoot(uc.workspace.RealPath(root.String()))
 		switch {
-		case len(found) == 0 || len(project.Root().String()) > len(found[0].Root().String()):
-			found = []domain.Project{project}
-		case len(project.Root().String()) == len(found[0].Root().String()):
-			found = append(found, project)
+		case err == nil && real.Contains(realDir):
+			resolved = append(resolved, rootMatch{project: project, root: real.String()})
+		case root.Contains(dir):
+			written = append(written, rootMatch{project: project, root: root.String()})
 		}
 	}
+	if len(resolved) == 0 {
+		resolved = written
+	}
+	found := innermost(resolved)
 	switch len(found) {
 	case 0:
 		err := fmt.Errorf("%w: %s (weave list shows the registered projects)", ErrNoProjectAt, dir)
@@ -87,10 +94,32 @@ func (uc OpenProject) HandleDir(dir string) error {
 		}
 		return err
 	case 1:
-		return uc.open(found[0])
+		return uc.open(found[0].project)
 	}
 	return fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject,
-		found[0].Name(), found[1].Name(), found[0].Root())
+		found[0].project.Name(), found[1].project.Name(), found[0].root)
+}
+
+// rootMatch is a project whose root, in one form, contains a directory.
+type rootMatch struct {
+	project domain.Project
+	root    string
+}
+
+// innermost are the matches with the longest root. Roots that contain the
+// same directory, in the same form, nest, so the longest is the innermost,
+// and roots as long are the same directory.
+func innermost(matches []rootMatch) []rootMatch {
+	var found []rootMatch
+	for _, m := range matches {
+		switch {
+		case len(found) == 0 || len(m.root) > len(found[0].root):
+			found = []rootMatch{m}
+		case len(m.root) == len(found[0].root):
+			found = append(found, m)
+		}
+	}
+	return found
 }
 
 func (uc OpenProject) open(project domain.Project) error {

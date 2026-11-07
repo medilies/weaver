@@ -49,7 +49,7 @@ Corrections to the findings below:
 ### Other sections
 
 - **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item (but see restoring below), the `Problem` comment, `specs.md`, tests before releasing, the `Confirm` dialog items, and the marked minor items and test gaps.
-- **Open:** a hint in the error when a restored window's directory is missing, the concepts missing from the glossary, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
+- **Open:** a hint in the error when a restored window's directory is missing, the concepts missing from the glossary, unquoted `~` in configs, and the unmarked test gaps.
 - **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency (as the report says), the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, and a tmux version check when weave runs.
 
@@ -447,7 +447,7 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 ### Paths
 
 - Freezing a project whose root is written through a symlink records its panes' directories outside the root. tmux and `/proc` both report resolved directories, and the form and `dirOf` make them relative to the root as written. Same cure as `HandleDir`: compare after `filepath.EvalSymlinks`.
-- `HandleDir` compares `os.Getwd()`, which keeps a symlink the user changed directory through, with roots as written. When one goes through a symlink and the other doesn't, no project is found. This is not only macOS's `/tmp`: any symlinked directory does it. Compare both after `filepath.EvalSymlinks`.
+- **Fixed**, through a `Workspace.RealPath` port method: roots and the directory are compared resolved, and as written only when no root contains it that way. `HandleDir` compares `os.Getwd()`, which keeps a symlink the user changed directory through, with roots as written. When one goes through a symlink and the other doesn't, no project is found. This is not only macOS's `/tmp`: any symlinked directory does it.
 
 ### macOS (ignored)
 

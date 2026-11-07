@@ -38,3 +38,11 @@ func (LocalWorkspace) Executable(program, dir string) bool {
 	_, err := exec.LookPath(program)
 	return err == nil || errors.Is(err, exec.ErrDot)
 }
+
+// RealPath implements domain.Workspace.
+func (LocalWorkspace) RealPath(path string) string {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
+	}
+	return path
+}

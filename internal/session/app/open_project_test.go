@@ -47,6 +47,14 @@ func (s *fakeSessions) Attach(name domain.ProjectName) error {
 type fakeWorkspace struct {
 	dirs     map[string]bool
 	programs map[string]bool
+	links    map[string]string // paths reached through a symlink, and where they lead
+}
+
+func (w *fakeWorkspace) RealPath(path string) string {
+	if real, ok := w.links[path]; ok {
+		return real
+	}
+	return path
 }
 
 func (w *fakeWorkspace) Executable(program, _ string) bool {
@@ -271,6 +279,45 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		}
 		if !slices.Equal(sessions.attached, []string{"shop-back"}) {
 			t.Fatalf("got %q attached, want shop-back", sessions.attached)
+		}
+	})
+
+	t.Run("opens the project whose root a symlinked directory leads into", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		workspace := everything()
+		workspace.links = map[string]string{"/home/me/shop/front": "/srv/shop/front"}
+		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace).HandleDir("/home/me/shop/front"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"shop"}) {
+			t.Fatalf("got %q attached, want shop", sessions.attached)
+		}
+	})
+
+	t.Run("opens the project whose root is written through a symlink", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		workspace := everything()
+		workspace.links = map[string]string{"/home/me/blog": "/srv/blog"}
+		workspace.dirs["/home/me/blog"] = true
+		if err := app.NewOpenProject(registry(rootedAt(t, "blog", "/home/me/blog")), sessions, workspace).HandleDir("/srv/blog/posts"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"blog"}) {
+			t.Fatalf("got %q attached, want blog", sessions.attached)
+		}
+	})
+
+	t.Run("prefers the innermost root when only one is written through a symlink", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		workspace := everything()
+		workspace.links = map[string]string{"/home/me/projects/shop": "/srv/shop", "/home/me/projects/shop/front": "/srv/shop/front"}
+		workspace.dirs["/home/me/projects/shop"] = true
+		configs := registry(rootedAt(t, "outer", "/home/me/projects/shop"), rootedAt(t, "inner", "/srv/shop/front"))
+		if err := app.NewOpenProject(configs, sessions, workspace).HandleDir("/home/me/projects/shop/front"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(sessions.attached, []string{"inner"}) {
+			t.Fatalf("got %q attached, want inner", sessions.attached)
 		}
 	})
 

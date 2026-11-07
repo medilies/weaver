@@ -39,6 +39,34 @@ func TestLocalWorkspaceExists(t *testing.T) {
 	}
 }
 
+func TestLocalWorkspaceRealPath(t *testing.T) {
+	workspace := infra.NewLocalWorkspace()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatalf("resolving the test directory: %v", err)
+	}
+	real := filepath.Join(dir, "real")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatalf("making fixture: %v", err)
+	}
+	if err := os.Symlink(real, filepath.Join(dir, "link")); err != nil {
+		t.Fatalf("linking fixture: %v", err)
+	}
+
+	t.Run("resolves a path through a symlink", func(t *testing.T) {
+		if got := workspace.RealPath(filepath.Join(dir, "link")); got != real {
+			t.Fatalf("got %q, want %q", got, real)
+		}
+	})
+
+	t.Run("keeps a path that doesn't exist as is", func(t *testing.T) {
+		missing := filepath.Join(dir, "link", "missing")
+		if got := workspace.RealPath(missing); got != missing {
+			t.Fatalf("got %q, want %q", got, missing)
+		}
+	})
+}
+
 func TestLocalWorkspaceExecutable(t *testing.T) {
 	workspace := infra.NewLocalWorkspace()
 

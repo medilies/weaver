@@ -8,12 +8,13 @@ import (
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
+	"github.com/medilies/weaver/internal/session/infra"
 )
 
 // `weave .` opens the project holding the current directory: "." is no
 // project's name.
 func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
-	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, nil)})
+	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, infra.NewLocalWorkspace())})
 	root.SetArgs([]string{"."})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {
