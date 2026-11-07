@@ -222,7 +222,7 @@ failure leaves no session behind.
   open, and nothing is built. Restoring windows and attaching don't run
   `start`.
 - `stop`, in `app`: `KillProject` holds a `SessionKiller` and a `SessionLocator` today. It
-  would also load the project from the `ProjectRepository`. When the
+  would also load the project from the `ProjectRegistry`. When the
   config can't be read, kill anyway, as now: you asked to kill it. When
   a `stop` command fails, still kill the session and report the failure.
 - Browser: `enter` and `x` run their use case after the Bubble Tea

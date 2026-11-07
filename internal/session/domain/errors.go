@@ -17,7 +17,7 @@ var (
 	// ErrRelativeProjectRoot is returned when a project root is not an
 	// absolute path: `weave <project>` runs from anywhere.
 	ErrRelativeProjectRoot = errors.New("project root must be an absolute path")
-	// ErrProjectNotFound is returned when a repository has no project
+	// ErrProjectNotFound is returned when a registry has no project
 	// under the given name.
 	ErrProjectNotFound = errors.New("project not found")
 	// ErrInvalidConfig wraps whatever makes a stored project config

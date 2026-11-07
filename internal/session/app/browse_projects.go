@@ -100,7 +100,7 @@ func (o ProjectOverview) WindowCount() (present, configured int) {
 type BrowseProjects struct {
 	browser   ProjectBrowser
 	confirm   Confirmer
-	projects  domain.ProjectRepository
+	projects  domain.ProjectRegistry
 	documents ProjectDocuments
 	workspace domain.Workspace
 	sessions  domain.SessionFinder
@@ -116,7 +116,7 @@ type BrowseProjects struct {
 func NewBrowseProjects(
 	browser ProjectBrowser,
 	confirm Confirmer,
-	projects domain.ProjectRepository,
+	projects domain.ProjectRegistry,
 	documents ProjectDocuments,
 	workspace domain.Workspace,
 	sessions domain.SessionFinder,

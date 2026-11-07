@@ -77,7 +77,7 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 // browseSetup is blog, not running, and shop, running in a session weaver
 // didn't start, with their configs stored as YAML.
 type browseSetup struct {
-	configs   inMemoryRepository
+	configs   inMemoryRegistry
 	documents storedDocuments
 	sessions  *fakeSessions
 	workspace *fakeWorkspace
@@ -89,7 +89,7 @@ type browseSetup struct {
 func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 	t.Helper()
 	return browseSetup{
-		configs:   inMemoryRepository{projects: map[string]domain.Project{"blog": project(t, "blog"), "shop": shop(t)}},
+		configs:   inMemoryRegistry{projects: map[string]domain.Project{"blog": project(t, "blog"), "shop": shop(t)}},
 		documents: storedDocuments{"blog": "root: /srv/blog\n", "shop": "root: /srv/shop\n"},
 		sessions:  &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}},
 		workspace: everything(),
@@ -606,10 +606,10 @@ func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string
 	return app.Choice{}, b.err
 }
 
-// invalidConfig is a repository whose config for the project named
+// invalidConfig is a registry whose config for the project named
 // invalid can't be loaded.
 type invalidConfig struct {
-	inMemoryRepository
+	inMemoryRegistry
 	invalid string
 }
 
@@ -617,5 +617,5 @@ func (r invalidConfig) FindByName(name domain.ProjectName) (domain.Project, erro
 	if name.String() == r.invalid {
 		return domain.Project{}, fmt.Errorf("%s: %w", name, domain.ErrInvalidConfig)
 	}
-	return r.inMemoryRepository.FindByName(name)
+	return r.inMemoryRegistry.FindByName(name)
 }

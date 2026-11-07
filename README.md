@@ -209,10 +209,10 @@ graph TD
     end
     subgraph domain["internal/session/domain"]
         M["Project, Window, Pane, Split, Command, Env<br/>SessionPlan, WindowPlacement"]
-        DP["ProjectRepository, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
+        DP["ProjectRegistry, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRepository + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
+        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
     end
 
     CLI --> UC

@@ -16,7 +16,7 @@ func (r runningSessions) Running() ([]string, error) {
 }
 
 func TestListProjects(t *testing.T) {
-	configs := inMemoryRepository{projects: map[string]domain.Project{
+	configs := inMemoryRegistry{projects: map[string]domain.Project{
 		"shop":   shop(t),
 		"nimbus": project(t, "nimbus"),
 	}}

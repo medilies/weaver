@@ -13,7 +13,7 @@ import (
 )
 
 // load writes doc as the config of project name in a fresh directory and
-// reads it back through the repository.
+// reads it back through the registry.
 func load(t *testing.T, name, doc string) (domain.Project, error) {
 	t.Helper()
 	dir := t.TempDir()
@@ -24,7 +24,7 @@ func load(t *testing.T, name, doc string) (domain.Project, error) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	return infra.NewFileProjectRepository(dir).FindByName(projectName)
+	return infra.NewFileProjectRegistry(dir).FindByName(projectName)
 }
 
 // loadFixture reads testdata/<name>.yml, which must be valid.
@@ -57,7 +57,7 @@ func paneNamed(t *testing.T, project domain.Project, window, pane string) domain
 	return domain.Pane{}
 }
 
-func TestFileProjectRepositoryFindByName(t *testing.T) {
+func TestFileProjectRegistryFindByName(t *testing.T) {
 	t.Run("loads a config that only sets the root", func(t *testing.T) {
 		project, err := load(t, "weaver", "root: /home/ilies/dev/weaver\n")
 		if err != nil {
@@ -88,14 +88,14 @@ func TestFileProjectRepositoryFindByName(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		_, err = infra.NewFileProjectRepository(t.TempDir()).FindByName(name)
+		_, err = infra.NewFileProjectRegistry(t.TempDir()).FindByName(name)
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 }
 
-func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
+func TestFileProjectRegistryReadsLayouts(t *testing.T) {
 	nimbus := loadFixture(t, "nimbus")
 
 	t.Run("reads windows in order", func(t *testing.T) {
@@ -162,7 +162,7 @@ func TestFileProjectRepositoryReadsLayouts(t *testing.T) {
 	})
 }
 
-func TestFileProjectRepositoryReadsEnvironments(t *testing.T) {
+func TestFileProjectRegistryReadsEnvironments(t *testing.T) {
 	shop := loadFixture(t, "shop")
 
 	t.Run("reads project env", func(t *testing.T) {
@@ -206,7 +206,7 @@ func TestFileProjectRepositoryReadsEnvironments(t *testing.T) {
 	})
 }
 
-func TestFileProjectRepositoryResolvesSplitTargetsByName(t *testing.T) {
+func TestFileProjectRegistryResolvesSplitTargetsByName(t *testing.T) {
 	project, err := load(t, "grid", gridDoc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -218,7 +218,7 @@ func TestFileProjectRepositoryResolvesSplitTargetsByName(t *testing.T) {
 	}
 }
 
-func TestFileProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
+func TestFileProjectRegistryRejectsInvalidConfigs(t *testing.T) {
 	t.Run("rejects unknown keys, usually typos", func(t *testing.T) {
 		_, err := load(t, "typo", "root: /srv/typo\nwindos: []\n")
 		if !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "windos") {
@@ -332,7 +332,7 @@ func writeConfigs(t *testing.T, files ...string) string {
 	return dir
 }
 
-func TestFileProjectRepositoryNames(t *testing.T) {
+func TestFileProjectRegistryNames(t *testing.T) {
 	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
 		dir := t.TempDir()
 		for _, file := range []string{"shop.yml", "nimbus.yml", "a-b.yml", "a.yml", "weaver.schema.json", "notes.txt", "old.json", "blog.yaml", "show.yml"} {
@@ -344,7 +344,7 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 			t.Fatalf("creating fixture: %v", err)
 		}
 
-		names, err := infra.NewFileProjectRepository(dir).Names()
+		names, err := infra.NewFileProjectRegistry(dir).Names()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -361,7 +361,7 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 		dir := writeConfigs(t, "shop.yml", "edit.yml", "my.shop.yml", ".#shop.yml")
 		var warnings strings.Builder
 
-		if _, err := infra.NewFileProjectRepository(dir).WithWarnings(&warnings).Names(); err != nil {
+		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -377,7 +377,7 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 	t.Run("warns once per skipped config", func(t *testing.T) {
 		dir := writeConfigs(t, "edit.yml")
 		var warnings strings.Builder
-		configs := infra.NewFileProjectRepository(dir).WithWarnings(&warnings)
+		configs := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings)
 
 		for range 2 {
 			if _, err := configs.Names(); err != nil {
@@ -391,14 +391,14 @@ func TestFileProjectRepositoryNames(t *testing.T) {
 	})
 
 	t.Run("has no projects when the directory is missing", func(t *testing.T) {
-		names, err := infra.NewFileProjectRepository(filepath.Join(t.TempDir(), "missing")).Names()
+		names, err := infra.NewFileProjectRegistry(filepath.Join(t.TempDir(), "missing")).Names()
 		if err != nil || len(names) != 0 {
 			t.Fatalf("got %v (%v), want no projects", names, err)
 		}
 	})
 }
 
-func TestFileProjectRepositoryDelete(t *testing.T) {
+func TestFileProjectRegistryDelete(t *testing.T) {
 	name, _ := domain.NewProjectName("shop")
 
 	t.Run("removes the project's config", func(t *testing.T) {
@@ -406,7 +406,7 @@ func TestFileProjectRepositoryDelete(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/shop\n"), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
-		configs := infra.NewFileProjectRepository(dir)
+		configs := infra.NewFileProjectRegistry(dir)
 		if err := configs.Delete(name); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -416,7 +416,7 @@ func TestFileProjectRepositoryDelete(t *testing.T) {
 	})
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
-		if err := infra.NewFileProjectRepository(t.TempDir()).Delete(name); !isNotFound(err) {
+		if err := infra.NewFileProjectRegistry(t.TempDir()).Delete(name); !isNotFound(err) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})

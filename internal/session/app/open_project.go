@@ -23,14 +23,14 @@ var (
 // first when it isn't running, or re-creating the windows it lacks when
 // weaver started it.
 type OpenProject struct {
-	projects  domain.ProjectRepository
+	projects  domain.ProjectRegistry
 	sessions  domain.SessionLauncher
 	workspace domain.Workspace
 }
 
 // NewOpenProject constructs the use case against its ports.
 func NewOpenProject(
-	projects domain.ProjectRepository,
+	projects domain.ProjectRegistry,
 	sessions domain.SessionLauncher,
 	workspace domain.Workspace,
 ) OpenProject {

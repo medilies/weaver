@@ -52,7 +52,7 @@ func (c capturedSessions) Current() (string, error) {
 }
 
 type freezeSetup struct {
-	configs inMemoryRepository
+	configs inMemoryRegistry
 	form    *fakeForm
 	current string // the session weaver runs in; none outside tmux
 }
@@ -60,7 +60,7 @@ type freezeSetup struct {
 func newFreezeSetup(t *testing.T) freezeSetup {
 	t.Helper()
 	return freezeSetup{
-		configs: inMemoryRepository{projects: map[string]domain.Project{}},
+		configs: inMemoryRegistry{projects: map[string]domain.Project{}},
 		form:    &fakeForm{project: shop(t)},
 	}
 }

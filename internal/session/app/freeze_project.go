@@ -31,7 +31,7 @@ const CurrentSession = "."
 // FreezeProject registers a project the user describes in a form, started
 // from the layout and commands of a running session if asked.
 type FreezeProject struct {
-	projects domain.ProjectRepository
+	projects domain.ProjectRegistry
 	capturer domain.SessionCapturer
 	form     ProjectForm
 	confirm  Confirmer
@@ -39,7 +39,7 @@ type FreezeProject struct {
 
 // NewFreezeProject constructs the use case against its ports.
 func NewFreezeProject(
-	projects domain.ProjectRepository,
+	projects domain.ProjectRegistry,
 	capturer domain.SessionCapturer,
 	form ProjectForm,
 	confirm Confirmer,

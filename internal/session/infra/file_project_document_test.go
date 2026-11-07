@@ -10,16 +10,16 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-func TestFileProjectRepositoryDocuments(t *testing.T) {
+func TestFileProjectRegistryDocuments(t *testing.T) {
 	const stored = "root: /srv/shop\n"
-	setup := func(t *testing.T) (infra.FileProjectRepository, string, domain.ProjectName) {
+	setup := func(t *testing.T) (infra.FileProjectRegistry, string, domain.ProjectName) {
 		t.Helper()
 		dir := t.TempDir()
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte(stored), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
 		name, _ := domain.NewProjectName("shop")
-		return infra.NewFileProjectRepository(dir), dir, name
+		return infra.NewFileProjectRegistry(dir), dir, name
 	}
 	read := func(t *testing.T, path string) string {
 		t.Helper()

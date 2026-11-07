@@ -20,12 +20,12 @@ func (s ProjectStatus) Running() bool {
 // ListProjects lists the registered projects and whether their sessions
 // run.
 type ListProjects struct {
-	projects domain.ProjectRepository
+	projects domain.ProjectRegistry
 	sessions domain.SessionLister
 }
 
 // NewListProjects constructs the use case against its ports.
-func NewListProjects(projects domain.ProjectRepository, sessions domain.SessionLister) ListProjects {
+func NewListProjects(projects domain.ProjectRegistry, sessions domain.SessionLister) ListProjects {
 	return ListProjects{projects: projects, sessions: sessions}
 }
 

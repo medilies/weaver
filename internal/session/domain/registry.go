@@ -1,8 +1,8 @@
 package domain
 
-// ProjectRepository is the port application use cases depend on to look
+// ProjectRegistry is the port application use cases depend on to look
 // up registered projects. Infrastructure provides the implementation.
-type ProjectRepository interface {
+type ProjectRegistry interface {
 	FindByName(name ProjectName) (Project, error)
 	// Names lists the registered projects' names, sorted.
 	Names() ([]ProjectName, error)

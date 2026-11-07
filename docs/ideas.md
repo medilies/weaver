@@ -90,7 +90,7 @@ session comparison and the warnings; the browser only draws them.
 
 ```mermaid
 flowchart LR
-    Repo[ProjectRepository] --> Read[app: ProjectOverview read model]
+    Registry[ProjectRegistry] --> Read[app: ProjectOverview read model]
     Tmux[tmux: running sessions] --> Read
     WS[Workspace: dirs, programs] --> Read
     Read -->|Plan, missing windows, warnings| Browser[infra: TeaBrowser]

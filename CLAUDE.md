@@ -15,8 +15,8 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | Term | Meaning | Config / CLI / browser | Code |
 | --- | --- | --- | --- |
 | project | A named dev environment weaver can open | `<name>.yml` | `Project`, `ProjectName` |
-| config | A project's YAML file | `weave show`, `weave edit` | `ProjectRepository`, `ConfigDocument` |
-| registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRepository.Names()` |
+| config | A project's YAML file | `weave show`, `weave edit` | `ProjectRegistry`, `ConfigDocument` |
+| registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRegistry.Names()` |
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
 | window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
@@ -34,17 +34,15 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
 | edit | Change a config in the editor, keeping it only if valid | `weave edit`, key `e` | `EditProject`, `ActionEdit` |
 | kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
-| delete | Remove a config; a running session keeps running | key `d` | `ProjectRepository.Delete`, `ActionDelete` |
+| delete | Remove a config; a running session keeps running | key `d` | `ProjectRegistry.Delete`, `ActionDelete` |
 | browser | The project list `weave` shows without arguments | `weave` | `BrowseProjects`, `ProjectBrowser`, `ProjectOverview` |
 | warning | Something opening would likely fail on | browser summary | `ProjectOverview.Warnings()` |
-
-`ProjectRepository` is the DDD repository of configs, unrelated to git repositories.
 
 ## Environment
 
 - No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weave`.
 - Go version is `1.26` everywhere, and `go.mod` is the source of truth: its `go` directive (`1.26.0`, which the `go` command insists on) sets the language version, and its `toolchain` directive the exact Go that CI and releases build with, read by setup-go's `go-version-file`. Bump `toolchain` when a 1.26.x patch ships.
-- No database: project configs are plain YAML files (`<name>.yml`, one per project) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRepository` port and the `infra.FileProjectRepository` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
+- No database: project configs are plain YAML files (`<name>.yml`, one per project) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRegistry` port and the `infra.FileProjectRegistry` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
 
 ## Tests
 

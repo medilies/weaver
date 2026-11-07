@@ -103,7 +103,7 @@ func shop(t *testing.T) domain.Project {
 // openShop runs OpenProject on the shop project with the given state.
 func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace) error {
 	t.Helper()
-	configs := inMemoryRepository{projects: map[string]domain.Project{"shop": shop(t)}}
+	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
 	return app.NewOpenProject(configs, sessions, workspace).Handle("shop")
 }
 
@@ -194,7 +194,7 @@ func TestOpenProject(t *testing.T) {
 	})
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
-		configs := inMemoryRepository{projects: map[string]domain.Project{}}
+		configs := inMemoryRegistry{projects: map[string]domain.Project{}}
 		err := app.NewOpenProject(configs, &fakeSessions{}, everything()).Handle("shop")
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
@@ -216,14 +216,14 @@ func rootedAt(t *testing.T, raw, root string) domain.Project {
 	return domain.NewProject(name, projectRoot)
 }
 
-// withBrokenConfig is a repository that also lists the project "broken",
+// withBrokenConfig is a registry that also lists the project "broken",
 // whose stored config can't be read.
 type withBrokenConfig struct {
-	inMemoryRepository
+	inMemoryRegistry
 }
 
 func (r withBrokenConfig) Names() ([]domain.ProjectName, error) {
-	names, err := r.inMemoryRepository.Names()
+	names, err := r.inMemoryRegistry.Names()
 	broken, _ := domain.NewProjectName("broken")
 	return append([]domain.ProjectName{broken}, names...), err
 }
@@ -232,12 +232,12 @@ func (r withBrokenConfig) FindByName(name domain.ProjectName) (domain.Project, e
 	if name.String() == "broken" {
 		return domain.Project{}, fmt.Errorf("broken.yml: %w: root: missing", domain.ErrInvalidConfig)
 	}
-	return r.inMemoryRepository.FindByName(name)
+	return r.inMemoryRegistry.FindByName(name)
 }
 
 func TestOpenProjectHandleDir(t *testing.T) {
-	repository := func(projects ...domain.Project) inMemoryRepository {
-		configs := inMemoryRepository{projects: map[string]domain.Project{}}
+	registry := func(projects ...domain.Project) inMemoryRegistry {
+		configs := inMemoryRegistry{projects: map[string]domain.Project{}}
 		for _, p := range projects {
 			configs.projects[p.Name().String()] = p
 		}
@@ -245,11 +245,11 @@ func TestOpenProjectHandleDir(t *testing.T) {
 	}
 	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
-		return app.NewOpenProject(repository(projects...), sessions, everything()).HandleDir(dir)
+		return app.NewOpenProject(registry(projects...), sessions, everything()).HandleDir(dir)
 	}
 	openPastBroken := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
-		configs := withBrokenConfig{repository(projects...)}
+		configs := withBrokenConfig{registry(projects...)}
 		return app.NewOpenProject(configs, sessions, everything()).HandleDir(dir)
 	}
 

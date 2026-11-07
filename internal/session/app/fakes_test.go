@@ -8,13 +8,13 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// inMemoryRepository is a fake domain.ProjectRepository, so these tests
+// inMemoryRegistry is a fake domain.ProjectRegistry, so these tests
 // never touch disk.
-type inMemoryRepository struct {
+type inMemoryRegistry struct {
 	projects map[string]domain.Project
 }
 
-func (r inMemoryRepository) FindByName(name domain.ProjectName) (domain.Project, error) {
+func (r inMemoryRegistry) FindByName(name domain.ProjectName) (domain.Project, error) {
 	project, ok := r.projects[name.String()]
 	if !ok {
 		return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
@@ -22,12 +22,12 @@ func (r inMemoryRepository) FindByName(name domain.ProjectName) (domain.Project,
 	return project, nil
 }
 
-func (r inMemoryRepository) Save(project domain.Project) error {
+func (r inMemoryRegistry) Save(project domain.Project) error {
 	r.projects[project.Name().String()] = project
 	return nil
 }
 
-func (r inMemoryRepository) Delete(name domain.ProjectName) error {
+func (r inMemoryRegistry) Delete(name domain.ProjectName) error {
 	if _, ok := r.projects[name.String()]; !ok {
 		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
 	}
@@ -35,7 +35,7 @@ func (r inMemoryRepository) Delete(name domain.ProjectName) error {
 	return nil
 }
 
-func (r inMemoryRepository) Names() ([]domain.ProjectName, error) {
+func (r inMemoryRegistry) Names() ([]domain.ProjectName, error) {
 	var names []domain.ProjectName
 	for _, key := range slices.Sorted(maps.Keys(r.projects)) {
 		names = append(names, r.projects[key].Name())

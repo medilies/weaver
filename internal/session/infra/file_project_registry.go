@@ -20,32 +20,32 @@ import (
 // configExtension is the extension of the config files.
 const configExtension = ".yml"
 
-// FileProjectRepository reads and saves project configs in a directory of
+// FileProjectRegistry reads and saves project configs in a directory of
 // "<name>.yml" files, in the format of projectFile.
-type FileProjectRepository struct {
+type FileProjectRegistry struct {
 	dir      string
 	warnings io.Writer
 	// warned holds the skipped files already warned about: each is
-	// warned about once per repository and its copies.
+	// warned about once per registry and its copies.
 	warned map[string]bool
 }
 
-// NewFileProjectRepository constructs a repository rooted at dir.
-func NewFileProjectRepository(dir string) FileProjectRepository {
-	return FileProjectRepository{dir: dir, warnings: io.Discard, warned: map[string]bool{}}
+// NewFileProjectRegistry constructs a registry rooted at dir.
+func NewFileProjectRegistry(dir string) FileProjectRegistry {
+	return FileProjectRegistry{dir: dir, warnings: io.Discard, warned: map[string]bool{}}
 }
 
 // WithWarnings writes to w why config files are skipped, e.g. "edit.yml",
 // which `weave edit` can't open since it runs the edit command.
-func (r FileProjectRepository) WithWarnings(w io.Writer) FileProjectRepository {
+func (r FileProjectRegistry) WithWarnings(w io.Writer) FileProjectRegistry {
 	r.warnings = w
 	return r
 }
 
-// Names implements domain.ProjectRepository. It reads file names only:
+// Names implements domain.ProjectRegistry. It reads file names only:
 // config files whose stem isn't a valid project name are skipped, with a
 // warning, and a missing directory has no projects.
-func (r FileProjectRepository) Names() ([]domain.ProjectName, error) {
+func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 	entries, err := os.ReadDir(r.dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -72,7 +72,7 @@ func (r FileProjectRepository) Names() ([]domain.ProjectName, error) {
 	return names, nil
 }
 
-func (r FileProjectRepository) warnSkipped(file string, reason error) {
+func (r FileProjectRegistry) warnSkipped(file string, reason error) {
 	path := filepath.Join(r.dir, file)
 	if r.warned[path] {
 		return
@@ -82,8 +82,8 @@ func (r FileProjectRepository) warnSkipped(file string, reason error) {
 	_, _ = fmt.Fprintf(r.warnings, "warning: skipping %s: %v; rename it to register it\n", path, reason)
 }
 
-// FindByName implements domain.ProjectRepository.
-func (r FileProjectRepository) FindByName(name domain.ProjectName) (domain.Project, error) {
+// FindByName implements domain.ProjectRegistry.
+func (r FileProjectRegistry) FindByName(name domain.ProjectName) (domain.Project, error) {
 	path, err := r.find(name)
 	if err != nil {
 		return domain.Project{}, err
@@ -100,7 +100,7 @@ func (r FileProjectRepository) FindByName(name domain.ProjectName) (domain.Proje
 }
 
 // Document implements app.ProjectDocuments.
-func (r FileProjectRepository) Document(name domain.ProjectName) (app.ConfigDocument, error) {
+func (r FileProjectRegistry) Document(name domain.ProjectName) (app.ConfigDocument, error) {
 	path, err := r.find(name)
 	if err != nil {
 		return app.ConfigDocument{}, err
@@ -115,7 +115,7 @@ func (r FileProjectRepository) Document(name domain.ProjectName) (app.ConfigDocu
 // ReplaceDocument implements app.ProjectDocuments: it stores content, as
 // written, in the project's config file if it is a valid config. Otherwise the stored config stays and the error wraps
 // domain.ErrInvalidConfig.
-func (r FileProjectRepository) ReplaceDocument(name domain.ProjectName, content []byte) error {
+func (r FileProjectRegistry) ReplaceDocument(name domain.ProjectName, content []byte) error {
 	path, err := r.find(name)
 	if err != nil {
 		return err
@@ -129,10 +129,10 @@ func (r FileProjectRepository) ReplaceDocument(name domain.ProjectName, content 
 	return writeFileAtomic(path, content)
 }
 
-// Save implements domain.ProjectRepository. It writes the config and
+// Save implements domain.ProjectRegistry. It writes the config and
 // saves the JSON Schema next to it, which it points to so editors
 // complete and check it.
-func (r FileProjectRepository) Save(project domain.Project) error {
+func (r FileProjectRegistry) Save(project domain.Project) error {
 	doc, err := encodeProject(project)
 	if err != nil {
 		return err
@@ -143,9 +143,9 @@ func (r FileProjectRepository) Save(project domain.Project) error {
 	return writeFileAtomic(r.path(project.Name()), doc)
 }
 
-// Delete implements domain.ProjectRepository: it removes the project's
+// Delete implements domain.ProjectRegistry: it removes the project's
 // config file.
-func (r FileProjectRepository) Delete(name domain.ProjectName) error {
+func (r FileProjectRegistry) Delete(name domain.ProjectName) error {
 	err := os.Remove(r.path(name))
 	if errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
@@ -154,7 +154,7 @@ func (r FileProjectRepository) Delete(name domain.ProjectName) error {
 }
 
 // find is the path of the config file of project name.
-func (r FileProjectRepository) find(name domain.ProjectName) (string, error) {
+func (r FileProjectRegistry) find(name domain.ProjectName) (string, error) {
 	path := r.path(name)
 	_, err := os.Stat(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -164,13 +164,13 @@ func (r FileProjectRepository) find(name domain.ProjectName) (string, error) {
 }
 
 // path is where the config of project name lives.
-func (r FileProjectRepository) path(name domain.ProjectName) string {
+func (r FileProjectRegistry) path(name domain.ProjectName) string {
 	return filepath.Join(r.dir, name.String()+configExtension)
 }
 
 // writeSchema saves the JSON Schema next to the configs, unless it is
 // there already.
-func (r FileProjectRepository) writeSchema() error {
+func (r FileProjectRegistry) writeSchema() error {
 	if err := os.MkdirAll(r.dir, 0o755); err != nil {
 		return err
 	}

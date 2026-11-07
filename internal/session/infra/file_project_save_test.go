@@ -32,7 +32,7 @@ windows:
 func save(t *testing.T, project domain.Project) (string, string) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "projects")
-	if err := infra.NewFileProjectRepository(dir).Save(project); err != nil {
+	if err := infra.NewFileProjectRegistry(dir).Save(project); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	doc, err := os.ReadFile(filepath.Join(dir, project.Name().String()+".yml"))
@@ -51,7 +51,7 @@ func mustLoad(t *testing.T, name, doc string) domain.Project {
 	return project
 }
 
-func TestFileProjectRepositorySave(t *testing.T) {
+func TestFileProjectRegistrySave(t *testing.T) {
 	t.Setenv("HOME", "/home/someone")
 
 	for _, fixture := range []string{"nimbus", "shop"} {
@@ -128,7 +128,7 @@ windows:
 		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/old\n"), 0o600); err != nil {
 			t.Fatalf("writing fixture: %v", err)
 		}
-		configs := infra.NewFileProjectRepository(dir)
+		configs := infra.NewFileProjectRegistry(dir)
 		saved := mustLoad(t, "shop", "root: /srv/shop\n")
 		if err := configs.Save(saved); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -147,7 +147,7 @@ windows:
 
 	t.Run("lists the saved project, not the schema", func(t *testing.T) {
 		dir, _ := save(t, mustLoad(t, "grid", gridDoc))
-		names, err := infra.NewFileProjectRepository(dir).Names()
+		names, err := infra.NewFileProjectRegistry(dir).Names()
 		if err != nil || len(names) != 1 || names[0].String() != "grid" {
 			t.Fatalf("got %v (%v), want grid only", names, err)
 		}

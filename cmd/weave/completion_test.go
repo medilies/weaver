@@ -11,7 +11,7 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// registered is a fake domain.ProjectRepository that only knows names.
+// registered is a fake domain.ProjectRegistry that only knows names.
 type registered []string
 
 func (r registered) FindByName(name domain.ProjectName) (domain.Project, error) {
