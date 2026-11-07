@@ -87,7 +87,7 @@
           "minLength": 1
         },
         "dir": {
-          "description": "Where the pane's shell starts: relative to root, or absolute.",
+          "description": "Where the pane's shell starts: relative to root, absolute, or starting with ~/.",
           "type": "string"
         },
         "split": {

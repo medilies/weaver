@@ -237,6 +237,13 @@ func TestFileProjectRepositoryRejectsInvalidConfigs(t *testing.T) {
 		}
 	})
 
+	t.Run("names a field's place as the config does, not by its Go type", func(t *testing.T) {
+		_, err := load(t, "typo", "root: /srv/typo\nwindows: [{name: a, panes: [{comand: ls}]}]\n")
+		if err == nil || !strings.Contains(err.Error(), "not found in type pane") || strings.Contains(err.Error(), "infra.") {
+			t.Fatalf("got %v, want comand reported as not found in a pane", err)
+		}
+	})
+
 	t.Run("rejects a second document", func(t *testing.T) {
 		_, err := load(t, "twice", "root: /srv/a\n---\nroot: /srv/b\n")
 		if !errors.Is(err, infra.ErrTrailingData) {

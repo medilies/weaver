@@ -6,9 +6,11 @@ import (
 	"strings"
 )
 
-// expandHome turns a leading "~" into the user's home directory, so
-// configs can say "~/dev/weaver" and stay portable across machines.
-func expandHome(path string) (string, error) {
+// ExpandHome turns a leading "~" into the user's home directory, so
+// configs can say "~/dev/weaver" and stay portable across machines. The
+// forms and `weave freeze --root=~/…`, which the shell leaves as typed,
+// read it the same way.
+func ExpandHome(path string) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path, nil
 	}
@@ -20,7 +22,7 @@ func expandHome(path string) (string, error) {
 }
 
 // contractHome turns the user's home directory at the start of path back
-// into "~", the inverse of expandHome.
+// into "~", the inverse of ExpandHome.
 func contractHome(path string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" || home == "/" {

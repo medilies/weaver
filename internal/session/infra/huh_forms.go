@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
@@ -27,10 +28,15 @@ func NewHuhForms() HuhForms {
 }
 
 // Confirm implements app.Confirmer, as a dialog in the middle of the
-// screen.
+// screen. Esc answers No, as every question asked so has No leave things
+// as they are. Declining to replace a registered project ends the freeze,
+// as Ctrl+C would.
 func (HuhForms) Confirm(question string) (bool, error) {
 	yes := false
-	form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&yes)))
+	keys := huh.NewDefaultKeyMap()
+	keys.Confirm.Reject = key.NewBinding(key.WithKeys("n", "N", "esc"), key.WithHelp("n", "No"))
+	form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&yes))).
+		WithKeyMap(keys)
 	form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Interrupt
 	help := form.Help().ShortHelpView(form.KeyBinds())
 	width := max(lipgloss.Width(question)+confirmFrameWidth, lipgloss.Width(help))
@@ -78,7 +84,7 @@ func (d dialog) View() tea.View {
 // Fill implements app.ProjectForm: a screen for the project, then, for
 // each window, one for its name and one per pane. Windows captured from a
 // running session come first, pre-filled.
-func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
+func (HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	answers := projectAnswers{name: draft.Name, root: draft.Root}
 	for _, repo := range draft.Repos.List() {
 		answers.keep = append(answers.keep, repo.Dir())
@@ -103,8 +109,11 @@ func (f HuhForms) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	}
 	for {
 		if len(windows) > 0 {
-			more, err := f.Confirm("Add another window?")
-			if err != nil {
+			more := false
+			// Full screen, like the steps around it, and not Confirm: No
+			// saves the project here.
+			if err := show(huh.NewGroup(huh.NewConfirm().Title("Add another window?").
+				Affirmative("Yes").Negative("No").Value(&more))); err != nil {
 				return domain.Project{}, err
 			}
 			if !more {
@@ -148,13 +157,20 @@ func (a *projectAnswers) groups(found domain.Repos) []*huh.Group {
 			Description("Used as `weave <name>` and as the tmux session name.").
 			Value(&a.name).Validate(func(s string) error { _, err := domain.NewProjectName(s); return err }),
 		huh.NewInput().Title("Root").
-			Description("The project's directory.").
-			Value(&a.root).Validate(func(s string) error { _, err := domain.NewProjectRoot(s); return err }),
+			Description("The project's directory: absolute, or starting with ~/.").
+			Value(&a.root).Validate(func(s string) error { _, err := parseRoot(s); return err }),
 	).Title("New project")}
 
+	// The found repositories come first in the group, so the ones kept are
+	// known when the typed ones are checked.
+	checkRepos := func(s string) error {
+		a.more = s
+		_, err := a.repos(found)
+		return err
+	}
 	repositories := []huh.Field{huh.NewText().Title("Other repositories").
 		Description("Cloned when missing. One per line: directory = remote, e.g. back = git@host:back.git").
-		Value(&a.more).Validate(func(s string) error { _, err := parseRepos(s); return err })}
+		Value(&a.more).Validate(checkRepos)}
 	if list := found.List(); len(list) > 0 {
 		options := make([]huh.Option[string], 0, len(list))
 		for _, repo := range list {
@@ -169,7 +185,7 @@ func (a *projectAnswers) groups(found domain.Repos) []*huh.Group {
 	groups = append(groups, huh.NewGroup(repositories...).Title("Repositories"))
 
 	return append(groups, huh.NewGroup(
-		beforeField("Run first in every pane", &a.before),
+		beforeField("Before commands for every pane", &a.before),
 		envField("Environment for every pane", &a.env),
 	).Title("Every pane"))
 }
@@ -179,20 +195,12 @@ func (a projectAnswers) project(found domain.Repos) (domain.Project, error) {
 	if err != nil {
 		return domain.Project{}, err
 	}
-	root, err := domain.NewProjectRoot(a.root)
+	root, err := parseRoot(a.root)
 	if err != nil {
 		return domain.Project{}, err
 	}
-	repos, err := parseRepos(a.more)
-	if err != nil {
-		return domain.Project{}, err
-	}
-	for _, repo := range found.List() {
-		if slices.Contains(a.keep, repo.Dir()) {
-			repos = append(repos, repo)
-		}
-	}
-	kept, err := domain.NewRepos(repos...)
+	// Checked again: going back, the user may tick a found one typed too.
+	kept, err := a.repos(found)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -205,6 +213,21 @@ func (a projectAnswers) project(found domain.Repos) (domain.Project, error) {
 		return domain.Project{}, err
 	}
 	return domain.NewProject(name, root).WithRepos(kept).WithEnv(env).RunningFirst(before...), nil
+}
+
+// repos are the repositories typed and the found ones kept, checked
+// together: a directory typed and ticked too is one too many.
+func (a *projectAnswers) repos(found domain.Repos) (domain.Repos, error) {
+	repos, err := parseRepos(a.more)
+	if err != nil {
+		return domain.Repos{}, err
+	}
+	for _, repo := range found.List() {
+		if slices.Contains(a.keep, repo.Dir()) {
+			repos = append(repos, repo)
+		}
+	}
+	return domain.NewRepos(repos...)
 }
 
 // askWindow asks for a window's name, then for its panes one by one. A
@@ -234,7 +257,7 @@ func askWindow(
 		}
 		return nil
 	})}
-	fields = append(fields, beforeField("Run first in every pane of this window", &before))
+	fields = append(fields, beforeField("Before commands for every pane of this window", &before))
 	if captured != nil {
 		fields = append(fields, huh.NewConfirm().Title("Keep this window?").
 			Description(fmt.Sprintf("It has %d pane(s) in the running session.", len(captured.Panes()))).
@@ -274,7 +297,7 @@ func askWindow(
 	built := make([]domain.Pane, 0, len(panes))
 	for i, pane := range panes {
 		if len(panes) > 1 {
-			pane.name = pane.label(i) // borders need a label
+			pane.name = pane.paneName(i) // borders need a name
 		}
 		p, err := pane.pane(i)
 		if err != nil {
@@ -329,19 +352,19 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 		huh.NewInput().Title("Pane name").
 			Description("Shown in the pane's top border; a window with several panes needs one per pane.").
 			Value(&a.name).Validate(func(s string) error {
-			label := domain.DefaultPaneName(index)
+			want := domain.DefaultPaneName(index)
 			switch {
 			case strings.TrimSpace(s) != "":
 				name, err := domain.NewPaneName(s)
 				if err != nil {
 					return err
 				}
-				label = name
+				want = name
 			case index == 0:
-				return nil // a single pane needs no label
+				return nil // a single pane needs no name
 			}
 			for i, e := range earlier {
-				if e.label(i) == label.String() {
+				if e.paneName(i) == want.String() {
 					return domain.ErrDuplicatePaneName
 				}
 			}
@@ -354,7 +377,7 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 	if index > 0 {
 		targets := make([]huh.Option[int], 0, index)
 		for i, e := range earlier {
-			targets = append(targets, huh.NewOption(e.label(i), i))
+			targets = append(targets, huh.NewOption(e.paneName(i), i))
 		}
 		layout = append(layout,
 			huh.NewSelect[int]().Title("Split").Description("The pane this one is carved out of.").
@@ -365,7 +388,7 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 				Value(&a.size).Validate(func(s string) error { _, err := domain.ParseSize(s); return err }),
 		)
 	}
-	layout = append(layout, beforeField("Run first", &a.before), huh.NewInput().Title("Command").
+	layout = append(layout, beforeField("Before commands", &a.before), huh.NewInput().Title("Command").
 		Description("Typed into the shell when the pane starts. Empty for a plain shell.").
 		Value(&a.command).Validate(func(s string) error {
 		if strings.TrimSpace(s) == "" {
@@ -376,7 +399,7 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 	}))
 
 	running := huh.NewGroup(huh.NewConfirm().Title("Run the command when the pane starts?").
-		Affirmative("Run it").Negative("Only type it").Value(&a.run)).
+		Affirmative("Run it").Negative("Prefill it").Value(&a.run)).
 		WithHideFunc(func() bool { return strings.TrimSpace(a.command) == "" })
 
 	extras := []huh.Field{huh.NewText().Title("Note").
@@ -395,9 +418,9 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 	}
 }
 
-// label is the name of the pane at index, or its default in a window with
-// several panes.
-func (a *paneAnswers) label(index int) string {
+// paneName is the name of the pane at index, or its default in a window
+// with several panes.
+func (a *paneAnswers) paneName(index int) string {
 	if name := strings.TrimSpace(a.name); name != "" {
 		return name
 	}

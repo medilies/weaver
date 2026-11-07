@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -62,6 +64,13 @@ type splitFile struct {
 // schema saved next to the configs.
 const schemaHeader = "# yaml-language-server: $schema=./" + schemaFileName + "\n"
 
+// fileTypes names the file shapes in YAML's errors as the config does,
+// e.g. "field comand not found in type pane".
+var fileTypes = strings.NewReplacer(
+	"infra.projectFile", "project", "infra.windowFile", "window",
+	"infra.paneFile", "pane", "infra.splitFile", "split",
+)
+
 // decodeProject strictly parses a config: unknown fields (usually typos)
 // and a second document are errors, not silently ignored.
 func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) {
@@ -70,7 +79,7 @@ func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) 
 	decoder.KnownFields(true)
 	// An empty document leaves the root empty, which toProject reports.
 	if err := decoder.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
-		return domain.Project{}, err
+		return domain.Project{}, errors.New(fileTypes.Replace(err.Error()))
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		return domain.Project{}, ErrTrailingData
@@ -79,11 +88,7 @@ func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) 
 }
 
 func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) {
-	rootPath, err := expandHome(f.Root)
-	if err != nil {
-		return domain.Project{}, err
-	}
-	root, err := domain.NewProjectRoot(rootPath)
+	root, err := parseRoot(f.Root)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -114,10 +119,12 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 		WithWindows(windows...)
 }
 
+// toRepos reads the repositories in directory order, so the same config
+// always reports the same error.
 func toRepos(repositories map[string]string) (domain.Repos, error) {
 	repos := make([]domain.Repo, 0, len(repositories))
-	for dir, remote := range repositories {
-		repo, err := domain.NewRepo(dir, remote)
+	for _, dir := range slices.Sorted(maps.Keys(repositories)) {
+		repo, err := domain.NewRepo(dir, repositories[dir])
 		if err != nil {
 			return domain.Repos{}, err
 		}
@@ -174,7 +181,7 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 		pane = pane.Named(name)
 	}
 
-	dirPath, err := expandHome(p.Dir)
+	dirPath, err := ExpandHome(p.Dir)
 	if err != nil {
 		return domain.Pane{}, err
 	}

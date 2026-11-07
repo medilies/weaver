@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/medilies/weaver/internal/session/app"
+	"github.com/medilies/weaver/internal/session/infra"
 )
 
 func newFreezeCommand(weaver application) *cobra.Command {
@@ -17,8 +18,8 @@ func newFreezeCommand(weaver application) *cobra.Command {
 		Short: "Register a project through interactive forms, from a running session if given",
 		Long: `weave freeze asks for a project's name and root (the current
 directory unless --root says otherwise), the repositories to clone when
-missing, the commands to run first in its panes, and its windows and
-panes, then saves it.
+missing, the before commands of its panes, and its windows and panes,
+then saves it.
 
 Given a running tmux session, the windows and panes start as the session
 has them, and the name as the session's: lay them out by hand, then let
@@ -41,7 +42,12 @@ quotes and variables don't survive. Choose "Run it" to run it.`,
 			if err != nil {
 				return err
 			}
-			request := app.FreezeRequest{Name: name, Root: root, WorkingDir: dir}
+			// The shell leaves the ~ of --root=~/dev/shop as typed.
+			expanded, err := infra.ExpandHome(root)
+			if err != nil {
+				return err
+			}
+			request := app.FreezeRequest{Name: name, Root: expanded, WorkingDir: dir}
 			if len(args) == 1 {
 				request.Session = args[0]
 			}
