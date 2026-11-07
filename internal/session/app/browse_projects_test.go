@@ -438,13 +438,31 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("shows why a session couldn't be killed", func(t *testing.T) {
+	t.Run("says a session isn't running without asking to kill it", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "blog"))
-		if err := s.browse(answer(true)); err != nil {
+		confirm := &countingConfirmer{answer: true}
+		if err := s.browse(confirm); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if notice := s.browser.last().notice; !strings.Contains(notice, domain.ErrSessionNotRunning.Error()) {
-			t.Fatalf("got notice %q, want blog's session not running", notice)
+		if notice := s.browser.last().notice; !strings.Contains(notice, domain.ErrSessionNotRunning.Error()) || confirm.asked != 0 {
+			t.Fatalf("got notice %q after %d questions, want blog's session not running and none", notice, confirm.asked)
+		}
+	})
+
+	t.Run("still asks to kill a session it couldn't find", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		confirm := &countingConfirmer{answer: true}
+		server := tmuxServer{s.sessions}
+		err := app.NewBrowseProjects(
+			s.browser, confirm, s.configs, s.documents, s.workspace, unfindableSessions{errors.New("tmux: not found")},
+			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
+			app.NewKillProject(server, capturedSessions{}),
+		).Handle("/srv/new")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if confirm.asked != 1 || s.browser.last().notice != "Killed shop." {
+			t.Fatalf("got notice %q after %d questions, want shop killed once confirmed", s.browser.last().notice, confirm.asked)
 		}
 	})
 

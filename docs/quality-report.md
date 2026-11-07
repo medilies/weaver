@@ -49,7 +49,7 @@ Corrections to the findings below:
 ### Other sections
 
 - **Fixed:** the glossary wording, `ErrNotInsideTmux`, every README item (but see restoring below), the `Problem` comment, `specs.md`, tests before releasing, the `Confirm` dialog items, and the marked minor items and test gaps.
-- **Open:** a hint in the error when a restored window's directory is missing, `#` in pane labels (`#{q/h:…}` works on tmux 3.4), the concepts missing from the glossary, the browser offering to kill a session that isn't running, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
+- **Open:** a hint in the error when a restored window's directory is missing, `#` in pane labels (`#{q/h:…}` works on tmux 3.4), the concepts missing from the glossary, `HandleDir` and symlinks, unquoted `~` in configs, and the unmarked test gaps.
 - **Deferred:** the items in "Fixes that wait for an idea" below.
 - **Left:** schema leniency (as the report says), the `weave edit` races, config file names that differ only by spaces, the GoReleaser version format, the changelog filters, and a tmux version check when weave runs.
 
@@ -253,7 +253,7 @@ Don't change `Exists`: pane directories are checked with it, and an empty pane d
 **Problem:** every exit error is read as "no such session, or no server". But tmux also exits 1 when it can't connect, for example to a socket it may not open. When that happens:
 
 - `weave list` and the browser show nothing running.
-- `weave kill shop` says "session not running".
+- `weave kill shop` says "session not running", and so does the browser's kill, without asking.
 - Opening cloned missing repositories before `new-session` failed with the real error. Since `0355ed1` opening doesn't clone, so it only checks directories first.
 
 **Tested on tmux 3.4:** with the socket at mode 000, `list-sessions` prints "error connecting to … (Permission denied)" and exits 1.
@@ -434,7 +434,7 @@ These apply to the dialog in `internal/session/infra/huh_forms.go`:
 - **Fixed.** `weave freeze nosuch` shows "tmux list-windows: exit status 1: can't find session: nosuch" (tmux 3.4). With no tmux server running, it shows tmux's connection error instead ("no server running on …" or "error connecting to …"). Have `Capture` turn tmux's exit error into one wrapping `ErrSessionNotRunning`, as `Kill` does.
 - **Fixed.** Config errors name Go types, such as "field comand not found in type infra.paneFile" or "cannot unmarshal !!str … into []string". They reach `weave edit`, `weave show` and the browser. Replace `projectFile`, `windowFile`, `paneFile` and `splitFile` with project, window, pane and split.
 - **Fixed.** `Command.Program` (`internal/session/domain/layout.go:278`) misses builtins such as `unsetopt`, `unalias`, `shopt`, `print` and `disown`. It also takes `#` for a program, so a prefill like `# run migrations` warns "program not found: #".
-- The browser asks "Kill X's session…?" for a project that isn't running, then shows "session not running". `BrowseProjects.act` could check `sessions.Find` before asking.
+- **Fixed.** The browser asks "Kill X's session…?" for a project that isn't running, then shows "session not running". `BrowseProjects.act` could check `sessions.Find` before asking.
 - **Deferred** to browser idea #3. After a delete, the browser's cursor jumps to the top of the list, because `act` selects the deleted name. Select its neighbour instead.
 
 ### Determinism and speed

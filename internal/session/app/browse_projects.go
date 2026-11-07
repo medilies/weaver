@@ -296,6 +296,11 @@ func (uc BrowseProjects) act(choice Choice, workingDir string) (domain.ProjectNa
 		}
 		return name, fmt.Sprintf("Saved %s.", name), nil
 	case ActionKill:
+		// Don't ask to kill what isn't running. When finding the session
+		// fails, ask anyway: killing it then reports the failure.
+		if _, found, err := uc.sessions.Find(name); err == nil && !found {
+			return name, "", fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+		}
 		if err := uc.ask(fmt.Sprintf("Kill %s's session and everything running in it?", name)); err != nil {
 			return name, "", err
 		}
