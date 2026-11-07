@@ -220,6 +220,34 @@ func TestPaneNote(t *testing.T) {
 	})
 }
 
+func TestWindowRebased(t *testing.T) {
+	for _, c := range []struct{ name, dir, want string }{
+		{"moves a directory under from under to", "/srv/shop/api", "/home/me/shop/api"},
+		{"moves from itself to to", "/srv/shop", "/home/me/shop"},
+		{"keeps a directory elsewhere", "/srv/shopping", "/srv/shopping"},
+		{"keeps a relative directory", "api", "api"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir, err := domain.NewPaneDir(c.dir)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			w := window(t, "main", domain.NewPane().In(dir))
+			if got := w.Rebased("/srv/shop", "/home/me/shop").Panes()[0].Dir().String(); got != c.want {
+				t.Fatalf("got %q, want %q", got, c.want)
+			}
+		})
+	}
+
+	t.Run("keeps the window's own commands", func(t *testing.T) {
+		cmd, _ := domain.NewCommand("nvm use")
+		w := window(t, "main").RunningFirst(cmd)
+		if got := w.Rebased("/srv/shop", "/home/me/shop").Before(); len(got) != 1 || got[0].String() != "nvm use" {
+			t.Fatalf("got %v, want nvm use", got)
+		}
+	})
+}
+
 func TestNewWindow(t *testing.T) {
 	apiShell := domain.NewPane().Named(paneName(t, "api shell"))
 	taskDev := domain.NewPane().Named(paneName(t, "task dev")).Splitting(split(t, 0, domain.Right, "40%"))

@@ -49,7 +49,7 @@ func wire() (application, error) {
 	forms := infra.NewHuhForms()
 
 	weaver := application{
-		freezeProject: app.NewFreezeProject(projects, tmux, forms, forms),
+		freezeProject: app.NewFreezeProject(projects, tmux, workspace, forms, forms),
 		editProject:   app.NewEditProject(projects, infra.NewEditor(), forms),
 		sessions:      tmux,
 		openProject:   app.NewOpenProject(projects, tmux, workspace),

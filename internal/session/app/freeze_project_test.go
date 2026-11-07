@@ -52,26 +52,46 @@ func (c capturedSessions) Current() (string, error) {
 }
 
 type freezeSetup struct {
-	configs inMemoryRegistry
-	form    *fakeForm
-	current string // the session weaver runs in; none outside tmux
+	configs   inMemoryRegistry
+	form      *fakeForm
+	current   string // the session weaver runs in; none outside tmux
+	workspace *fakeWorkspace
 }
 
 func newFreezeSetup(t *testing.T) freezeSetup {
 	t.Helper()
 	return freezeSetup{
-		configs: inMemoryRegistry{projects: map[string]domain.Project{}},
-		form:    &fakeForm{project: shop(t)},
+		configs:   inMemoryRegistry{projects: map[string]domain.Project{}},
+		form:      &fakeForm{project: shop(t)},
+		workspace: &fakeWorkspace{},
 	}
 }
 
 func (s freezeSetup) freeze(t *testing.T, confirm app.Confirmer, request app.FreezeRequest) (domain.Project, error) {
 	t.Helper()
 	sessions := capturedSessions{
-		windows: map[string][]domain.Window{"store-dev": shop(t).Windows(), "my.session": shop(t).Windows()},
+		windows: map[string][]domain.Window{
+			"store-dev": shop(t).Windows(), "my.session": shop(t).Windows(), "resolved": resolvedShop(t),
+		},
 		current: s.current,
 	}
-	return app.NewFreezeProject(s.configs, sessions, s.form, confirm).Handle(request)
+	return app.NewFreezeProject(s.configs, sessions, s.workspace, s.form, confirm).Handle(request)
+}
+
+// resolvedShop is a session's windows as tmux reports them for a shop
+// rooted at /home/me/shop, a symlink to /srv/shop.
+func resolvedShop(t *testing.T) []domain.Window {
+	t.Helper()
+	dir, err := domain.NewPaneDir("/srv/shop/api")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	name, _ := domain.NewWindowName("main")
+	window, err := domain.NewWindow(name, domain.NewPane().In(dir))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return []domain.Window{window}
 }
 
 func TestFreezeProject(t *testing.T) {
@@ -143,6 +163,17 @@ func TestFreezeProject(t *testing.T) {
 		}
 		if len(s.form.draft.Windows) != 2 || s.form.draft.Windows[1].Name().String() != "logs" {
 			t.Fatalf("got %d windows, want the session's shop and logs", len(s.form.draft.Windows))
+		}
+	})
+
+	t.Run("keeps captured directories under a root written through a symlink", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		s.workspace.links = map[string]string{"/home/me/shop": "/srv/shop"}
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/home/me/shop", Session: "resolved"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.form.draft.Windows[0].Panes()[0].Dir().String(); got != "/home/me/shop/api" {
+			t.Fatalf("got dir %q, want /home/me/shop/api", got)
 		}
 	})
 

@@ -110,6 +110,18 @@ func (d PaneDir) IsRoot() bool {
 	return d.path == ""
 }
 
+// rebased is d moved from one directory to another, as Window.Rebased
+// moves it.
+func (d PaneDir) rebased(from, to string) PaneDir {
+	if !filepath.IsAbs(d.path) {
+		return d
+	}
+	if rel, ok := under(from, d.path); ok {
+		return PaneDir{path: filepath.Join(to, rel)}
+	}
+	return d
+}
+
 // Direction is where a split puts the new pane relative to the pane it
 // splits.
 type Direction int
@@ -484,4 +496,16 @@ func (w Window) Panes() []Pane {
 // Before is the window's own commands run first in each of its panes.
 func (w Window) Before() []Command {
 	return slices.Clone(w.before)
+}
+
+// Rebased is the window with its panes' directories moved from one
+// directory to another: an absolute directory at or under from becomes
+// the same path under to, as when from is to with its symlinks resolved.
+// Relative directories, and ones elsewhere, are kept as they are.
+func (w Window) Rebased(from, to string) Window {
+	w.panes = slices.Clone(w.panes)
+	for i := range w.panes {
+		w.panes[i].dir = w.panes[i].dir.rebased(from, to)
+	}
+	return w
 }

@@ -114,7 +114,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		s.browser, confirm, s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace),
-		app.NewFreezeProject(s.configs, capturedSessions{}, s.form, confirm),
+		app.NewFreezeProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form, confirm),
 		app.NewEditProject(s.documents, s.editor, confirm),
 		app.NewKillProject(server, capturedSessions{}),
 	).Handle("/srv/new")

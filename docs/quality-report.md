@@ -21,7 +21,6 @@ Done against the project's aim of staying simple and small. macOS stays out of s
 ### Other sections
 
 - **Open:**
-  - freezing under a symlinked root (Paths)
   - a hint in the error when a restored window's directory is missing (README)
   - the test gaps
 - **Deferred:** the items in "Fixes that wait for an idea" below.
@@ -185,7 +184,7 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 
 ### Paths
 
-- **Open.** Freezing a project whose root is written through a symlink records its panes' directories outside the root. tmux and `/proc` both report resolved directories, and the form and `dirOf` make them relative to the root as written. `weave .` solved the same problem through `Workspace.RealPath`.
+- **Left.** A symlink inside a root that leads out of it, as `/srv/shop/api` to `/data/api`, is frozen as the absolute `/data/api`. tmux and `/proc` report directories resolved, and nothing tells which link the shell went through. Editing the config keeps the link.
 
 ### macOS (ignored)
 

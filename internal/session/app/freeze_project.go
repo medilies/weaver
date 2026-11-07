@@ -31,21 +31,23 @@ const CurrentSession = "."
 // FreezeProject registers a project the user describes in a form, started
 // from the layout and commands of a running session if asked.
 type FreezeProject struct {
-	projects domain.ProjectRegistry
-	capturer domain.SessionCapturer
-	form     ProjectForm
-	confirm  Confirmer
+	projects  domain.ProjectRegistry
+	capturer  domain.SessionCapturer
+	workspace domain.Workspace
+	form      ProjectForm
+	confirm   Confirmer
 }
 
 // NewFreezeProject constructs the use case against its ports.
 func NewFreezeProject(
 	projects domain.ProjectRegistry,
 	capturer domain.SessionCapturer,
+	workspace domain.Workspace,
 	form ProjectForm,
 	confirm Confirmer,
 ) FreezeProject {
 	return FreezeProject{
-		projects: projects, capturer: capturer, form: form, confirm: confirm,
+		projects: projects, capturer: capturer, workspace: workspace, form: form, confirm: confirm,
 	}
 }
 
@@ -99,7 +101,7 @@ func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {
 		if err != nil {
 			return ProjectDraft{}, err
 		}
-		draft.Windows = windows
+		draft.Windows = uc.underRoot(windows, draft.Root)
 		if _, err := domain.NewProjectName(session); err == nil && draft.Name == "" {
 			draft.Name = session
 		}
@@ -108,4 +110,20 @@ func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {
 		draft.Name = filepath.Base(draft.Root)
 	}
 	return draft, nil
+}
+
+// underRoot moves captured pane directories, which tmux reports with
+// their symlinks resolved, back under root as written, so the form and
+// the config can make them relative to it. A root the user then changes
+// in the form to its resolved path leaves them absolute.
+func (uc FreezeProject) underRoot(windows []domain.Window, root string) []domain.Window {
+	realRoot := uc.workspace.RealPath(root)
+	if realRoot == root {
+		return windows
+	}
+	moved := make([]domain.Window, 0, len(windows))
+	for _, window := range windows {
+		moved = append(moved, window.Rebased(realRoot, root))
+	}
+	return moved
 }
