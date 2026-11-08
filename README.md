@@ -101,7 +101,8 @@ places.
 | o | add an item to the list selected, a pane to the window selected, or a window |
 | d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields, the window, after you confirm |
 | J K | move the item, pane or window selected down or up |
-| ctrl+s | save; the config is rewritten, without its comments |
+| u, ctrl+r | undo the last change, or redo the last change undone |
+| ctrl+s | show what saving changes in the config (↑ ↓ scroll), then y, enter or ctrl+s saves and n or esc goes back; the config is rewritten, without its comments |
 | esc | cancel typing, or leave, asking first when there are changes |
 
 `weave <project>` attaches to the project's tmux session (inside tmux,

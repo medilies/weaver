@@ -30,9 +30,9 @@ func NewEditProject(
 }
 
 // Handle changes the project named rawName in the config form, starting
-// from its config, and saves the project the form returns. Saving drops
-// the config's comments, so a commented config asks first; ErrAborted
-// when the user declines or leaves the form.
+// from its project and its config as stored, and saves the project the
+// form returns. Saving drops the config's comments, so a commented config
+// asks first; ErrAborted when the user declines or leaves the form.
 func (uc EditProject) Handle(rawName string) error {
 	name, err := domain.NewProjectName(rawName)
 	if err != nil {
@@ -42,6 +42,10 @@ func (uc EditProject) Handle(rawName string) error {
 	if errors.Is(err, domain.ErrInvalidConfig) {
 		return fmt.Errorf("%w; edit it raw to fix it", err)
 	}
+	if err != nil {
+		return err
+	}
+	stored, err := uc.documents.Document(name)
 	if err != nil {
 		return err
 	}
@@ -65,6 +69,7 @@ func (uc EditProject) Handle(rawName string) error {
 		Env:     project.Env(),
 		Before:  project.Before(),
 		Windows: project.Windows(),
+		Config:  stored.Content,
 	})
 	if err != nil {
 		return err

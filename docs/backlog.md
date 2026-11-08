@@ -33,29 +33,13 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 9 | Undo and the diff before saving | form | S | |
 | 10 | The layout in the config form | form | M | |
 | 11 | Freeze through the config form | form | M | 10 |
 
 ```mermaid
 flowchart LR
     T10[10 layout in the form] --> T11[11 freeze through the form]
-    T9[9 undo and diff]
 ```
-
-## 9. Undo and the diff before saving
-
-The config form (`infra/tea_config_form.go`, `weave edit`, key `e`)
-changes a project in place, but a deleted pane or window can only come
-back by leaving without saving.
-
-- **Undo is cheap**: projects are immutable values, so undo is a stack
-  of earlier `Project`s in the form's model, `u` popping it and
-  `ctrl+r` redoing.
-- **The diff**: `ctrl+s` can show what saving changes, the stored
-  config against `encodeProject`'s, before writing. Comments the user
-  wrote show as removed, which the warning before the form opens only
-  says in a sentence.
 
 ## 10. The layout in the config form
 

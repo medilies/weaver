@@ -15,9 +15,10 @@ func newEditCommand(weaver application) *cobra.Command {
 		Use:   "edit <project>",
 		Short: "Change a project's config in the config form, or raw in your editor",
 		Long: `weave edit opens the config form: the project, its windows and their
-panes as cards, each field checked as you type it. ctrl+s saves, esc
-leaves. Saving rewrites the config, so its comments go: weaver asks
-first when it has some.
+panes as cards, each field checked as you type it. u undoes a change
+and ctrl+r redoes it. ctrl+s shows what saving changes in the config,
+then saves; esc leaves. Saving rewrites the config, so its comments go:
+weaver asks first when it has some.
 
 weave edit --raw opens a copy of the config in $VISUAL, else $EDITOR,
 else vi (with VS Code, use VISUAL="code --wait"), and keeps its

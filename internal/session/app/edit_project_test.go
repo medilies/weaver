@@ -94,13 +94,24 @@ func TestEditProject(t *testing.T) {
 		}
 		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).RunningFirst(nvm)}}
 		form := &fakeForm{project: moved}
-		if err := app.NewEditProject(registry, storedDocuments{}, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
+		documents := storedDocuments{"shop": "root: /srv/shop"}
+		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		draft := form.draft
 		if draft.Name != "shop" || draft.Root != "/srv/shop" || len(draft.Windows) != 2 ||
 			len(draft.Before) != 1 || len(draft.Env.Vars()) != 1 {
 			t.Fatalf("got draft %+v, want shop's project", draft)
+		}
+	})
+
+	t.Run("gives the form the config as stored, to show what saving changes", func(t *testing.T) {
+		form := &fakeForm{project: moved}
+		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, form, answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := string(form.draft.Config); got != "root: /srv/shop" {
+			t.Fatalf("got config %q, want the stored one", got)
 		}
 	})
 

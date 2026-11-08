@@ -32,7 +32,8 @@ func NewTeaConfigForm(workspace domain.Workspace) TeaConfigForm {
 }
 
 // Fill implements app.ProjectForm. The draft's name stays. It returns
-// the project as ctrl+s saves it, or ErrAborted when the user leaves it
+// the project as ctrl+s saves it, once the user has seen what saving
+// changes in the draft's config, or ErrAborted when the user leaves it
 // unchanged or discards their changes.
 func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	name, err := domain.NewProjectName(draft.Name)
@@ -53,7 +54,7 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 		return domain.Project{}, err
 	}
 	model := configForm{
-		project: project, original: original, workspace: f.workspace,
+		project: project, original: original, stored: draft.Config, workspace: f.workspace,
 		focus: spot{window: -1, pane: -1, field: fieldRoot},
 	}
 	final, err := tea.NewProgram(model).Run()
@@ -106,15 +107,32 @@ type spot struct {
 type configForm struct {
 	project       domain.Project
 	original      []byte // the project as its config writes it, to tell changes
+	stored        []byte // the config as stored, which saving replaces
 	workspace     domain.Workspace
 	focus         spot
 	top           int // the first line shown
 	editing       bool
 	edit          typing
 	asking        *question
-	problem       string // why the last change was refused
+	reviewing     *review
+	undos, redos  []state // the last change last
+	problem       string  // why the last change was refused
 	width, height int
 	saved         bool
+}
+
+// state is the project as it was and the row the cursor was on, which
+// undo and redo go back to.
+type state struct {
+	project domain.Project
+	focus   spot
+}
+
+// review is what saving changes in the stored config, shown before
+// saving, and its first line shown.
+type review struct {
+	diff []string
+	top  int
 }
 
 // typing is a field being typed.
@@ -154,9 +172,14 @@ func (m configForm) update(msg tea.Msg) (configForm, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.edit.input.SetWidth(m.inputWidth(m.edit.at))
+		if m.reviewing != nil {
+			m.reviewing = m.reviewing.scrolledTo(m.reviewing.top, m.bodyHeight())
+		}
 		return m, nil
 	case tea.KeyPressMsg:
 		switch {
+		case m.reviewing != nil:
+			return m.reviewed(msg.String())
 		case m.asking != nil:
 			return m.answer(msg.String())
 		case m.editing:
@@ -221,7 +244,8 @@ func (m configForm) kept() configForm {
 		m.edit.err = err
 		return m
 	}
-	m.project, m.editing = project, false
+	m = m.became(project)
+	m.editing = false
 	if at, ok := m.typedVar(); ok {
 		return m.settledOn(at)
 	}
@@ -274,6 +298,10 @@ func (m configForm) press(key string) (configForm, tea.Cmd) {
 		return m.reordered(1), nil
 	case "K":
 		return m.reordered(-1), nil
+	case "u":
+		return m.undone(), nil
+	case "ctrl+r":
+		return m.redone(), nil
 	case "ctrl+s":
 		return m.save()
 	case "esc", "ctrl+c":
@@ -282,10 +310,95 @@ func (m configForm) press(key string) (configForm, tea.Cmd) {
 	return m, nil
 }
 
-// save ends the form, with the project saved if it changed.
+// save ends the form when nothing changed, and otherwise shows what
+// saving changes in the stored config first.
 func (m configForm) save() (configForm, tea.Cmd) {
-	m.saved = m.dirty()
-	return m, tea.Quit
+	if !m.dirty() {
+		return m, tea.Quit
+	}
+	doc, err := encodeProject(m.project)
+	if err != nil {
+		m.problem = err.Error()
+		return m, nil
+	}
+	diff := configDiff(string(m.stored), string(doc))
+	if len(diff) == 0 {
+		m.saved = true
+		return m, tea.Quit
+	}
+	m.reviewing = &review{diff: diff}
+	return m, nil
+}
+
+// reviewed is m after key, pressed on what saving changes: y, enter or
+// ctrl+s saves, n or esc goes back to the form, ↑↓ scroll.
+func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
+	top := m.reviewing.top
+	switch key {
+	case "y", "Y", "enter", "ctrl+s":
+		m.saved = true
+		return m, tea.Quit
+	case "n", "N", "esc", "ctrl+c":
+		m.reviewing = nil
+		return m, nil
+	case "up", "k":
+		top--
+	case "down", "j":
+		top++
+	case "pgup":
+		top -= m.bodyHeight()
+	case "pgdown", "space":
+		top += m.bodyHeight()
+	}
+	m.reviewing = m.reviewing.scrolledTo(top, m.bodyHeight())
+	return m, nil
+}
+
+// scrolledTo is r showing from the line top, as near as height lines
+// shown allow.
+func (r review) scrolledTo(top, height int) *review {
+	r.top = max(min(top, len(r.diff)-height), 0)
+	return &r
+}
+
+// became is m with project, the project before it kept for undo, unless
+// its config is the same.
+func (m configForm) became(project domain.Project) configForm {
+	before, errBefore := encodeProject(m.project)
+	after, errAfter := encodeProject(project)
+	if errBefore != nil || errAfter != nil || !bytes.Equal(before, after) {
+		m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus})
+		m.redos = nil
+	}
+	m.project = project
+	return m
+}
+
+// undone is m after u: the project as it was before its last change, the
+// cursor back where it was then.
+func (m configForm) undone() configForm {
+	if len(m.undos) == 0 {
+		m.problem = "Nothing to undo."
+		return m
+	}
+	last := m.undos[len(m.undos)-1]
+	m.undos = m.undos[:len(m.undos)-1]
+	m.redos = append(slices.Clip(m.redos), state{project: m.project, focus: m.focus})
+	m.project, m.focus = last.project, last.focus
+	return m.settled(1)
+}
+
+// redone is m after ctrl+r: the last change undone made again.
+func (m configForm) redone() configForm {
+	if len(m.redos) == 0 {
+		m.problem = "Nothing to redo."
+		return m
+	}
+	last := m.redos[len(m.redos)-1]
+	m.redos = m.redos[:len(m.redos)-1]
+	m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus})
+	m.project, m.focus = last.project, last.focus
+	return m.settled(1)
 }
 
 // leave ends the form without saving, asking first when it changed.
@@ -307,11 +420,18 @@ func (m configForm) dirty() bool {
 
 // changedTo is m with project, or with why it was refused.
 func (m configForm) changedTo(project domain.Project, err error) configForm {
+	return m.changedAt(project, err, m.focus)
+}
+
+// changedAt is m with project and the cursor on the row at, or with why
+// project was refused.
+func (m configForm) changedAt(project domain.Project, err error, at spot) configForm {
 	if err != nil {
 		m.problem = err.Error()
 		return m
 	}
-	m.project = project
+	m = m.became(project)
+	m.focus = at
 	return m.settled(1)
 }
 
@@ -533,8 +653,8 @@ func (m configForm) paneAdded(index, after int) configForm {
 	if err != nil {
 		return m.changedTo(domain.Project{}, err)
 	}
-	m.focus = spot{window: index, pane: len(panes), field: fieldName}
-	return m.changedTo(m.project.ReplacingWindow(index, added))
+	project, err := m.project.ReplacingWindow(index, added)
+	return m.changedAt(project, err, spot{window: index, pane: len(panes), field: fieldName})
 }
 
 // deleting is m after d: the item removed from its list, or the pane or
@@ -561,8 +681,7 @@ func (m configForm) deleting() configForm {
 			return m.changedTo(project, err)
 		}
 		m.asking = &question{text: fmt.Sprintf("Delete %s?", paneHeading(pane)), yes: func(m configForm) (configForm, tea.Cmd) {
-			m.focus = spot{window: at.window, pane: max(at.pane-1, 0), field: fieldName}
-			return m.changedTo(project, nil), nil
+			return m.changedAt(project, nil, spot{window: at.window, pane: max(at.pane-1, 0), field: fieldName}), nil
 		}}
 	case inWindow && at.pane < 0:
 		project, err := m.project.WithoutWindow(at.window)
@@ -601,8 +720,9 @@ func (m configForm) reordered(by int) configForm {
 			return m
 		}
 		items[at.item], items[to] = items[to], items[at.item]
-		m.focus.item = to
-		return m.changedTo(m.withItems(at, items))
+		project, err := m.withItems(at, items)
+		at.item = to
+		return m.changedAt(project, err, at)
 	case inPane:
 		to := at.pane + by
 		if to < 0 || to >= len(window.Panes()) {
@@ -610,20 +730,16 @@ func (m configForm) reordered(by int) configForm {
 		}
 		moved, err := window.MovingPane(at.pane, to)
 		project, err := replaced(m.project, at.window, moved, err)
-		if err == nil {
-			m.focus.pane = to
-		}
-		return m.changedTo(project, err)
+		at.pane = to
+		return m.changedAt(project, err, at)
 	case inWindow && at.pane < 0:
 		to := at.window + by
 		if to < 0 || to >= len(m.project.Windows()) {
 			return m
 		}
 		project, err := m.project.MovingWindow(at.window, to)
-		if err == nil {
-			m.focus.window = to
-		}
-		return m.changedTo(project, err)
+		at.window = to
+		return m.changedAt(project, err, at)
 	}
 	return m
 }
@@ -1239,11 +1355,32 @@ func (m configForm) render() string {
 	if m.width == 0 {
 		return "" // until the terminal's size is known
 	}
-	page := m.layout()
 	height := m.bodyHeight()
-	shown := page.lines[min(m.top, len(page.lines)):min(m.top+height, len(page.lines))]
+	lines, top := m.layout().lines, m.top
+	if m.reviewing != nil {
+		lines, top = m.reviewing.styled(m.width), m.reviewing.top
+	}
+	shown := lines[min(top, len(lines)):min(top+height, len(lines))]
 	body := strings.Join(shown, "\n") + strings.Repeat("\n", height-len(shown))
 	return m.trail() + "\n" + body + "\n" + ansi.Truncate(m.status(), m.width, "…") + "\n" + m.keys()
+}
+
+// styled is the diff's lines, removed ones red and added ones green,
+// within width cells, without the carriage returns of a config with
+// Windows line ends.
+func (r review) styled(width int) []string {
+	lines := make([]string, 0, len(r.diff))
+	for _, line := range r.diff {
+		style := keysStyle
+		switch line[0] {
+		case '-':
+			style = problemStyle
+		case '+':
+			style = checkStyle
+		}
+		lines = append(lines, style.Render(ansi.Truncate(" "+strings.TrimSuffix(line, "\r"), width, "…")))
+	}
+	return lines
 }
 
 // trail is where the cursor is, and whether there are changes to save.
@@ -1267,9 +1404,12 @@ func (m configForm) trail() string {
 	return ansi.Truncate(line+strings.Repeat(" ", gap)+unsaved, m.width, "…")
 }
 
-// status is the question asked, or why the last change was refused.
+// status is what saving changes being shown, the question asked, or why
+// the last change was refused.
 func (m configForm) status() string {
 	switch {
+	case m.reviewing != nil:
+		return " Save these changes to the config?" + keysStyle.Render("  y save · n back")
 	case m.asking != nil:
 		return " " + m.asking.text + keysStyle.Render("  y yes · n no")
 	case m.problem != "":
@@ -1280,8 +1420,11 @@ func (m configForm) status() string {
 
 // keys are what the keys do, while typing or on a row.
 func (m configForm) keys() string {
-	told := "↑↓ move · enter edit · ←→ change · o add · d delete · J/K reorder · ctrl+s save · esc leave"
-	if m.editing {
+	told := "↑↓ move · enter edit · ←→ change · o add · d delete · J/K reorder · u undo · ctrl+r redo · ctrl+s save · esc leave"
+	switch {
+	case m.reviewing != nil:
+		told = "↑↓ scroll · y save · n back to the form"
+	case m.editing:
 		told = "enter keep · esc cancel · ctrl+s save"
 	}
 	return ansi.Truncate(keysStyle.Render(" "+told), m.width, "…")

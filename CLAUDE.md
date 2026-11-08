@@ -35,10 +35,12 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |
 | restoration | Putting back the configured windows an owned session lost | | `Project.Restoration`, `WindowPlacement` |
 | freeze | Register a project through forms, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
-| draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project when editing, whose name stays | | `ProjectDraft` |
+| draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project and its config when editing, whose name stays | | `ProjectDraft` |
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
 | edit | Change a config in the config form, or raw in the editor, keeping it only if valid | `weave edit`, key `e`; `weave edit --raw`, key `E` | `EditProject`, `ActionEdit`, `ActionEditRaw` |
 | config form | A full-screen form changing a project in place, a card each for the project, its windows and their panes, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e` | `TeaConfigForm`, `app.ProjectForm` |
+| undo, redo | Going back to the project as it was before the config form's last change, or forward again | keys `u`, `ctrl+r` in the config form | `undone`, `redone` in `tea_config_form.go` |
+| diff | What saving changes in the stored config, shown before the config form saves: comments the user wrote show as removed | `ctrl+s` in the config form | `configDiff`, `review` in `tea_config_form.go` |
 | card | The config form's box for the project, a window or a pane: the one with the cursor has a heavy border, the other panes fold to one line | config form | `card` in `tea_config_form.go` |
 | trail | The config form's top line: the project, window and pane the cursor is in, and ● unsaved when there are changes | config form | `trail` in `tea_config_form.go` |
 | kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
