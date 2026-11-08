@@ -3,7 +3,6 @@ package infra
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -118,70 +117,26 @@ func (p *layoutParser) peek() byte {
 	return 0
 }
 
-// layoutPane is a pane in an order that recreates its window: the first
-// fills the window, each later one splits an earlier one.
-type layoutPane struct {
-	pane      int // tmux pane number
-	splits    bool
-	of        int // index, in this order, of the pane it splits
-	direction domain.Direction
-	percent   int // share of the split pane
-}
-
-// creationOrder lists root's panes in an order that recreates it with
-// tmux split-window semantics. In a container, sibling k is split off the
-// first pane of sibling k-1, which still covers siblings k-1 to the last,
-// and takes the share of them siblings k to the last cover. Siblings are
-// split before their insides, which then split the panes they start as.
-func creationOrder(root layoutCell) []layoutPane {
-	panes := []layoutPane{{pane: firstPane(root)}}
-	index := func(pane int) int {
-		for i, p := range panes {
-			if p.pane == pane {
-				return i
-			}
-		}
-		return -1
+// layoutCell is c as the domain reads it. A cell's size is along its
+// container's axis, and every cell but the last also counts the border
+// after it, so the shares split-window takes come out as tmux drew them.
+func (c layoutCell) layoutCell(size int) domain.LayoutCell {
+	if len(c.children) == 0 {
+		return domain.PaneCell(c.pane, float64(size))
 	}
-	var carve func(cell layoutCell)
-	carve = func(cell layoutCell) {
-		children := cell.children
-		direction := domain.Below
-		if cell.sideBySide {
-			direction = domain.Right
+	children := make([]domain.LayoutCell, len(c.children))
+	for k, child := range c.children {
+		along := child.height
+		if c.sideBySide {
+			along = child.width
 		}
-		remaining := make([]int, len(children)+1) // remaining[k]: siblings k.. with separators
-		for k := len(children) - 1; k >= 0; k-- {
-			size := children[k].height
-			if cell.sideBySide {
-				size = children[k].width
-			}
-			remaining[k] = remaining[k+1] + size
-			if k < len(children)-1 {
-				remaining[k]++ // separator
-			}
+		if k < len(c.children)-1 {
+			along++ // the border
 		}
-		for k := 1; k < len(children); k++ {
-			percent := int(math.Round(100 * float64(remaining[k]) / float64(remaining[k-1])))
-			panes = append(panes, layoutPane{
-				pane:      firstPane(children[k]),
-				splits:    true,
-				of:        index(firstPane(children[k-1])),
-				direction: direction,
-				percent:   min(max(percent, 1), 99),
-			})
-		}
-		for _, child := range children {
-			carve(child)
-		}
+		children[k] = child.layoutCell(along)
 	}
-	carve(root)
-	return panes
-}
-
-func firstPane(cell layoutCell) int {
-	for len(cell.children) > 0 {
-		cell = cell.children[0]
+	if c.sideBySide {
+		return domain.SideBySide(float64(size), children...)
 	}
-	return cell.pane
+	return domain.Stacked(float64(size), children...)
 }

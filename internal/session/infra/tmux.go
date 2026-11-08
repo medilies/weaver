@@ -187,7 +187,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 		if err != nil {
 			return nil, err
 		}
-		panes, err := t.capturePanes(creationOrder(cell), shells)
+		panes, err := t.capturePanes(cell.layoutCell(cell.width).CreationOrder(), shells)
 		if err != nil {
 			return nil, err
 		}
@@ -204,11 +204,11 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	return windows, nil
 }
 
-func (t Tmux) capturePanes(order []layoutPane, shells map[string]bool) ([]domain.Pane, error) {
+func (t Tmux) capturePanes(order []domain.CarvedPane, shells map[string]bool) ([]domain.Pane, error) {
 	taken := make(map[string]bool)
 	panes := make([]domain.Pane, 0, len(order))
 	for i, p := range order {
-		target := "%" + strconv.Itoa(p.pane)
+		target := "%" + strconv.Itoa(p.Pane())
 		path, err := t.run("display-message", "-p", "-t", target, sized("pane_current_path"))
 		if err != nil {
 			return nil, err
@@ -261,15 +261,7 @@ func (t Tmux) capturePanes(order []layoutPane, shells map[string]bool) ([]domain
 		if name, err := domain.NewPaneName(unique(label, taken)); err == nil {
 			pane = pane.Named(name)
 		}
-		if p.splits {
-			size, err := domain.Percent(p.percent)
-			if err != nil {
-				return nil, err
-			}
-			split, err := domain.NewSplit(p.of, p.direction, size)
-			if err != nil {
-				return nil, err
-			}
+		if split, ok := p.Split(); ok {
 			pane = pane.Splitting(split)
 		}
 		panes = append(panes, pane)

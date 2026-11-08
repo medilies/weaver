@@ -20,6 +20,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
 | workspace | The filesystem projects live in: their directories, and the programs on PATH | | `Workspace` |
 | window, pane | tmux windows and panes, panes laid out by splits | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
+| layout cell | How tmux tiles a window: a pane, or cells side by side or stacked. Capture reads one and turns it into splits | | `LayoutCell`, `CarvedPane` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
 | dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |
 | env | Environment variables, a pane's overriding the project's | `env:` | `Env`, `WithEnv` |
