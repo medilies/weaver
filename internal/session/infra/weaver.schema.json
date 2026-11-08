@@ -48,6 +48,20 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["name"],
+      "if": {
+        "required": ["grid"]
+      },
+      "then": {
+        "properties": {
+          "panes": {
+            "items": {
+              "not": {
+                "required": ["split"]
+              }
+            }
+          }
+        }
+      },
       "properties": {
         "name": {
           "description": "Window name, unique in the project.",
@@ -57,8 +71,11 @@
         "before": {
           "$ref": "#/definitions/before"
         },
+        "grid": {
+          "$ref": "#/definitions/grid"
+        },
         "panes": {
-          "description": "Panes in creation order: the first fills the window, each later one splits an earlier one. Without any, one shell in root.",
+          "description": "Panes in creation order: the first fills the window, each later one splits an earlier one. With a grid, in any order and without splits. Without any, one shell in root.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/pane"
@@ -74,7 +91,7 @@
       },
       "properties": {
         "name": {
-          "description": "Shown in the pane's top border. Required, and unique, when the window has several panes.",
+          "description": "Shown in the pane's top border. Required, and unique, when the window has several panes or a grid.",
           "type": "string",
           "minLength": 1
         },
@@ -110,8 +127,47 @@
         }
       }
     },
+    "grid": {
+      "description": "Lays the panes out by naming them in rows and columns, instead of splits: then no pane has a split, and every pane is named in the areas.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["areas"],
+      "properties": {
+        "areas": {
+          "description": "Rows of pane names, one per column. A pane covers the rectangle of cells holding its name, and straight lines across the window must separate the panes: tmux builds no other layout.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "columns": {
+          "description": "Column widths, one per column: percentages of the window (60%), or weights sharing out what percentages leave (2fr). Default: equal.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/track"
+          }
+        },
+        "rows": {
+          "description": "Row heights, one per row: percentages of the window (70%), or weights sharing out what percentages leave (1fr). Default: equal.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/track"
+          }
+        }
+      }
+    },
+    "track": {
+      "type": "string",
+      "pattern": "^([1-9][0-9]?%|100%|[1-9][0-9]*fr)$"
+    },
     "split": {
-      "description": "How the pane is made from an earlier one. Every pane but the first has one.",
+      "description": "How the pane is made from an earlier one. Every pane but the first has one, unless the window has a grid.",
       "type": "object",
       "additionalProperties": false,
       "required": ["direction"],

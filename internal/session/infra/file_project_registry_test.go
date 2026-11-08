@@ -2,6 +2,7 @@ package infra_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -219,7 +220,7 @@ func TestFileProjectRegistryReadsEnvironments(t *testing.T) {
 }
 
 func TestFileProjectRegistryResolvesSplitTargetsByName(t *testing.T) {
-	project, err := load(t, "grid", gridDoc)
+	project, err := load(t, "splits", splitOfDoc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -230,7 +231,57 @@ func TestFileProjectRegistryResolvesSplitTargetsByName(t *testing.T) {
 	}
 }
 
+func TestFileProjectRegistryLaysOutGrids(t *testing.T) {
+	project, err := load(t, "grid", gridDoc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var got []string
+	for _, pane := range project.Windows()[0].Panes() {
+		desc := pane.Name().String()
+		if split, ok := pane.Split(); ok {
+			desc += fmt.Sprintf(" %s of #%d %s", split.Direction(), split.Of()+1, split.Size())
+		}
+		got = append(got, desc)
+	}
+	if want := []string{"editor", "server right of #1 40%", "go test below of #2 50%"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
 func TestFileProjectRegistryRejectsInvalidConfigs(t *testing.T) {
+	t.Run("rejects a window laid out by both a grid and splits", func(t *testing.T) {
+		_, err := load(t, "mixed", `root: /srv/mixed
+windows:
+  - name: app
+    grid:
+      areas: [[app shell, flutter run]]
+    panes:
+      - name: app shell
+      - name: flutter run
+        split: { direction: right }
+`)
+		want := `window "app": pane "flutter run": a window laid out by a grid must not split its panes`
+		if !errors.Is(err, domain.ErrSplitInGrid) || !strings.Contains(err.Error(), want) {
+			t.Fatalf("got %v, want %q", err, want)
+		}
+	})
+
+	t.Run("rejects a null grid rather than reading it as splits", func(t *testing.T) {
+		_, err := load(t, "null", "root: /srv/null\nwindows: [{name: app, grid: null, panes: [{name: a}, {name: b, split: {direction: right}}]}]\n")
+		if !errors.Is(err, domain.ErrEmptyGrid) || !strings.Contains(err.Error(), `window "app": grid: `) {
+			t.Fatalf("got %v, want an empty grid error for the app window", err)
+		}
+	})
+
+	t.Run("reports a grid's error under its window's grid", func(t *testing.T) {
+		_, err := load(t, "sizes", "root: /srv/sizes\nwindows: [{name: app, grid: {columns: [60%], areas: [[a, b]]}, panes: [{name: a}, {name: b}]}]\n")
+		if !errors.Is(err, domain.ErrTrackCount) || !strings.Contains(err.Error(), `window "app": grid: `) {
+			t.Fatalf("got %v, want a size count error under the app window's grid", err)
+		}
+	})
+
 	t.Run("rejects unknown keys, usually typos", func(t *testing.T) {
 		_, err := load(t, "typo", "root: /srv/typo\nwindos: []\n")
 		if !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "windos") {

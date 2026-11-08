@@ -33,23 +33,23 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 5 | Window `dir`, and the form rules into `domain` | config, domain | M | |
-| 6 | Where a pane's settings come from | browser | S | 5 |
-| 7 | Changing panes in `domain` | domain | M | 5 |
-| 8 | The config form | form | L | 6, 7 |
-| 9 | The layout in the config form | form | M | 8 |
-| 10 | Freeze through the config form | form | M | 8, 9 |
+| 6 | Window `dir`, and the form rules into `domain` | config, domain | M | |
+| 7 | Where a pane's settings come from | browser | S | 6 |
+| 8 | Changing panes in `domain` | domain | M | 6 |
+| 9 | The config form | form | L | 7, 8 |
+| 10 | The layout in the config form | form | M | 9 |
+| 11 | Freeze through the config form | form | M | 9, 10 |
 
 ```mermaid
 flowchart LR
-    T5[5 window dir, form rules] --> T6[6 where settings come from]
-    T5 --> T7[7 changing panes]
-    T7 --> T8[8 config form]
-    T6 --> T8
-    T8 --> T9[9 layout in the form] --> T10[10 freeze through the form]
+    T6[6 window dir, form rules] --> T7[7 where settings come from]
+    T6 --> T8[8 changing panes]
+    T8 --> T9[9 config form]
+    T7 --> T9
+    T9 --> T10[10 layout in the form] --> T11[11 freeze through the form]
 ```
 
-## 5. Window `dir`, and the form rules into `domain`
+## 6. Window `dir`, and the form rules into `domain`
 
 ```yaml
   - name: api
@@ -99,7 +99,7 @@ change reworks `PaneDir` and `dirOf` anyway:
   `defaultWindow` names it. This one is weak: it is only a suggestion
   the user can change.
 
-## 6. Where a pane's settings come from
+## 7. Where a pane's settings come from
 
 The Tab key moves between the panes of the drawing and highlights the
 selected box. Below the drawing, list what that pane really gets, each
@@ -120,7 +120,7 @@ line with the level it comes from:
 ```
 
 The YAML spreads before commands over three levels and env over two,
-and the plan merges them. Window `dir` (#5) adds one more thing to
+and the plan merges them. Window `dir` (#6) adds one more thing to
 trace, so build this after it.
 
 - The levels come from the getters already there: `Project`, `Window`
@@ -129,11 +129,11 @@ trace, so build this after it.
 - "Comes from" and "over" are new words for the browser: give the
   concept a glossary entry first.
 
-## 7. Changing panes in `domain`
+## 8. Changing panes in `domain`
 
-The config form (#8, #9) adds, removes, reorders and re-splits panes
+The config form (#9, #10) adds, removes, reorders and re-splits panes
 and windows. `Window` can do none of that yet: it has `NewWindow`,
-`RunningFirst`, `Rebased` and getters. It comes after #5, which adds
+`RunningFirst`, `Rebased` and getters. It comes after #6, which adds
 `dir` to `Window` and the dir-set flag to `Pane`, both of which these
 methods must keep. Those changes are rules, not form code:
 removing `back` while `front` splits it must re-target `front` or
@@ -141,7 +141,7 @@ refuse, and moving a pane must keep every split pointing at an earlier
 one. They go into `domain`, as methods returning a new `Window` or
 `Project` and an error, with tests, before the config form uses them.
 
-## 8. The config form
+## 9. The config form
 
 `e` opens the YAML in the editor; the freeze forms walk one screen per
 window and per pane, with no way back. Instead, one full-screen form
@@ -189,7 +189,7 @@ one line. A trail at the top says where the cursor is.
 ```
 
 Before commands and env from the project and the window show dimmed in
-each pane, with their level, as in #6; enter on an inherited variable
+each pane, with their level, as in #7; enter on an inherited variable
 overrides it for the pane.
 
 ### A control per kind of field
@@ -228,7 +228,7 @@ own control instead:
   a `ProjectDraft` built from an existing project, and the use case
   saves through `ProjectRegistry.Save`. Esc with changes asks before
   discarding them, as editing does today. The structural changes are
-  #7's domain methods; the form only asks for them.
+  #8's domain methods; the form only asks for them.
 - **Undo is cheap**: projects are immutable values, so undo is a stack
   of earlier `Project`s. `ctrl+s` can show the YAML diff before writing.
 - **Comments are lost.** `Save` writes the config through
@@ -240,7 +240,7 @@ own control instead:
 - **Words**: "card", "level" and the like need glossary entries before
   they reach the screen.
 
-## 9. The layout in the config form
+## 10. The layout in the config form
 
 A window's card becomes the browser's drawing, edited with tmux's own keys: `%`
 splits the selected pane right, `"` below, `x` removes it, arrows
@@ -261,7 +261,14 @@ select, `H/L` resize. The selected pane's fields show below.
  % split right · " split below · x remove · ←→↑↓ select · H/L resize
 ```
 
-## 10. Freeze through the config form
+A window with a `grid` is edited as a grid, never saved back as
+splits: `Window.Grid()` gives it, and `encodeProject` writes it.
+Turning a grid window into splits, or back, is an action of its own,
+never a side effect. Saving a grid window lists its panes in creation
+order, not as the config listed them; keep the config's order here if
+the form makes that visible.
+
+## 11. Freeze through the config form
 
 Freeze opens the config form on its draft (name, root and the captured
 windows, if any), and the freeze forms in `infra/huh_forms.go` go, with
@@ -279,6 +286,19 @@ that looks like. They are listed from the smallest.
 the drawing replaced. `e` opens the file, and a config that can't be
 read shows why. Bring it back behind a key (`y`):
 `ProjectOverview.Config()` still carries it.
+
+### Grid sizes in cells (S)
+
+**When**: a config wants a fixed-width column or row beside ones that
+share the rest, such as a 30-cell file tree.
+
+A grid's `columns` and `rows` take `%` and `fr` only: a split's `-l`
+is the new pane's size, so a cell size on a leading track depends on
+the window's width. Either size the split from the terminal's size
+(`TmuxOptions.Size`), split with `-b` so the new pane is the fixed one,
+or apply a `select-layout` string with tmux's checksum. Freeze would
+still write splits; writing a grid when a session fits a small one is
+its own decision.
 
 ### Window miniatures (S)
 
@@ -319,7 +339,7 @@ one winning.
   `$ref: "#/definitions/env"` in the window's schema.
 - Test: a window's variable overrides the project's, and a pane's
   overrides the window's.
-- #6 and the config form show the extra level once it exists.
+- #7 and the config form show the extra level once it exists.
 
 ### Focus (S)
 
@@ -410,7 +430,7 @@ session behind.
 - The warnings check that `start` and teardown programs are on `PATH`,
   as they do for pane commands.
 - Freeze can't see either list: replacing a config drops them, as it
-  drops comments. Once #10 is done, freeze through the config form can keep
+  drops comments. Once #11 is done, freeze through the config form can keep
   them from the existing config.
 - `d` deletes the config but keeps the session running, so no teardown
   there.
@@ -712,7 +732,12 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 **Left out** of the config, as other session managers have them:
 
 - `layout` presets (`tiled`, `main-vertical`): splits already describe
-  more.
+  more, and a grid writes them out explicitly.
+- A flex layout (nested rows and columns of sized panes): it is
+  `#{window_layout}`'s tree, saying what splits already say, more deeply
+  nested. `wrap`, `gap`, `justify-content` and `align-items` mean
+  nothing to tmux, whose panes always fill the window, so the name
+  promises more than it can do. A grid is the other notation.
 - `synchronize-panes`, a raw tmux `options` field: rarely needed.
 - `sleep` delays (tmuxp's `sleep_before`): `wait` does the same job more
   reliably.
@@ -730,9 +755,9 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 ## Shared groundwork
 
-- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves #6
-  and #9, and its border drawing the live preview.
-- #7's domain methods serve #8, #9 and #10.
+- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves #7
+  and #10, and its border drawing the live preview.
+- #8's domain methods serve #9, #10 and #11.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.
 - The idle-shell check (`foreground`) serves the exited-command warning

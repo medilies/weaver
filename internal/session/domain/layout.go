@@ -421,11 +421,14 @@ func (p Pane) Env() Env {
 }
 
 // Window is a tmux window and its panes, in creation order: the first pane
-// fills the window and each later one splits an earlier one.
+// fills the window and each later one splits an earlier one. Its panes
+// say how they split, or its grid places them.
 type Window struct {
-	name   WindowName
-	panes  []Pane
-	before []Command
+	name    WindowName
+	panes   []Pane
+	before  []Command
+	grid    Grid
+	gridded bool
 }
 
 // NewWindow validates and constructs a Window. With no panes, it holds one
@@ -452,6 +455,48 @@ func NewWindow(name WindowName, panes ...Pane) (Window, error) {
 		named[pane.name.value] = true
 	}
 	return Window{name: name, panes: slices.Clone(panes)}, nil
+}
+
+// NewGridWindow validates and constructs a Window laid out by grid: every
+// pane is named in its areas, and none says how it splits another. The
+// panes are put in the order tmux creates them, each splitting an
+// earlier one as the grid needs.
+func NewGridWindow(name WindowName, grid Grid, panes ...Pane) (Window, error) {
+	if len(grid.names) == 0 {
+		return Window{}, ErrEmptyGrid // the zero Grid, not one from NewGrid
+	}
+	index := make(map[PaneName]int, len(panes))
+	for i, pane := range panes {
+		if _, splits := pane.Split(); splits {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), ErrSplitInGrid)
+		}
+		if _, taken := index[pane.name]; taken {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), ErrDuplicatePaneName)
+		}
+		if !slices.Contains(grid.names, pane.name) {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), ErrPaneOutsideGrid)
+		}
+		index[pane.name] = i
+	}
+	for _, name := range grid.names {
+		if _, ok := index[name]; !ok {
+			return Window{}, fmt.Errorf("%w: %q", ErrUnknownGridPane, name.value)
+		}
+	}
+	order := grid.cell.CreationOrder()
+	ordered := make([]Pane, len(order))
+	for i, carved := range order {
+		ordered[i] = panes[index[grid.names[carved.Pane()]]]
+		if split, ok := carved.Split(); ok {
+			ordered[i] = ordered[i].Splitting(split)
+		}
+	}
+	window, err := NewWindow(name, ordered...)
+	if err != nil {
+		return Window{}, err
+	}
+	window.grid, window.gridded = grid, true
+	return window, nil
 }
 
 // checkPlacement enforces the creation order: the first pane fills the
@@ -491,6 +536,12 @@ func (w Window) Name() WindowName {
 // Panes are the window's panes in creation order.
 func (w Window) Panes() []Pane {
 	return slices.Clone(w.panes)
+}
+
+// Grid is the grid laying the window out, if any: its panes' splits then
+// come from it.
+func (w Window) Grid() (Grid, bool) {
+	return w.grid, w.gridded
 }
 
 // Before is the window's own commands run first in each of its panes.

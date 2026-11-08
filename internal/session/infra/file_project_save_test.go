@@ -14,9 +14,9 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-// gridDoc splits a pane that isn't the previous one, so its saved form
+// splitOfDoc splits a pane that isn't the previous one, so its saved form
 // needs "split.of".
-const gridDoc = `root: /srv/grid
+const splitOfDoc = `root: /srv/splits
 windows:
   - name: main
     panes:
@@ -25,6 +25,23 @@ windows:
         split: { direction: right }
       - name: under left
         split: { of: left, direction: below }
+`
+
+// gridDoc lays a window out by a grid, its panes listed in another order
+// than tmux creates them.
+const gridDoc = `root: /srv/grid
+windows:
+  - name: app
+    grid:
+      columns: [60%, 40%]
+      areas:
+        - [editor, server]
+        - [editor, go test]
+    panes:
+      - name: go test
+        command: go test ./...
+      - name: editor
+      - name: server
 `
 
 // save saves project into a fresh directory and returns the directory and
@@ -89,9 +106,44 @@ func TestFileProjectRegistrySave(t *testing.T) {
 	})
 
 	t.Run("names a split's target only when it isn't the previous pane", func(t *testing.T) {
-		_, got := save(t, mustLoad(t, "grid", gridDoc))
+		_, got := save(t, mustLoad(t, "splits", splitOfDoc))
 		if n := strings.Count(got, "of:"); n != 1 || !strings.Contains(got, "of: left") {
 			t.Fatalf("got %d split targets in:\n%s\nwant only the one to left", n, got)
+		}
+	})
+
+	t.Run("writes a grid back, its panes in creation order and without splits", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "grid", gridDoc))
+		want := `# yaml-language-server: $schema=./weaver.schema.json
+root: /srv/grid
+windows:
+  - name: app
+    grid:
+      columns: [60%, 40%]
+      areas:
+        - [editor, server]
+        - [editor, go test]
+    panes:
+      - name: editor
+      - name: server
+      - name: go test
+        command: go test ./...
+`
+		if got != want {
+			t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+		}
+	})
+
+	t.Run("keeps a grid through a save and reload", func(t *testing.T) {
+		saved, _ := save(t, mustLoad(t, "grid", gridDoc))
+
+		name, _ := domain.NewProjectName("grid")
+		reloaded, err := infra.NewFileProjectRegistry(saved).FindByName(name)
+		if err != nil {
+			t.Fatalf("reloading: %v", err)
+		}
+		if _, ok := reloaded.Windows()[0].Grid(); !ok {
+			t.Fatal("got no grid after reloading")
 		}
 	})
 
@@ -161,17 +213,17 @@ windows:
 	})
 
 	t.Run("saves the JSON Schema next to the configs", func(t *testing.T) {
-		dir, _ := save(t, mustLoad(t, "grid", gridDoc))
+		dir, _ := save(t, mustLoad(t, "splits", splitOfDoc))
 		if _, err := os.Stat(filepath.Join(dir, "weaver.schema.json")); err != nil {
 			t.Fatalf("got no schema: %v", err)
 		}
 	})
 
 	t.Run("lists the saved project, not the schema", func(t *testing.T) {
-		dir, _ := save(t, mustLoad(t, "grid", gridDoc))
+		dir, _ := save(t, mustLoad(t, "splits", splitOfDoc))
 		names, err := infra.NewFileProjectRegistry(dir).Names()
-		if err != nil || len(names) != 1 || names[0].String() != "grid" {
-			t.Fatalf("got %v (%v), want grid only", names, err)
+		if err != nil || len(names) != 1 || names[0].String() != "splits" {
+			t.Fatalf("got %v (%v), want splits only", names, err)
 		}
 	})
 }
@@ -179,7 +231,7 @@ windows:
 // schemaFor saves a project and returns the schema saved next to it.
 func schemaFor(t *testing.T) map[string]any {
 	t.Helper()
-	dir, _ := save(t, mustLoad(t, "grid", gridDoc))
+	dir, _ := save(t, mustLoad(t, "splits", splitOfDoc))
 	raw, err := os.ReadFile(filepath.Join(dir, "weaver.schema.json"))
 	if err != nil {
 		t.Fatalf("reading the schema: %v", err)
@@ -228,6 +280,7 @@ func TestJSONSchema(t *testing.T) {
 	saved := map[string]domain.Project{
 		"nimbus": loadFixture(t, "nimbus"),
 		"shop":   loadFixture(t, "shop"),
+		"splits": mustLoad(t, "splits", splitOfDoc),
 		"grid":   mustLoad(t, "grid", gridDoc),
 	}
 	for name, project := range saved {

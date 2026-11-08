@@ -62,6 +62,39 @@ var (
 )
 
 var (
+	// ErrInvalidTrack is returned for a grid column or row size that is
+	// neither a percentage from 1% to 100% nor a positive weight (2fr).
+	ErrInvalidTrack = errors.New("invalid grid size")
+	// ErrEmptyGrid is returned when a grid names no pane, or has an empty
+	// row, or is missing.
+	ErrEmptyGrid = errors.New("every grid row must name at least one pane")
+	// ErrRaggedGrid is returned when a grid's rows have different lengths.
+	ErrRaggedGrid = errors.New("every grid row must name as many panes")
+	// ErrTrackCount is returned when a grid has more or fewer sizes than
+	// columns or rows.
+	ErrTrackCount = errors.New("a grid needs one size per column and per row")
+	// ErrTrackShares is returned when a grid's percentages don't share out
+	// the whole window: 100% without weights, less with some.
+	ErrTrackShares = errors.New("grid sizes must share out the whole window")
+	// ErrPaneNotRectangle is returned when a pane's cells in a grid don't
+	// form one rectangle.
+	ErrPaneNotRectangle = errors.New("a pane's cells in a grid must form one rectangle")
+	// ErrInterlockedPanes is returned when panes of a grid can't be told
+	// apart by straight cuts across the window, the only layouts tmux
+	// builds.
+	ErrInterlockedPanes = errors.New("tmux can't build this grid: no straight line across the window separates these panes")
+	// ErrSplitInGrid is returned when a pane of a window laid out by a grid
+	// also says how it splits another.
+	ErrSplitInGrid = errors.New("a window laid out by a grid must not split its panes")
+	// ErrPaneOutsideGrid is returned when a pane of a window laid out by a
+	// grid isn't in its areas.
+	ErrPaneOutsideGrid = errors.New("the window's grid doesn't place this pane")
+	// ErrUnknownGridPane is returned when a grid names a pane its window
+	// doesn't have.
+	ErrUnknownGridPane = errors.New("the grid names a pane this window doesn't have")
+)
+
+var (
 	// ErrInvalidEnvName is returned for an environment variable name that
 	// a shell can't export.
 	ErrInvalidEnvName = errors.New("invalid environment variable name")

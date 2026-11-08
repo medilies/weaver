@@ -194,15 +194,55 @@ windows:
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
-| `windows[].panes` | Panes in creation order. None: one shell in `root`. |
-| `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes. |
+| `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see below. |
+| `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in `root`. |
+| `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
 | `dir` | Where the pane's shell starts, relative to `root` (or absolute, or starting with `~/`; `"~"` in quotes for the home directory). |
-| `split` | How every pane but the first is made: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
+| `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
 | `note` | Lines printed before the shell starts. |
 | `env` (pane) | Overrides the project's, per variable. |
+
+A `grid` lays a window's panes out by naming them in rows and columns,
+sized as shares of the window rather than of the pane being split. This
+window is the nimbus `app` window again:
+
+```yaml
+  - name: app
+    grid:
+      columns: [60%, 40%]
+      rows: [70%, 30%]
+      areas:
+        - [app shell, flutter run]
+        - [app shell, emulator]
+    panes:
+      - name: app shell
+        dir: app
+      - name: flutter run
+        dir: app
+        command: nimbus app
+      - name: emulator
+        prefill: nimbus emulator
+```
+
+| Field | Meaning |
+| --- | --- |
+| `areas` | Rows of pane names, one per column. A pane covers the rectangle of cells holding its name. Every pane is named, and none has a `split`. |
+| `columns`, `rows` | One size per column or row: a percentage of the window (`60%`), or a weight sharing out what the percentages leave (`2fr`). Default: equal. |
+
+tmux only cuts a window in straight lines, each piece cut again, so a
+grid whose panes no straight line across separates is refused, such as
+four panes turning around a fifth:
+
+```text
+a a b
+d e b
+d c c
+```
+
+`weave freeze` writes splits.
 
 Unknown fields are errors: they are usually typos. Comments are kept by
 `weave edit`, but not when `weave freeze` replaces a config.

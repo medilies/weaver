@@ -40,7 +40,30 @@ type projectFile struct {
 type windowFile struct {
 	Name   string     `yaml:"name"`
 	Before []string   `yaml:"before,omitempty"`
+	Grid   *gridFile  `yaml:"grid,omitempty"`
 	Panes  []paneFile `yaml:"panes,omitempty"`
+}
+
+type gridFile struct {
+	Columns []string  `yaml:"columns,omitempty,flow"`
+	Rows    []string  `yaml:"rows,omitempty,flow"`
+	Areas   []areaRow `yaml:"areas"`
+}
+
+// areaRow is a row of a grid's pane names, written on one line so the
+// rows read as the grid they draw.
+type areaRow []string
+
+func (r areaRow) MarshalYAML() (any, error) {
+	row := &yaml.Node{Kind: yaml.SequenceNode, Style: yaml.FlowStyle}
+	for _, name := range r {
+		var node yaml.Node
+		if err := node.Encode(name); err != nil {
+			return nil, err
+		}
+		row.Content = append(row.Content, &node)
+	}
+	return row, nil
 }
 
 type paneFile struct {
@@ -68,7 +91,7 @@ const schemaHeader = "# yaml-language-server: $schema=./" + schemaFileName + "\n
 // e.g. "field comand not found in type pane".
 var fileTypes = strings.NewReplacer(
 	"infra.projectFile", "project", "infra.windowFile", "window",
-	"infra.paneFile", "pane", "infra.splitFile", "split",
+	"infra.paneFile", "pane", "infra.splitFile", "split", "infra.gridFile", "grid",
 )
 
 // decodeProject strictly parses a config: unknown fields (usually typos)
@@ -87,7 +110,30 @@ func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) 
 	if err := file.bareHome(raw); err != nil {
 		return domain.Project{}, err
 	}
+	if err := nullGrid(raw); err != nil {
+		return domain.Project{}, err
+	}
 	return file.toProject(name)
+}
+
+// nullGrid reports a window's grid written empty or as null in raw, which
+// would otherwise read as no grid at all.
+func nullGrid(raw []byte) error {
+	var grids struct {
+		Windows []struct {
+			Name string    `yaml:"name"`
+			Grid yaml.Node `yaml:"grid"`
+		} `yaml:"windows"`
+	}
+	if err := yaml.Unmarshal(raw, &grids); err != nil {
+		return nil // decodeProject already read raw strictly
+	}
+	for _, window := range grids.Windows {
+		if window.Grid.Kind == yaml.ScalarNode && window.Grid.Tag == "!!null" {
+			return fmt.Errorf("window %q: grid: %w", window.Name, domain.ErrEmptyGrid)
+		}
+	}
+	return nil
 }
 
 // homeFile holds the nodes of the paths in a config, which a bare ~ would
@@ -182,11 +228,54 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	if err != nil {
 		return domain.Window{}, fmt.Errorf("before: %w", err)
 	}
-	window, err := domain.NewWindow(name, panes...)
-	if err != nil {
+	var window domain.Window
+	if w.Grid != nil {
+		grid, err := w.Grid.toGrid()
+		if err != nil {
+			return domain.Window{}, fmt.Errorf("grid: %w", err)
+		}
+		window, err = domain.NewGridWindow(name, grid, panes...)
+		if err != nil {
+			return domain.Window{}, err
+		}
+	} else if window, err = domain.NewWindow(name, panes...); err != nil {
 		return domain.Window{}, err
 	}
 	return window.RunningFirst(before...), nil
+}
+
+func (g gridFile) toGrid() (domain.Grid, error) {
+	areas := make([][]domain.PaneName, len(g.Areas))
+	for i, row := range g.Areas {
+		for _, raw := range row {
+			name, err := domain.NewPaneName(raw)
+			if err != nil {
+				return domain.Grid{}, fmt.Errorf("areas: row %d: %w", i+1, err)
+			}
+			areas[i] = append(areas[i], name)
+		}
+	}
+	columns, err := toTracks(g.Columns)
+	if err != nil {
+		return domain.Grid{}, fmt.Errorf("columns: %w", err)
+	}
+	rows, err := toTracks(g.Rows)
+	if err != nil {
+		return domain.Grid{}, fmt.Errorf("rows: %w", err)
+	}
+	return domain.NewGrid(areas, columns, rows)
+}
+
+func toTracks(raw []string) ([]domain.Track, error) {
+	tracks := make([]domain.Track, 0, len(raw))
+	for _, r := range raw {
+		track, err := domain.ParseTrack(r)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, track)
+	}
+	return tracks, nil
 }
 
 // toPane builds the pane at index of its window; siblings are all the
@@ -295,7 +384,8 @@ func (s splitFile) toSplit(index int, siblings []paneFile) (domain.Split, error)
 }
 
 // encodeProject writes a config in its canonical form: defaults left out,
-// "split.of" only when it isn't the previous pane, pane directories under
+// a grid as written, with its window's panes in creation order and no
+// splits, "split.of" only when it isn't the previous pane, pane directories under
 // the root relative to it, the home directory as "~", and pointing to the
 // schema saved next to it with a header line.
 func encodeProject(project domain.Project) ([]byte, error) {
@@ -327,13 +417,44 @@ func encodeProject(project domain.Project) ([]byte, error) {
 func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
 	file := windowFile{Name: window.Name().String(), Before: lines(window.Before())}
 	panes := window.Panes()
-	if len(panes) == 1 && isPlain(panes[0]) {
+	grid, gridded := window.Grid()
+	if gridded {
+		file.Grid = gridFileOf(grid)
+	} else if len(panes) == 1 && isPlain(panes[0]) {
 		return file
 	}
 	for i := range panes {
-		file.Panes = append(file.Panes, paneFileOf(root, i, panes))
+		pane := paneFileOf(root, i, panes)
+		if gridded {
+			pane.Split = nil // the grid's
+		}
+		file.Panes = append(file.Panes, pane)
 	}
 	return file
+}
+
+func gridFileOf(grid domain.Grid) *gridFile {
+	file := &gridFile{Columns: trackTexts(grid.Columns()), Rows: trackTexts(grid.Rows())}
+	for _, row := range grid.Areas() {
+		names := make(areaRow, len(row))
+		for i, name := range row {
+			names[i] = name.String()
+		}
+		file.Areas = append(file.Areas, names)
+	}
+	return file
+}
+
+// trackTexts is the tracks' text, or nil for none.
+func trackTexts(tracks []domain.Track) []string {
+	if len(tracks) == 0 {
+		return nil
+	}
+	out := make([]string, len(tracks))
+	for i, t := range tracks {
+		out[i] = t.String()
+	}
+	return out
 }
 
 // paneFileOf is the file shape of panes[index].
