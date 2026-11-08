@@ -12,10 +12,6 @@ Done against the project's aim of staying simple and small. macOS stays out of s
 
 | # | Bug | Severity | Fix | Status |
 | --- | --- | --- | --- | --- |
-| 5 | Pane started with a command frozen as a shell | Low | M | **Deferred** to config idea #4 |
-| 14 | `env:` and `note:` panes skip `default-command` | Low | M | **Deferred** to config idea #5 |
-| 15 | `weave kill` in a session named like a project | By design | — | **Deferred** to config idea #6 |
-| 12 | Unreachable server counts as not running | Low | S, but tied to tmux's error wording | **Left** |
 | 16 | macOS config location | — | — | **Ignored** |
 
 ### Other sections
@@ -28,76 +24,13 @@ Done against the project's aim of staying simple and small. macOS stays out of s
 
 | Fix | Waits for | Why |
 | --- | --- | --- |
-| #14 | config idea #5 secrets (and #7 `wait`, if it waits in the script) | They change the end of the pane startup script (`shellCommand`). |
-| #15, and naming the `stop:` key | config idea #6 `start` and `stop` | #6 makes kill load the project, which settles what killing the session you're in means. The glossary bans "stop". |
-| #5, and `Capture`'s three calls per pane | config idea #4 | #4 adds a pane listing with process IDs. Keep `foreground` meaning "the shell is idle": #4 and #6's clean shutdown rely on it. |
+| Naming the `stop:` key | config idea #6 `start` and `stop` | The glossary bans "stop". |
+| `Capture`'s four calls per pane | config idea #4 | #4 adds a pane listing with process IDs. Keep `foreground` meaning "the shell is idle": #4 and #6's clean shutdown rely on it. |
 | Form logic moved to `domain` (`ProjectRoot.Relative`) | config idea #2 window `dir` | #2 reworks `PaneDir` and `dirOf`. |
 | Building overviews concurrently | browser idea #2 live preview | Its refresh loop changes how overviews are built. Overviews only check directories and programs, which is fast. |
 | Cursor after a delete | browser idea #3 better list | Filtering changes how the selection works. |
 
 ## Bugs and edge cases
-
-### 5. Freezing loses the command of a pane started with one
-
-**Status:** **Deferred** to config idea #4.
-
-**Where:** `foreground` in `internal/session/infra/tmux.go`, called from `capturePanes`.
-
-**Problem:** a pane started with a command, such as `tmux new-window 'npm run dev'` or a script's `split-window 'htop'`, runs the program as the pane's own process. The terminal's foreground process group is then that process, which `foreground` reads as a shell idle at its prompt. The frozen pane becomes a bare shell. This breaks the `SessionCapturer.Capture` contract ("the commands running in them typed at their prompts").
-
-**Tested on tmux 3.4:** a pane started as `sleep 300` has a `tpgid` equal to its `pane_pid`, and a `pane_start_command` of `"sleep 300"`.
-
-**Fix:** when the foreground group is the pane's own process, treat the pane as idle only if `#{pane_start_command}` is empty or is weaver's own wrapper. Otherwise prefill the pane process's args.
-
-Prefilling them every time would be wrong: an idle pane would get `-bash`, and a weaver pane with `env:` or `note:` would get `/bin/bash -l`. The fix would also prefill a pane started as `zsh` or `bash` with its shell, so it has to tell shells apart, which is guesswork.
-
-### 12. A tmux server weave can't reach counts as not running
-
-**Status:** **Left.**
-
-**Where:** `internal/session/infra/tmux.go:57-59` (`Find`), `:271-273` (`Running`), `:283-285` (`Kill`), and `Capture`, so `weave freeze <session>` on a server weave can't reach says the session isn't running.
-
-**Problem:** every exit error is read as "no such session, or no server". But tmux also exits 1 when it can't connect, for example to a socket it may not open. When that happens:
-
-- `weave list` and the browser show nothing running.
-- `weave kill shop` says "session not running", and so does the browser's kill, without asking.
-
-**Tested on tmux 3.4:** with the socket at mode 000, `list-sessions` prints "error connecting to … (Permission denied)" and exits 1.
-
-**Fix:** read an exit as "not running" only when stderr says so: "no server running", "can't find session", or "error connecting to … (No such file or directory)". Return every other error. `run` already builds it with tmux's message.
-
-### 14. Panes with `env:` or `note:` skip tmux's `default-command`
-
-**Status:** **Deferred** to config idea #5.
-
-**Where:** `internal/session/infra/tmux_script.go:30` (`exec "${SHELL:-/bin/sh}" -l`).
-
-**Problem:** plain panes run tmux's `default-command` when one is set, for example `reattach-to-user-namespace -l zsh`. The wrapper always ends by starting a login shell, so panes with `env:` or `note:` skip it.
-
-**Not a problem: the shell itself.** tmux sets `SHELL` to `default-shell` in every new pane, even one started with an explicit command. The wrapper therefore starts the same shell as plain panes.
-
-**Tested on tmux 3.4:**
-
-- With `SHELL=/bin/sh` and `set -g default-shell /bin/bash`, a pane started as `/bin/sh -c 'echo $SHELL'` prints `/bin/bash`.
-- tmux runs `default-command` as `$SHELL -c '<command>'`.
-
-**Fix:** read `show-options -gv default-command`. When it is set, end the wrapper with `exec "$SHELL" -c` followed by the quoted command, as tmux runs it, instead of `exec "$SHELL" -l`.
-
-**Not `-e`:** `new-session -e` sets the session's environment, not just the first pane's. The first pane's `env:` would reach every later window and pane, including the ones the user opens. `new-window -e` and `split-window -e` are pane-local, but tmux reads a trailing `;` in their values as a command separator, so the values would need `argument()`.
-
-### 15. `weave kill` ends any session whose name looks like a project name
-
-**Status:** **Deferred** to config idea #6.
-
-Low severity, and by design: `cc4e803` made a plain `weave kill` behave like `tmux kill-session`.
-
-**Where:** `internal/session/app/kill_project.go:33` (`HandleCurrent`).
-
-**Scenario:** tmux names its default sessions `0`, `1` and so on, which are valid project names. Running `weave kill` inside one of them kills it. Nothing checks that it is an owned session, and nothing asks first. The glossary defines kill as ending *a project's* session.
-
-**Fix, if it should change:** have `HandleCurrent` check that the session is owned, through `SessionFinder.Find`. A registered-name check would wrongly refuse after `d` deletes the config of a running session, which stays owned.
-
-Don't ask for confirmation, so `weave kill` stays usable in scripts. Leave `weave kill <project>` as it is, since the user names the session.
 
 ### 16. On macOS, the documented config location is wrong (ignored)
 
@@ -149,11 +82,7 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 
 - `TestTmuxStartLeavesNothingWhenAStepFails` only fails inside the first window. A failure in a later window, where cleanup has to kill the session by ID, is not covered.
 - Decoding `~` is only tested for `root`, not for a pane's `dir:`. There is no save/reload test for a relative dir starting with `~`.
-- `Capture` isn't tested with a pane started with a command (bug #5).
-- Untested:
-  - a `Size` of 0x0
-  - `Kill` and `Running` against a server they can't reach (#12)
-- Env and note panes are only tested without a `default-command`, so bug #14 cannot show up in tests.
+- Untested: a `Size` of 0x0.
 
 ## Minor issues
 
@@ -164,8 +93,9 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 
 ### Freeze and capture
 
-- **Left.** A pane with a job is frozen in its shell's directory, read from `/proc` since `f65e161`: `make -C sub dev` from the root is frozen with `dir:` the root, so its prefill finds `sub`. A subshell that changes directory first loses that directory instead: `(cd api && exec sleep 300)` is frozen with `dir:` the root and the prefill `sleep 300`. ps can't give back the `cd`, and commands like `make -C` are the more common case. A shell a wrapper forks, as a `default-command` of `sh -c 'bash -i; true'` does, is taken for a job, so the pane gets the wrapper's directory and its shell as a prefill: bug #5's guesswork about telling shells apart.
-- **Deferred** to config idea #4. `Capture` runs three `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing on its own: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk. #4's pane listing is the time to share one.
+- **Left.** A pane with a job is frozen in its shell's directory, read from `/proc` since `f65e161`: `make -C sub dev` from the root is frozen with `dir:` the root, so its prefill finds `sub`. A subshell that changes directory first loses that directory instead: `(cd api && exec sleep 300)` is frozen with `dir:` the root and the prefill `sleep 300`. ps can't give back the `cd`, and commands like `make -C` are the more common case. A shell a wrapper forks, as a `default-command` of `sh -c 'bash -i; true'` does, is taken for a job, so the pane gets the wrapper's directory and its shell as a prefill. Telling shells apart would be guesswork.
+- **Left.** A pane tmux started with a command is frozen with that command as a prefill, unless it is weaver's startup script or tmux's `default-command` or `default-shell`. A pane started as another shell, as `tmux new-window zsh` where `default-shell` is bash, is frozen with `zsh` typed at its prompt, for the same reason.
+- **Deferred** to config idea #4. `Capture` runs four or five `display-message` calls per pane, where one `list-panes -F` would do. It's not worth changing on its own: freeze is interactive, and splitting free-text paths and labels out of one line of output adds parsing risk. #4's pane listing is the time to share one.
 
 ### Configs
 
