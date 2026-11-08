@@ -56,8 +56,8 @@ func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error)
 	// A window's format sees its session's options too. "/" can't be in a
 	// project name, so it ends the session's tag.
 	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{@weaver_project}/"+sized("@weaver_window"))
-	if _, exited := errors.AsType[*exec.ExitError](err); exited {
-		return domain.RunningSession{}, false, nil // no such session, or no server at all
+	if absent(err) {
+		return domain.RunningSession{}, false, nil
 	}
 	if err != nil {
 		return domain.RunningSession{}, false, err
@@ -156,7 +156,7 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // apart.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} "+sized("window_name"))
-	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, session)
 	}
 	if err != nil {
@@ -296,7 +296,7 @@ func unique(name string, taken map[string]bool) string {
 // Running implements domain.SessionLister.
 func (t Tmux) Running() ([]string, error) {
 	out, err := t.run("list-sessions", "-F", sized("session_name"))
-	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+	if absent(err) {
 		return nil, nil // no server, so no sessions
 	}
 	if err != nil || out == "" {
@@ -312,7 +312,7 @@ func (t Tmux) Running() ([]string, error) {
 // Kill implements domain.SessionKiller.
 func (t Tmux) Kill(name domain.ProjectName) error {
 	_, err := t.run("kill-session", "-t", "="+name.String())
-	if _, exited := errors.AsType[*exec.ExitError](err); exited {
+	if absent(err) {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
 	}
 	return err
@@ -464,9 +464,42 @@ func (t Tmux) run(args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("tmux %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
+		return "", &tmuxError{command: args[0], err: err, stderr: strings.TrimSpace(stderr.String())}
 	}
 	return strings.TrimSuffix(string(out), "\n"), nil
+}
+
+// tmuxError is a tmux command that failed, with what tmux said.
+type tmuxError struct {
+	command string
+	err     error
+	stderr  string
+}
+
+func (e *tmuxError) Error() string {
+	return "tmux " + e.command + ": " + e.err.Error() + ": " + e.stderr
+}
+
+func (e *tmuxError) Unwrap() error {
+	return e.err
+}
+
+// absent reports whether err is tmux saying that the session it was given
+// doesn't exist, or that no server runs to have one. Any other failure,
+// such as a socket weave may not open, is an error: reading it as "not
+// running" would hide the user's sessions.
+func absent(err error) bool {
+	failed, ok := errors.AsType[*tmuxError](err)
+	if !ok {
+		return false
+	}
+	if _, exited := errors.AsType[*exec.ExitError](failed.err); !exited {
+		return false
+	}
+	said := failed.stderr
+	return strings.HasPrefix(said, "can't find session") ||
+		strings.HasPrefix(said, "no server running") || // a socket left by a server that's gone
+		strings.HasPrefix(said, "error connecting to") && strings.HasSuffix(said, "(No such file or directory)")
 }
 
 // runIDs runs a tmux command printing n space-separated IDs. (tmux prints

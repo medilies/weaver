@@ -3,6 +3,7 @@ package infra_test
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -308,6 +309,78 @@ func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
 	if server.running(t, name) {
 		t.Fatal("got the session running, want the half-built session gone")
 	}
+}
+
+// unreachable is a running server whose socket weave may not open, as
+// one another user started.
+func unreachable(t *testing.T) tmuxServer {
+	t.Helper()
+	if os.Geteuid() == 0 {
+		t.Skip("root opens any socket")
+	}
+	server := newTmuxServer(t)
+	server.query(t, "new-session", "-d", "-s", "shop")
+	socket := server.global[1]
+	if err := os.Chmod(socket, 0); err != nil {
+		t.Fatalf("closing the socket: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(socket, 0o700) })
+	return server
+}
+
+// stale is a server's socket left behind once it is gone, so connecting
+// is refused.
+func stale(t *testing.T) tmuxServer {
+	t.Helper()
+	server := newTmuxServer(t)
+	listener, err := net.Listen("unix", server.global[1])
+	if err != nil {
+		t.Fatalf("leaving a socket: %v", err)
+	}
+	listener.(*net.UnixListener).SetUnlinkOnClose(false)
+	_ = listener.Close()
+	return server
+}
+
+func TestTmuxUnreachableServer(t *testing.T) {
+	server := unreachable(t)
+	name, _ := domain.NewProjectName("shop")
+
+	t.Run("listing fails rather than finding nothing running", func(t *testing.T) {
+		if sessions, err := server.tmux().Running(); err == nil {
+			t.Fatalf("got %q, want an error", sessions)
+		}
+	})
+
+	t.Run("finding fails rather than finding nothing", func(t *testing.T) {
+		if _, _, err := server.tmux().Find(name); err == nil {
+			t.Fatal("got no error, want one")
+		}
+	})
+
+	t.Run("killing says why it failed", func(t *testing.T) {
+		err := server.tmux().Kill(name)
+		if err == nil || errors.Is(err, domain.ErrSessionNotRunning) || !strings.Contains(err.Error(), "Permission denied") {
+			t.Fatalf("got %v, want tmux's permission error", err)
+		}
+	})
+}
+
+func TestTmuxStaleSocket(t *testing.T) {
+	server := stale(t)
+
+	t.Run("lists no sessions", func(t *testing.T) {
+		if sessions, err := server.tmux().Running(); err != nil || len(sessions) != 0 {
+			t.Fatalf("got %q (%v), want none running", sessions, err)
+		}
+	})
+
+	t.Run("finds no session", func(t *testing.T) {
+		name, _ := domain.NewProjectName("shop")
+		if _, running, err := server.tmux().Find(name); err != nil || running {
+			t.Fatalf("got running=%v (%v), want not running", running, err)
+		}
+	})
 }
 
 func TestTmuxKill(t *testing.T) {
