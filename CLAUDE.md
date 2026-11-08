@@ -80,3 +80,13 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 - `go run ./cmd/weave <args>` — run without building
 - `go test ./...` — run tests
 - `golangci-lint run ./...` — format check, static analysis, layer boundaries
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues for `medilies/weaver`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: the glossary is the Ubiquitous language table above, and ADRs live in `docs/adr/`. See `docs/agents/domain.md`.
