@@ -3,6 +3,7 @@ package infra
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -59,13 +60,14 @@ var (
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
-// projects the filter shows, top is the first the list shows, and the
-// window is the selected project's one drawn.
+// projects the filter shows, top is the first the list shows, the window
+// is the selected project's one drawn, and the pane is its selected one.
 type browser struct {
 	projects      []app.ProjectOverview
 	cursor        int
 	top           int
 	window        int
+	pane          int
 	filter        string
 	filtering     bool // typing the filter
 	notice        string
@@ -105,11 +107,11 @@ func (m browser) filtered(filter string) browser {
 	return m.reselected(selected)
 }
 
-// reselected is m drawing the first window again unless the project
-// selected before is still.
+// reselected is m drawing the first window again, its first pane
+// selected, unless the project selected before is still.
 func (m browser) reselected(before domain.ProjectName) browser {
 	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Name() != before {
-		m.window = 0
+		m.window, m.pane = 0, 0
 	}
 	return m
 }
@@ -117,7 +119,27 @@ func (m browser) reselected(before domain.ProjectName) browser {
 // windowMoved is m drawing the window by windows right of the one it
 // draws, or left when by is negative, staying in the selected project's.
 func (m browser) windowMoved(by int) browser {
-	m.window = max(min(m.window+by, m.windowsShown()-1), 0)
+	return m.windowSelected(max(min(m.window+by, len(m.windowsShown())-1), 0))
+}
+
+// windowSelected is m drawing the window at index, its first pane
+// selected unless it was drawn already.
+func (m browser) windowSelected(index int) browser {
+	if index != m.window {
+		m.window, m.pane = index, 0
+	}
+	return m
+}
+
+// paneMoved is m with the pane by panes after the selected one selected,
+// or before when by is negative, going round the drawn window's.
+func (m browser) paneMoved(by int) browser {
+	windows := m.windowsShown()
+	if len(windows) == 0 {
+		return m
+	}
+	count := len(windows[m.drawn(windows)].Panes())
+	m.pane = ((m.selectedPane(count)+by)%count + count) % count
 	return m
 }
 
@@ -127,13 +149,18 @@ func (m browser) drawn(windows []domain.WindowPlan) int {
 	return min(m.window, len(windows)-1)
 }
 
-// windowsShown is how many windows the selected project has.
-func (m browser) windowsShown() int {
+// selectedPane is the selected pane's index in a window of count panes.
+func (m browser) selectedPane(count int) int {
+	return min(m.pane, count-1)
+}
+
+// windowsShown are the selected project's windows, as it opens them.
+func (m browser) windowsShown() []domain.WindowPlan {
 	shown := m.shown()
 	if len(shown) == 0 {
-		return 0
+		return nil
 	}
-	return len(shown[m.cursor].Project().Windows())
+	return shown[m.cursor].Project().Plan().Windows()
 }
 
 func (m browser) Init() tea.Cmd {
@@ -178,6 +205,10 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m = m.windowMoved(-1)
 	case "right":
 		m = m.windowMoved(1)
+	case "tab":
+		m = m.paneMoved(1)
+	case "shift+tab":
+		m = m.paneMoved(-1)
 	case "/":
 		m.filtering = true
 	case "esc":
@@ -214,8 +245,8 @@ func (m browser) typeFilter(msg tea.KeyPressMsg) browser {
 }
 
 // filterKey is m after key, pressed while the filter is typed: the
-// arrows select, enter keeps the filter for the keys to act on what it
-// shows, esc clears it. False when key types text instead.
+// arrows and tab select, enter keeps the filter for the keys to act on
+// what it shows, esc clears it. False when key types text instead.
 func (m browser) filterKey(key string) (browser, bool) {
 	switch key {
 	case "up":
@@ -226,6 +257,10 @@ func (m browser) filterKey(key string) (browser, bool) {
 		return m.windowMoved(-1), true
 	case "right":
 		return m.windowMoved(1), true
+	case "tab":
+		return m.paneMoved(1), true
+	case "shift+tab":
+		return m.paneMoved(-1), true
 	case "enter":
 		m.filtering = false
 		return m, true
@@ -332,8 +367,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 // selected.
 func (m browser) act(spot hotspot) (tea.Model, tea.Cmd) {
 	if spot.key == "" {
-		m.window = spot.window
-		return m, nil
+		return m.windowSelected(spot.window), nil
 	}
 	if m.filtering {
 		if next, ok := m.filterKey(spot.key); ok {
@@ -381,6 +415,10 @@ var (
 	browsingKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
 )
 
+// paneKey is tab told, before the last two keys, when the drawn window
+// has panes to switch between.
+var paneKey = keyTold{"tab", "pane"}
+
 // keys are the filter being typed and what its keys do, or the filter
 // kept and the keys acting on what it shows, cut to the width; with the
 // cells each key told covers, and the filter kept, which / edits again,
@@ -395,6 +433,9 @@ func (m browser) keys() (string, []hotspot) {
 	case m.filter != "":
 		spots = append(spots, hotspot{from: 0, to: ansi.StringWidth("/" + m.filter), key: "/"})
 		line, told = "/"+m.filter+keysStyle.Render(" · "), filteredKeys
+	}
+	if windows := m.windowsShown(); !m.filtering && len(windows) > 0 && len(windows[m.drawn(windows)].Panes()) > 1 {
+		told = slices.Insert(slices.Clone(told), len(told)-2, paneKey)
 	}
 	for i, k := range told {
 		if i > 0 {
@@ -473,8 +514,8 @@ func root(project app.ProjectOverview) string {
 const minDrawingWidth, minDrawingHeight = 24, 6
 
 // details are the selected project's summary, or why its config can't
-// be read, then its windows' tabs and the selected one drawn in what is
-// left of width×height.
+// be read, then its windows' tabs, the selected one drawn in what is left
+// of width×height, and the levels of its selected pane below.
 func (m browser) details(width, height int) string {
 	shown := m.shown()
 	switch {
@@ -491,16 +532,21 @@ func (m browser) details(width, height int) string {
 	}
 	index := m.drawn(windows)
 	window, root := windows[index], project.Project().Root().String()
-	left := height - tabsRow(top) - 1 // the tabs
+	pane := m.selectedPane(len(window.Panes()))
+	below := height - tabsRow(top) - 1 // the tabs
+	levelLines := levels(project.Project(), index, pane, width)
 	var panes []string
-	if width < minDrawingWidth || left < minDrawingHeight {
-		panes = paneList(window, root, alerts(project, window), width, left)
+	if width < minDrawingWidth || below < minDrawingHeight {
+		panes = paneList(window, root, alerts(project, window), pane, width, below)
 	} else {
 		// A session opens at the browser's size, less tmux's status line.
-		panes = drawing(window, root, alerts(project, window), m.width, max(m.height-1, 1), width, left)
+		// The levels leave the drawing its least height.
+		panes = drawing(window, root, alerts(project, window), pane, m.width, max(m.height-1, 1),
+			width, max(below-len(levelLines), minDrawingHeight))
 	}
+	levelLines = fitted(levelLines, below-len(panes))
 	tabLine, _ := tabs(project, windows, index, width)
-	return top + "\n\n" + tabLine + "\n" + strings.Join(panes, "\n")
+	return top + "\n\n" + tabLine + "\n" + strings.Join(append(panes, levelLines...), "\n")
 }
 
 // tabsRow is the details' line the tabs are on, below top and a blank

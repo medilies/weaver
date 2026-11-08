@@ -33,47 +33,16 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 7 | Where a pane's settings come from | browser | S | |
 | 8 | Changing panes in `domain` | domain | M | |
-| 9 | The config form | form | L | 7, 8 |
+| 9 | The config form | form | L | 8 |
 | 10 | The layout in the config form | form | M | 9 |
 | 11 | Freeze through the config form | form | M | 9, 10 |
 
 ```mermaid
 flowchart LR
     T8[8 changing panes] --> T9[9 config form]
-    T7[7 where settings come from] --> T9
     T9 --> T10[10 layout in the form] --> T11[11 freeze through the form]
 ```
-
-## 7. Where a pane's settings come from
-
-The Tab key moves between the panes of the drawing and highlights the
-selected box. Below the drawing, list what that pane really gets, each
-line with the level it comes from:
-
-```text
-┌─ back ──────────────────────────────┬─[ front ]─────┐
-│ back/                               │ front/        │
-│ $ █                                 │ Usual command │
-│                                     │   npm i       │
-│                                     │ $ █           │
-└─────────────────────────────────────┴───────────────┘
- front  ~/dev/shop/front
- before  source ~/.shop_aliases   project
-         git fetch --quiet        window shop
-         nvm use 20               pane
- env     APP_ENV=dev              pane, over project's local
-```
-
-The YAML spreads before commands over three levels and env over two,
-and the plan merges them, and a pane's dir replaces its window's.
-
-- The levels come from the getters already there: `Project`, `Window`
-  and `Pane.Before()`, `Project.Env()` against `Pane.Env()`, and the
-  window's and pane's dir. No change to `domain`.
-- "Comes from" and "over" are new words for the browser: give the
-  concept a glossary entry first.
 
 ## 8. Changing panes in `domain`
 
@@ -135,7 +104,7 @@ one line. A trail at the top says where the cursor is.
 ```
 
 Before commands and env from the project and the window show dimmed in
-each pane, with their level, as in #7; enter on an inherited variable
+each pane, with their level, as in the browser; enter on an inherited variable
 overrides it for the pane.
 
 ### A control per kind of field
@@ -285,7 +254,8 @@ one winning.
   `$ref: "#/definitions/env"` in the window's schema.
 - Test: a window's variable overrides the project's, and a pane's
   overrides the window's.
-- #7 and the config form show the extra level once it exists.
+- The browser's levels and the config form show the extra level once
+  it exists.
 
 ### Focus (S)
 
@@ -701,8 +671,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 ## Shared groundwork
 
-- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves #7
-  and #10, and its border drawing the live preview.
+- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves
+  #10, and its border drawing the live preview.
 - #8's domain methods serve #9, #10 and #11.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.

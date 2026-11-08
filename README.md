@@ -58,13 +58,19 @@ as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
 neither (`$ █`). A pane with a warning has ⚠ in its top border, and
 the border is red when its directory is missing, yellow when its
 program isn't found. In a small terminal the panes are listed instead.
+The selected pane has its name in brackets, and below the drawing are
+the directory it starts in, its `before` commands in the order they
+run, and its variables, each with the level it comes from (the project,
+the window or the pane) and what it is over when it replaces the
+window's `dir` or a project variable.
 
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
+| tab or shift+tab | select the next or previous pane of the selected window |
 | click | select the project clicked in the list, or the window whose tab is clicked; on a key shown at the bottom, or on ← or → beside the tabs, do what the key does; on the kept filter, edit it again as / does |
-| / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project and ← → a window, enter keeps the filter for the keys below and esc clears it |
+| / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
 | e | edit its config, like `weave edit <project>` |

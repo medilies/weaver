@@ -84,7 +84,7 @@ func TestDrawing(t *testing.T) {
         split: { direction: right }
       - name: below
         split: { of: right, direction: below }
-`), "/srv/shop", nil, 81, 20, 21, 9)
+`), "/srv/shop", nil, -1, 81, 20, 21, 9)
 		want := []string{
 			"┌─ left ──┬─ right ─┐",
 			"│ $ █     │ $ █     │",
@@ -101,32 +101,52 @@ func TestDrawing(t *testing.T) {
 		}
 	})
 
+	t.Run("puts the selected pane's name in brackets", func(t *testing.T) {
+		got := drawing(firstWindow(t, `      - name: left
+      - name: right
+        split: { direction: right }
+`), "/srv/shop", nil, 1, 81, 20, 31, 4)[0]
+		if want := "┌─ left ───────┬─[ right ]────┐"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("leaves out the brackets of a selected name with no room for them", func(t *testing.T) {
+		got := drawing(firstWindow(t, `      - name: left
+      - name: right
+        split: { direction: right }
+`), "/srv/shop", nil, 1, 81, 20, 15, 4)[0]
+		if want := "┌─ l… ─┬─ r… ─┐"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
 	t.Run("cuts a name that doesn't fit in its border", func(t *testing.T) {
 		got := drawing(firstWindow(t, `      - name: a long name
       - name: b
         split: { direction: below }
-`), "/srv/shop", nil, 81, 20, 12, 5)[0]
+`), "/srv/shop", nil, -1, 81, 20, 12, 5)[0]
 		if want := "┌─ a lon… ─┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("cuts a prompt that doesn't fit in its box", func(t *testing.T) {
-		got := drawing(firstWindow(t, "      - command: npm run dev\n"), "/srv/shop", nil, 81, 20, 12, 3)[1]
+		got := drawing(firstWindow(t, "      - command: npm run dev\n"), "/srv/shop", nil, -1, 81, 20, 12, 3)[1]
 		if want := "│ $ npm r… │"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("names no lone pane, as tmux draws no border around it", func(t *testing.T) {
-		got := drawing(firstWindow(t, "      - name: only\n"), "/srv/shop", nil, 81, 20, 12, 3)[0]
+		got := drawing(firstWindow(t, "      - name: only\n"), "/srv/shop", nil, -1, 81, 20, 12, 3)[0]
 		if want := "┌──────────┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("keeps a combining mark with its letter", func(t *testing.T) {
-		got := drawing(firstWindow(t, "      - note: [\"cafe\u0301\"]\n"), "/srv/shop", nil, 81, 20, 12, 4)[1]
+		got := drawing(firstWindow(t, "      - note: [\"cafe\u0301\"]\n"), "/srv/shop", nil, -1, 81, 20, 12, 4)[1]
 		if want := "│ cafe\u0301     │"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -140,7 +160,7 @@ func TestDrawingAlerts(t *testing.T) {
 `
 
 	t.Run("puts ⚠ in the top border of a pane with an alert", func(t *testing.T) {
-		got := ansi.Strip(drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, programAlert}, 81, 20, 21, 4)[0])
+		got := ansi.Strip(drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, programAlert}, -1, 81, 20, 21, 4)[0])
 		if want := "┌─ left ──┬─ ⚠ ri… ─┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -152,42 +172,42 @@ func TestDrawingAlerts(t *testing.T) {
 `
 
 	t.Run("colours the border of a pane with an alert", func(t *testing.T) {
-		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 81, 20, 21, 4)[1]
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, 81, 20, 21, 4)[1]
 		if want := problemStyle.Render("│"); !strings.HasSuffix(row, want) {
 			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
 
 	t.Run("leaves plain the border of a pane without one", func(t *testing.T) {
-		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 81, 20, 21, 4)[1]
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, 81, 20, 21, 4)[1]
 		if !strings.HasPrefix(row, "│ $ █") {
 			t.Fatalf("got %q, want it to start plain", row)
 		}
 	})
 
 	t.Run("leaves plain what a pane with an alert shows inside", func(t *testing.T) {
-		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 81, 20, 21, 4)[1]
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, 81, 20, 21, 4)[1]
 		if !strings.Contains(row, "│ $ █     "+problemStyle.Render("│")) {
 			t.Fatalf("got %q, want the right pane's prompt plain", row)
 		}
 	})
 
 	t.Run("leaves plain a neighbour's name on a shared border", func(t *testing.T) {
-		row := drawing(firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, 81, 20, 21, 7)[3]
+		row := drawing(firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, -1, 81, 20, 21, 7)[3]
 		if want := problemStyle.Render("─") + " bottom "; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the border red and the name bottom plain: %q", row, want)
 		}
 	})
 
 	t.Run("colours a shared border with the worse alert", func(t *testing.T) {
-		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{dirAlert, programAlert}, 81, 20, 21, 4)[1]
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{dirAlert, programAlert}, -1, 81, 20, 21, 4)[1]
 		if want := " $ █     " + problemStyle.Render("│") + " $ █"; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the shared border red: %q", row, want)
 		}
 	})
 
 	t.Run("marks a lone pane with an alert, though it has no name shown", func(t *testing.T) {
-		got := ansi.Strip(drawing(firstWindow(t, "      - name: only\n"), "/srv/shop", []alert{programAlert}, 81, 20, 12, 3)[0])
+		got := ansi.Strip(drawing(firstWindow(t, "      - name: only\n"), "/srv/shop", []alert{programAlert}, -1, 81, 20, 12, 3)[0])
 		if want := "┌─ ⚠ ──────┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -201,8 +221,18 @@ func TestPaneList(t *testing.T) {
         split: { direction: below }
       - name: c
         split: { direction: below }
-`), "/srv/shop", nil, 40, 2)
+`), "/srv/shop", nil, -1, 40, 2)
 		if want := []string{"a · $ █", "… 2 more"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("puts the selected pane's name in brackets", func(t *testing.T) {
+		got := paneList(firstWindow(t, `      - name: a
+      - name: b
+        split: { direction: below }
+`), "/srv/shop", nil, 1, 40, 2)
+		if want := []string{"a · $ █", "[ b ] · $ █"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})

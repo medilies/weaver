@@ -104,10 +104,11 @@ var alertStyles = map[alert]lipgloss.Style{
 // drawing is window's panes drawn as boxes in width×height cells, in the
 // proportions they take in a window of cols×rows. Each box shows what
 // its pane looks like the moment it opens: its name in the top border,
-// its dir when it isn't root, its note, then its prompt. A pane with an
-// alert, from alerts by its index, gets ⚠ in its top border and a border
-// in the alert's colour, the worst winning on a border boxes share.
-func drawing(window domain.WindowPlan, root string, alerts []alert, cols, rows, width, height int) []string {
+// its dir when it isn't root, its note, then its prompt. The selected
+// pane, by its index, has its name in brackets. A pane with an alert,
+// from alerts by its index, gets ⚠ in its top border and a border in the
+// alert's colour, the worst winning on a border boxes share.
+func drawing(window domain.WindowPlan, root string, alerts []alert, selected, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
 	// rows (the other one), maps to the same drawn line for every box it
@@ -135,8 +136,13 @@ func drawing(window domain.WindowPlan, root string, alerts []alert, cols, rows, 
 		if alertOf(alerts, i) != noAlert {
 			title = strings.TrimSpace("⚠ " + title)
 		}
-		if width := f.right - f.left - 5; title != "" && width > 0 {
-			grid.write(f.left+2, f.top, " "+ansi.Truncate(title, width, "…")+" ", width+2)
+		room := f.right - f.left - 3
+		open, closing := " ", " "
+		if i == selected && len(panes) > 1 && room >= 5 { // else no room for the brackets
+			open, closing = "[ ", " ]"
+		}
+		if width := room - len(open) - len(closing); title != "" && width > 0 {
+			grid.write(f.left+2, f.top, open+ansi.Truncate(title, width, "…")+closing, room)
 		}
 		for j, text := range paneLines(pane, root) {
 			if f.top+1+j >= f.bottom {
@@ -165,16 +171,19 @@ func alertOf(alerts []alert, index int) alert {
 }
 
 // paneList is window's panes one a line, for a space too small to draw
-// them in: "api shell · api/ · $ task dev", each cut to width cells, ⚠
-// first for a pane with an alert. When
-// they take more than height lines, the last line says how many are left
-// out.
-func paneList(window domain.WindowPlan, root string, alerts []alert, width, height int) []string {
+// them in: "api shell · api/ · $ task dev", each cut to width cells, the
+// selected one's name in brackets, and ⚠ first for a pane with an alert.
+// When they take more than height lines, the last line says how many are
+// left out.
+func paneList(window domain.WindowPlan, root string, alerts []alert, selected, width, height int) []string {
 	panes := window.Panes()
 	lines := make([]string, 0, len(panes))
 	for i, pane := range panes {
 		parts := paneLines(pane, root)
 		if title := paneTitle(pane, len(panes)); title != "" {
+			if i == selected {
+				title = "[ " + title + " ]"
+			}
 			parts = append([]string{title}, parts...)
 		}
 		if alertOf(alerts, i) != noAlert {
@@ -182,8 +191,17 @@ func paneList(window domain.WindowPlan, root string, alerts []alert, width, heig
 		}
 		lines = append(lines, ansi.Truncate(strings.Join(parts, " · "), width, "…"))
 	}
-	if height = max(height, 1); len(lines) > height {
-		lines = append(lines[:height-1], fmt.Sprintf("… %d more", len(lines)-height+1))
+	return fitted(lines, max(height, 1))
+}
+
+// fitted is lines in height lines at most, the last saying how many are
+// left out when they don't fit.
+func fitted(lines []string, height int) []string {
+	switch {
+	case height <= 0:
+		return nil
+	case len(lines) > height:
+		return append(lines[:height-1:height-1], fmt.Sprintf("… %d more", len(lines)-height+1))
 	}
 	return lines
 }

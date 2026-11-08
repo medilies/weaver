@@ -44,6 +44,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | summary | Where the selected project stands, at the top of the browser's details | browser | `summary` in `tea_browser.go` |
 | drawing | A window's panes drawn as boxes in their proportions, each as it looks the moment it opens | browser details | `drawing` in `tea_drawing.go` |
 | tab | A window's name above the drawing, ○ marking one an owned session lacks, which open restores | `←/→` in the browser | `tabs` in `tea_browser.go` |
+| level | Where a pane's dir, before commands or env is set: the project, the pane's window or the pane. The Tab key selects a pane in the drawing, and below it the browser lists what that pane gets, each with the level it comes from and, when it replaces a higher level's, what it is over | Tab key in the browser | `levels` in `tea_levels.go` |
 | filter | Text narrowing the browser's list to the projects whose names contain it, ignoring case | `/` in the browser | `filter` in `tea_browser.go` |
 | notice | The browser's status line: what the last action did, or why it failed | browser | the `notice` passed to `ProjectBrowser.Browse` |
 | warning | Something opening would likely fail on, in the panes it concerns | browser summary and drawing | `Warning`, `ProjectOverview.Warnings()` |
