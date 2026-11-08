@@ -68,6 +68,9 @@ var (
 	// ErrSessionNotRunning is returned when killing a session that isn't
 	// running.
 	ErrSessionNotRunning = errors.New("session not running")
+	// ErrSessionNotOwned is returned when killing the session weaver runs
+	// in while weaver didn't start it.
+	ErrSessionNotOwned = errors.New("weave didn't start this session")
 	// ErrNotInsideTmux is returned when asking for the session weaver runs
 	// in while it runs outside tmux.
 	ErrNotInsideTmux = errors.New("not inside tmux")

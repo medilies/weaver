@@ -74,8 +74,11 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 	return domain.RunningSession{}, false, s.err
 }
 
-// unkillableSessions is a domain.SessionKiller that fails.
-type unkillableSessions struct{ err error }
+// unkillableSessions is a domain.SessionKiller that fails to kill.
+type unkillableSessions struct {
+	unfindableSessions
+	err error
+}
 
 func (s unkillableSessions) Kill(domain.ProjectName) error {
 	return s.err
@@ -462,7 +465,7 @@ func TestBrowseProjects(t *testing.T) {
 		err := app.NewBrowseProjects(
 			s.browser, answer(true), s.configs, s.documents, s.workspace, server,
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
-			app.NewKillProject(unkillableSessions{errors.New("tmux kill-session: lost server")}, capturedSessions{}),
+			app.NewKillProject(unkillableSessions{err: errors.New("tmux kill-session: lost server")}, capturedSessions{}),
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

@@ -25,7 +25,7 @@ weave .               # same, for the project whose root holds the current direc
 weave                 # browse the projects, to open, freeze, edit, kill or delete them
 weave edit nimbus     # edit its config in $VISUAL or $EDITOR; only a valid config is saved
 weave kill nimbus     # kill the session and everything running in it
-weave kill            # same, for the session you're in
+weave kill            # same, for the session you're in, if weave started it
 weave list            # registered projects, and which sessions run
 weave show nimbus     # print its config file
 ```

@@ -29,8 +29,9 @@ func (uc KillProject) Handle(rawName string) error {
 }
 
 // HandleCurrent kills the session weaver runs in, or returns
-// domain.ErrNotInsideTmux. A session no project could be named after is
-// left running.
+// domain.ErrNotInsideTmux. Only a session weaver started is killed: one
+// that merely has a project's name, as tmux's own "0", is left running,
+// and Handle kills it when named.
 func (uc KillProject) HandleCurrent() error {
 	current, err := uc.locator.Current()
 	if errors.Is(err, domain.ErrNotInsideTmux) {
@@ -42,6 +43,13 @@ func (uc KillProject) HandleCurrent() error {
 	name, err := domain.NewProjectName(current)
 	if err != nil {
 		return fmt.Errorf("the session you're in, %q, isn't a project's: %w", current, err)
+	}
+	session, running, err := uc.sessions.Find(name)
+	if err != nil {
+		return err
+	}
+	if running && !session.Owned() {
+		return fmt.Errorf("%w: %s; run weave kill %s to kill it anyway", domain.ErrSessionNotOwned, name, name)
 	}
 	return uc.sessions.Kill(name)
 }
