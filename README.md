@@ -90,7 +90,9 @@ its windows and panes, laid out as they are, each in its directory,
 written relative to the root even when you reached the root through a
 symlink. The command in a pane's foreground is typed at its prompt but
 not run, from the directory of the shell that started it. Check it
-before you run it: pipes, quotes and variables don't survive.
+before you run it: pipes, quotes and variables don't survive. A pane
+tmux started with a command, as `tmux new-window 'npm run dev'`, gets
+that command typed at its prompt too, from the directory it started in.
 
 ## Development
 

@@ -108,6 +108,16 @@ func (s tmuxServer) busy(t *testing.T, session, program string) domain.Startup {
 	}
 }
 
+// firstStartup is what Capture types in session's first pane.
+func firstStartup(t *testing.T, s tmuxServer, session string) domain.Startup {
+	t.Helper()
+	windows, err := s.tmux().Capture(session)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return windows[0].Panes()[0].Startup()
+}
+
 // attached is another private server, and a pane of it holding a client
 // attached to session. capture-pane leaves out pane borders: reading that
 // pane shows what tmux draws, borders included.
@@ -829,6 +839,63 @@ func TestTmuxCapture(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if cmd, ok := windows[0].Panes()[0].Startup().Command(); ok {
+			t.Fatalf("got command %q, want none", cmd)
+		}
+	})
+
+	t.Run("types the command a pane was started with without running it", func(t *testing.T) {
+		started := `echo "it's $HOME" ~ '#x'; sleep 300`
+		server.query(t, "new-session", "-d", "-s", "started", started)
+
+		startup := firstStartup(t, server, "started")
+		if cmd, _ := startup.Command(); cmd.String() != started || startup.Submits() {
+			t.Fatalf("got command %q (run: %t), want %q only typed", cmd, startup.Submits(), started)
+		}
+	})
+
+	t.Run("quotes the arguments a pane was started with", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "argv", "--",
+			"/bin/sh", "-c", "sleep 300", "it's", "~", "a=b", "=x", "", `back\slash`, `"`, "a#$z")
+
+		cmd, _ := firstStartup(t, server, "argv").Command()
+		if want := `/bin/sh -c 'sleep 300' 'it'\''s' '~' a=b '=x' '' 'back\slash' '"' 'a#$z'`; cmd.String() != want {
+			t.Fatalf("got command %q, want %q", cmd, want)
+		}
+	})
+
+	t.Run("keeps the directory a started command changed from", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "cd", "-c", root, "cd api && sleep 300")
+		server.busy(t, "cd", "cd api")
+
+		windows, err := server.tmux().Capture("cd")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := windows[0].Panes()[0].Dir(); got.String() != root {
+			t.Fatalf("got dir %q, want where the command started, %q", got, root)
+		}
+	})
+
+	t.Run("gives a pane started with tmux's default-command no command", func(t *testing.T) {
+		server.query(t, "set-option", "-g", "default-command", "exec /bin/sh")
+		t.Cleanup(func() { server.query(t, "set-option", "-gu", "default-command") })
+		server.query(t, "new-session", "-d", "-s", "default")
+		server.waitFor(t, "default:", "$")
+
+		if cmd, ok := firstStartup(t, server, "default").Command(); ok {
+			t.Fatalf("got command %q, want none", cmd)
+		}
+	})
+
+	t.Run("gives a pane weaver started with a note no command", func(t *testing.T) {
+		if err := server.tmux().Start(planOf(t, "noted", fmt.Sprintf(`{"root": %q, "windows": [
+			{"name": "w", "panes": [{"note": ["hello"], "env": {"A": "1"}}]}
+		]}`, root))); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		server.waitFor(t, "=noted:", "hello")
+
+		if cmd, ok := firstStartup(t, server, "noted").Command(); ok {
 			t.Fatalf("got command %q, want none", cmd)
 		}
 	})

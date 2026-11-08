@@ -154,10 +154,11 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // its window or session gets a number. The job in the foreground of a
 // pane's terminal, if any, is typed at its prompt but not run: ps rebuilds
 // it from its arguments, losing quotes, pipes and variables, so the user
-// checks it first. The pane weaver runs in gets no command: its job is
-// weaver. A pane with a job keeps its shell's directory, which the typed
-// command will run from, rather than the job's, when /proc tells them
-// apart.
+// checks it first. A pane started with a command, rather than a shell,
+// gets that command, as tmux holds it, in the directory it started in. The pane weaver runs in gets no
+// command: its job is weaver. A pane with a job keeps its shell's
+// directory, which the typed command will run from, rather than the
+// job's, when /proc tells them apart.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} "+sized("window_name"))
 	if absent(err) {
@@ -165,6 +166,17 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	// Commands that start a shell like any other: tmux's default-command,
+	// which a pane given no command holds as its start command once set,
+	// and its default-shell, as a pane started with it explicitly holds.
+	shells := make(map[string]bool)
+	for _, option := range []string{"default-command", "default-shell"} {
+		value, err := t.option("="+session, option)
+		if err != nil {
+			return nil, err
+		}
+		shells[value] = true
 	}
 	taken := make(map[string]bool)
 	var windows []domain.Window
@@ -175,7 +187,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 		if err != nil {
 			return nil, err
 		}
-		panes, err := t.capturePanes(creationOrder(cell))
+		panes, err := t.capturePanes(creationOrder(cell), shells)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +204,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	return windows, nil
 }
 
-func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
+func (t Tmux) capturePanes(order []layoutPane, shells map[string]bool) ([]domain.Pane, error) {
 	taken := make(map[string]bool)
 	panes := make([]domain.Pane, 0, len(order))
 	for i, p := range order {
@@ -211,8 +223,24 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 		if err != nil {
 			return nil, err
 		}
+		start, err := t.run("display-message", "-p", "-t", target, sized("pane_start_command"))
+		if err != nil {
+			return nil, err
+		}
 		pane := domain.NewPane()
 		if target != t.opts.Pane {
+			if cmd, ok := startedWith(startArgs(verbatim(start)), shells); ok {
+				pane = pane.Prefilling(cmd)
+				// It may have changed directory since, as `make -C sub`
+				// does: it is typed where it started.
+				started, err := t.run("display-message", "-p", "-t", target, sized("pane_start_path"))
+				if err != nil {
+					return nil, err
+				}
+				if started = verbatim(started); started != "" {
+					path = started
+				}
+			}
 			if cmd, ok := foreground(pid); ok {
 				pane = pane.Prefilling(cmd)
 				// tmux reports the job's directory, but the prefill runs
@@ -250,9 +278,9 @@ func (t Tmux) capturePanes(order []layoutPane) ([]domain.Pane, error) {
 }
 
 // foreground is the command line of the job in the foreground of the
-// terminal of the pane whose process is pid: none when that process, its
-// shell, is idle at the prompt. It is read best effort, as the job may end
-// meanwhile.
+// terminal of the pane whose process is pid: none when that process is,
+// either a shell idle at the prompt or the command the pane was started
+// with. It is read best effort, as the job may end meanwhile.
 func foreground(pid string) (domain.Command, bool) {
 	group, err := exec.Command("ps", "-o", "tpgid=", "-p", pid).Output()
 	leader := strings.TrimSpace(string(group))
@@ -265,6 +293,27 @@ func foreground(pid string) (domain.Command, bool) {
 		return domain.Command{}, false
 	}
 	cmd, err := domain.NewCommand(string(args))
+	return cmd, err == nil
+}
+
+// startedWith is the command a pane was started with, given its
+// arguments, as it would be typed at a prompt: none when the pane started
+// a shell: none at all, as tmux does given no command, one of shells, or
+// weaver's startup script.
+func startedWith(args []string, shells map[string]bool) (domain.Command, bool) {
+	var line string
+	switch {
+	case len(args) == 0, wrapped(args):
+		return domain.Command{}, false
+	case len(args) == 1:
+		line = args[0] // tmux has its default-shell run it, as a command line
+	default:
+		line = shellWords(args)
+	}
+	if shells[line] {
+		return domain.Command{}, false
+	}
+	cmd, err := domain.NewCommand(line)
 	return cmd, err == nil
 }
 
@@ -572,6 +621,74 @@ func verbatim(printed string) string {
 		b.WriteByte(value[i])
 	}
 	return b.String()
+}
+
+// startArgs reads back the arguments a pane was started with from
+// #{pane_start_command}, read verbatim: tmux joins them with spaces,
+// quoting those that need it and escaping their characters as C does,
+// "\\n" for a newline, "\\033" for an escape, and a "\\" before any
+// character it could read otherwise.
+func startArgs(start string) []string {
+	var args []string
+	var arg strings.Builder
+	var quote byte
+	started := false
+	for i := 0; i < len(start); i++ {
+		c := start[i]
+		switch {
+		case c == '\\' && i+1 < len(start):
+			i++
+			end := i
+			for end < len(start) && end < i+3 && '0' <= start[end] && start[end] <= '7' {
+				end++
+			}
+			if code, err := strconv.ParseUint(start[i:end], 8, 8); err == nil {
+				arg.WriteByte(byte(code))
+				i = end - 1
+			} else {
+				arg.WriteByte(unescaped(start[i]))
+			}
+			started = true
+		case quote != 0 && c == quote:
+			quote = 0
+		case quote == 0 && (c == '"' || c == '\''):
+			quote, started = c, true
+		case quote == 0 && c == ' ':
+			if started {
+				args = append(args, arg.String())
+				arg.Reset()
+				started = false
+			}
+		default:
+			arg.WriteByte(c)
+			started = true
+		}
+	}
+	if started {
+		args = append(args, arg.String())
+	}
+	return args
+}
+
+// unescaped is the character that "\\" and c stand for in a C string.
+func unescaped(c byte) byte {
+	switch c {
+	case 'a':
+		return '\a'
+	case 'b':
+		return '\b'
+	case 'f':
+		return '\f'
+	case 'n':
+		return '\n'
+	case 'r':
+		return '\r'
+	case 't':
+		return '\t'
+	case 'v':
+		return '\v'
+	}
+	return c
 }
 
 // startsName reports whether c, after a "$", makes tmux 3.4 print a "\"

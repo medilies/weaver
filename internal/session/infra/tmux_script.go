@@ -41,7 +41,42 @@ func shellCommand(pane domain.PanePlan, defaultCommand string) []string {
 	return []string{"--", "/bin/sh", "-c", strings.Join(lines, "\n")}
 }
 
+// wrapped reports whether args, a pane's start command, are a startup
+// script of shellCommand's, so the pane runs a shell like any other.
+func wrapped(args []string) bool {
+	if len(args) != 3 || args[0] != "/bin/sh" || args[1] != "-c" {
+		return false
+	}
+	script := args[2]
+	return strings.HasPrefix(script[strings.LastIndexByte(script, '\n')+1:], shellLine)
+}
+
 // shellQuote quotes s for sh, so it is taken literally.
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// shellWords is args as a command line sh splits back into them, each
+// quoted only when it has to be.
+func shellWords(args []string) string {
+	words := make([]string, len(args))
+	for i, arg := range args {
+		words[i] = arg
+		// A first word with "=" would be read as setting a variable, and
+		// zsh expands a word starting with "=" into a program's path.
+		if arg == "" || strings.ContainsFunc(arg, needsQuotes) || strings.HasPrefix(arg, "=") ||
+			i == 0 && strings.Contains(arg, "=") {
+			words[i] = shellQuote(arg)
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// needsQuotes reports whether sh could read r as more than itself.
+func needsQuotes(r rune) bool {
+	switch {
+	case 'a' <= r && r <= 'z', 'A' <= r && r <= 'Z', '0' <= r && r <= '9':
+		return false
+	}
+	return !strings.ContainsRune("-_./:,+=@%", r)
 }
