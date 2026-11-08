@@ -105,6 +105,16 @@ func TestEditProject(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps the project's name in the form", func(t *testing.T) {
+		form := &fakeForm{project: moved}
+		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, form, answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !form.draft.NameStays {
+			t.Fatal("got a name to type, want shop's name kept")
+		}
+	})
+
 	t.Run("gives the form the config as stored, to show what saving changes", func(t *testing.T) {
 		form := &fakeForm{project: moved}
 		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, form, answer(true)); err != nil {

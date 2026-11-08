@@ -126,13 +126,16 @@ type Project struct {
 	env     Env
 	before  []Command
 	windows []Window
+	// defaulted is true until the project is given windows: it opens the
+	// window named after it.
+	defaulted bool
 }
 
 // NewProject constructs a Project from its already-validated parts. Until
 // it is given windows, it opens one window, named after it, holding one
 // shell in its root.
 func NewProject(name ProjectName, root ProjectRoot) Project {
-	return Project{name: name, root: root, windows: []Window{defaultWindow(name)}}
+	return Project{name: name, root: root, windows: []Window{defaultWindow(name)}, defaulted: true}
 }
 
 // WithWindows replaces the windows the project's session opens, in order.
@@ -140,7 +143,7 @@ func NewProject(name ProjectName, root ProjectRoot) Project {
 // its default window.
 func (p Project) WithWindows(windows ...Window) (Project, error) {
 	if len(windows) == 0 {
-		p.windows = []Window{defaultWindow(p.name)}
+		p.windows, p.defaulted = []Window{defaultWindow(p.name)}, true
 		return p, nil
 	}
 	seen := make(map[string]bool, len(windows))
@@ -150,8 +153,18 @@ func (p Project) WithWindows(windows ...Window) (Project, error) {
 		}
 		seen[window.name.value] = true
 	}
-	p.windows = slices.Clone(windows)
+	p.windows, p.defaulted = slices.Clone(windows), false
 	return p, nil
+}
+
+// Named is the project named name instead. Until it is given windows, the
+// window it opens follows the name.
+func (p Project) Named(name ProjectName) Project {
+	p.name = name
+	if p.defaulted {
+		p.windows = []Window{defaultWindow(name)}
+	}
+	return p
 }
 
 // RootedAt is the project rooted at root instead: its windows' and

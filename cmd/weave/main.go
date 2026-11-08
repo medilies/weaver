@@ -46,18 +46,18 @@ func wire() (application, error) {
 	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize})
 	workspace := infra.NewLocalWorkspace()
 
-	forms := infra.NewHuhForms()
+	confirm, configForm := infra.NewHuhConfirmer(), infra.NewTeaConfigForm(workspace)
 
 	weaver := application{
-		freezeProject: app.NewFreezeProject(projects, tmux, workspace, forms, forms),
-		editProject:   app.NewEditProject(projects, projects, infra.NewTeaConfigForm(workspace), infra.NewEditor(), forms),
+		freezeProject: app.NewFreezeProject(projects, tmux, workspace, configForm, confirm),
+		editProject:   app.NewEditProject(projects, projects, configForm, infra.NewEditor(), confirm),
 		sessions:      tmux,
 		openProject:   app.NewOpenProject(projects, tmux, workspace),
 		killProject:   app.NewKillProject(tmux, tmux),
 		listProjects:  app.NewListProjects(projects, tmux),
 		documents:     projects,
 	}
-	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), forms, projects, projects, workspace, tmux,
+	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), confirm, projects, projects, workspace, tmux,
 		weaver.listProjects, weaver.openProject, weaver.freezeProject, weaver.editProject, weaver.killProject)
 	return weaver, nil
 }

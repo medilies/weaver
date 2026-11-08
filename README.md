@@ -20,7 +20,7 @@ may work; if one doesn't, please open an issue.
 ## Usage
 
 ```sh
-weave freeze          # register the project in the current directory, through forms
+weave freeze          # register the project in the current directory, through the config form
 weave freeze scratch  # same, starting from the windows, panes and commands of the running session scratch
 weave freeze .        # same, from the session you're in
 weave nimbus          # open the nimbus session, from anywhere
@@ -85,7 +85,9 @@ unfiltered, with what happened. Since the browser takes the mouse, most
 terminals select text with shift held.
 
 The config form shows a project as cards: the project's, then its
-windows', a tab each. The selected window's panes are drawn as they
+windows', a tab each. Freezing starts it on a name, the root, and the
+session's windows if you named one; the name is typed there, and stays
+when editing. The selected window's panes are drawn as they
 open, and the selected pane's card is below the drawing. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists. A
 pane lists the project's and its window's before commands and the
@@ -139,7 +141,7 @@ directories exist; a window that fails to build is removed again.
 Windows you opened yourself stay as they are, and a session weaver
 didn't start is only attached.
 
-`weave freeze <session>` starts its forms from the session as it runs:
+`weave freeze <session>` starts the config form from the session as it runs:
 its windows and panes, laid out as they are, each in its directory,
 written relative to the root even when you reached the root through a
 symlink. The command in a pane's foreground is typed at its prompt but
@@ -320,7 +322,7 @@ graph TD
         DP["ProjectRegistry, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhForms, TeaBrowser, TeaConfigForm"]
+        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhConfirmer, TeaBrowser, TeaConfigForm"]
     end
 
     CLI --> UC

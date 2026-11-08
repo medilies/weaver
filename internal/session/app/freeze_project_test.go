@@ -125,6 +125,16 @@ func TestFreezeProject(t *testing.T) {
 		}
 	})
 
+	t.Run("has the name typed in the form", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.form.draft.NameStays {
+			t.Fatal("got the name kept, want it typed")
+		}
+	})
+
 	t.Run("saves the project the user described", func(t *testing.T) {
 		s := newFreezeSetup(t)
 		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
