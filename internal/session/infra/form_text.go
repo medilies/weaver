@@ -1,7 +1,6 @@
 package infra
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/medilies/weaver/internal/session/domain"
@@ -19,29 +18,6 @@ func parseRoot(text string) (domain.ProjectRoot, error) {
 	return domain.NewProjectRoot(path)
 }
 
-// parseEnv reads "NAME=value" lines, skipping blank ones. Spaces around
-// the name and the value are dropped, so "FOO = bar" sets FOO to "bar".
-// A name set twice is an error, as in a config.
-func parseEnv(text string) (domain.Env, error) {
-	vars := make(map[string]string)
-	for line := range strings.Lines(text) {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		name, value, ok := strings.Cut(line, "=")
-		if !ok {
-			return domain.Env{}, fmt.Errorf("%q: want NAME=value", line)
-		}
-		name = strings.TrimSpace(name)
-		if _, set := vars[name]; set {
-			return domain.Env{}, fmt.Errorf("%s: set twice", name)
-		}
-		vars[name] = strings.TrimSpace(value)
-	}
-	return domain.NewEnv(vars)
-}
-
 // parseCommands reads one command per line, skipping blank ones.
 func parseCommands(text string) ([]domain.Command, error) {
 	var cmds []domain.Command
@@ -56,4 +32,12 @@ func parseCommands(text string) ([]domain.Command, error) {
 		cmds = append(cmds, cmd)
 	}
 	return cmds, nil
+}
+
+// optionalPaneName reads a pane name, blank for none.
+func optionalPaneName(raw string) (domain.PaneName, error) {
+	if strings.TrimSpace(raw) == "" {
+		return domain.PaneName{}, nil
+	}
+	return domain.NewPaneName(raw)
 }

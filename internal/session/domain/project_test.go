@@ -125,6 +125,57 @@ func TestProjectWindows(t *testing.T) {
 	})
 }
 
+func TestRenamingAProject(t *testing.T) {
+	project := domain.NewProject(projectName(t, "weaver"), projectRoot(t, "/srv/shop"))
+
+	t.Run("takes the new name", func(t *testing.T) {
+		if got := project.Named(projectName(t, "shop")).Name().String(); got != "shop" {
+			t.Fatalf("got %q, want shop", got)
+		}
+	})
+
+	t.Run("renames the window it opens until given others", func(t *testing.T) {
+		windows := project.Named(projectName(t, "shop")).Windows()
+		if len(windows) != 1 || windows[0].Name().String() != "shop" {
+			t.Fatalf("got %d windows, want one named shop", len(windows))
+		}
+	})
+
+	t.Run("keeps the windows it was given", func(t *testing.T) {
+		given, err := project.WithWindows(window(t, "weaver"))
+		if err != nil {
+			t.Fatalf("WithWindows: %v", err)
+		}
+		if got := given.Named(projectName(t, "shop")).Windows()[0].Name().String(); got != "weaver" {
+			t.Fatalf("got window %q, want weaver kept", got)
+		}
+	})
+
+	t.Run("keeps its window once that window is changed", func(t *testing.T) {
+		changed, err := project.ReplacingWindow(0, window(t, "weaver"))
+		if err != nil {
+			t.Fatalf("ReplacingWindow: %v", err)
+		}
+		if got := changed.Named(projectName(t, "shop")).Windows()[0].Name().String(); got != "weaver" {
+			t.Fatalf("got window %q, want weaver kept", got)
+		}
+	})
+
+	t.Run("renames its window again once its windows are cleared", func(t *testing.T) {
+		given, err := project.WithWindows(window(t, "api"))
+		if err != nil {
+			t.Fatalf("WithWindows: %v", err)
+		}
+		cleared, err := given.WithWindows()
+		if err != nil {
+			t.Fatalf("WithWindows: %v", err)
+		}
+		if got := cleared.Named(projectName(t, "shop")).Windows()[0].Name().String(); got != "shop" {
+			t.Fatalf("got window %q, want shop", got)
+		}
+	})
+}
+
 func TestChangingProjectWindows(t *testing.T) {
 	shopProject := func(t *testing.T) domain.Project {
 		t.Helper()

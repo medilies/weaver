@@ -16,14 +16,15 @@ var ErrAborted = errors.New("aborted")
 
 // ProjectDraft is what a form starts from: suggestions the user can
 // change when freezing, or a registered project and its config when
-// editing it.
+// editing it, whose name stays.
 type ProjectDraft struct {
-	Name    string
-	Root    string
-	Env     domain.Env
-	Before  []domain.Command
-	Windows []domain.Window // a running session's, to start from; none to start blank
-	Config  []byte          // the config as stored, which saving replaces; none when freezing
+	Name      string
+	NameStays bool // editing: only a new config can be named otherwise
+	Root      string
+	Env       domain.Env
+	Before    []domain.Command
+	Windows   []domain.Window // a running session's, to start from; none to start blank
+	Config    []byte          // the config as stored, which saving replaces; none when freezing
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.

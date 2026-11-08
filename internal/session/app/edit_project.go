@@ -64,12 +64,13 @@ func (uc EditProject) Handle(rawName string) error {
 		}
 	}
 	changed, err := uc.form.Fill(ProjectDraft{
-		Name:    name.String(),
-		Root:    project.Root().String(),
-		Env:     project.Env(),
-		Before:  project.Before(),
-		Windows: project.Windows(),
-		Config:  stored.Content,
+		Name:      name.String(),
+		NameStays: true,
+		Root:      project.Root().String(),
+		Env:       project.Env(),
+		Before:    project.Before(),
+		Windows:   project.Windows(),
+		Config:    stored.Content,
 	})
 	if err != nil {
 		return err

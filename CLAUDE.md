@@ -3,7 +3,7 @@
 ## Design
 
 - SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weave` Cobra layer. `domain` imports only the standard library, and `app` only that and `domain`; enforced by the `depguard` allow-lists in `.golangci.yml`.
-- Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, the local filesystem, the editor, the huh forms, the Bubble Tea config form and project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
+- Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, the local filesystem, the editor, the huh confirmation dialog, the Bubble Tea config form and project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
 - Minimal and explicit in what weaver executes: it runs only what the user wrote in a config, and does nothing on their behalf. It knows nothing of git: no cloning, no repository status. Users add commands for that themselves.
@@ -34,11 +34,11 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | capture | Reading a running session's windows and panes, for freeze to start from | `weave freeze [session]` | `SessionCapturer.Capture` |
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |
 | restoration | Putting back the configured windows an owned session lost | | `Project.Restoration`, `WindowPlacement` |
-| freeze | Register a project through forms, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
-| draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project and its config when editing, whose name stays | | `ProjectDraft` |
+| freeze | Register a project through the config form, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
+| draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project and its config when editing, whose name stays; a freeze's name is typed | | `ProjectDraft`, `NameStays` |
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
 | edit | Change a config in the config form, or raw in the editor, keeping it only if valid | `weave edit`, key `e`; `weave edit --raw`, key `E` | `EditProject`, `ActionEdit`, `ActionEditRaw` |
-| config form | A full-screen form changing a project in place: a card for the project, then one for its windows, with the selected window's drawing and the selected pane's card, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e` | `TeaConfigForm`, `app.ProjectForm` |
+| config form | A full-screen form changing a project in place, a draft when freezing: a card for the project, then one for its windows, with the selected window's drawing and the selected pane's card, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e`; `weave freeze`, key `f` | `TeaConfigForm`, `app.ProjectForm` |
 | undo, redo | Going back to the project as it was before the config form's last change, or forward again | keys `u`, `ctrl+r` in the config form | `undone`, `redone` in `tea_config_form.go` |
 | diff | What saving changes in the stored config, shown before the config form saves: comments the user wrote show as removed | `ctrl+s` in the config form | `configDiff`, `review` in `tea_config_form.go` |
 | card | The config form's box for the project, the windows or the selected pane: the one with the cursor has a heavy border, as does the selected pane in the drawing when the cursor is on it | config form | `card` in `tea_config_form.go` |
@@ -65,7 +65,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
-- The huh forms, the config form and the browser aren't unit-tested; check them by running `weave freeze`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
+- The huh dialog, the config form and the browser aren't unit-tested; check them by running `weave freeze`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
 
 ## Workflow
 

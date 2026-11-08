@@ -32,14 +32,19 @@ func NewTeaConfigForm(workspace domain.Workspace) TeaConfigForm {
 	return TeaConfigForm{workspace: workspace}
 }
 
-// Fill implements app.ProjectForm. The draft's name stays. It returns
-// the project as ctrl+s saves it, once the user has seen what saving
-// changes in the draft's config, or ErrAborted when the user leaves it
-// unchanged or discards their changes.
+// Fill implements app.ProjectForm. The draft's name stays when it says
+// so, and is typed otherwise. It returns the project as ctrl+s saves it,
+// once the user has seen what saving changes in the draft's config, or
+// ErrAborted when the user leaves it unchanged or discards it. A draft
+// without a Config, as freezing gives, is unsaved until then. A name to
+// type that isn't valid opens the form typing it.
 func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
-	name, err := domain.NewProjectName(draft.Name)
-	if err != nil {
-		return domain.Project{}, err
+	name, nameErr := domain.NewProjectName(draft.Name)
+	if nameErr != nil && draft.NameStays {
+		return domain.Project{}, nameErr
+	}
+	if nameErr != nil {
+		name = standInName
 	}
 	root, err := parseRoot(draft.Root)
 	if err != nil {
@@ -50,13 +55,23 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	if err != nil {
 		return domain.Project{}, err
 	}
-	original, err := encodeProject(project)
-	if err != nil {
-		return domain.Project{}, err
+	var original []byte
+	if len(draft.Config) > 0 {
+		if original, err = encodeProject(project); err != nil {
+			return domain.Project{}, err
+		}
 	}
 	model := configForm{
-		project: project, original: original, stored: draft.Config, workspace: f.workspace,
-		focus: spot{window: -1, pane: -1, field: fieldRoot},
+		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
+		workspace: f.workspace, focus: spot{window: -1, pane: -1, field: fieldRoot},
+	}
+	if !draft.NameStays {
+		model.focus.field = fieldName
+	}
+	if nameErr != nil {
+		model.unnamed = true
+		model, model.start = model.typeInto(model.focus, draft.Name, true)
+		model.edit.err = nameErr
 	}
 	final, err := tea.NewProgram(model).Run()
 	if err != nil {
@@ -105,8 +120,11 @@ type spot struct {
 // valid: a field being typed changes it only once enter keeps it.
 type configForm struct {
 	project       domain.Project
-	original      []byte // the project as its config writes it, to tell changes
+	original      []byte // the project as its config writes it, to tell changes; none when unsaved
 	stored        []byte // the config as stored, which saving replaces
+	nameStays     bool   // the project's name can't be typed
+	unnamed       bool   // the project has standInName until a name typed is kept
+	start         tea.Cmd
 	workspace     domain.Workspace
 	focus         spot
 	picked        spot // the window and pane shown, kept while the cursor is above them
@@ -126,7 +144,15 @@ type configForm struct {
 type state struct {
 	project domain.Project
 	focus   spot
+	unnamed bool
 }
+
+// standInName names a project being frozen until a valid name is typed,
+// when the one suggested isn't.
+var standInName, _ = domain.NewProjectName("project")
+
+// projectNameAt is the row typing the project's name.
+var projectNameAt = spot{window: -1, pane: -1, field: fieldName}
 
 // review is what saving changes in the stored config, shown before
 // saving, and its first line shown.
@@ -157,7 +183,7 @@ type question struct {
 var checkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 
 func (m configForm) Init() tea.Cmd {
-	return nil
+	return m.start
 }
 
 // Update is m after msg, scrolled to keep the cursor in view.
@@ -247,6 +273,9 @@ func (m configForm) kept() configForm {
 	}
 	m = m.became(project)
 	m.editing = false
+	if m.edit.at == projectNameAt {
+		m.unnamed = false
+	}
 	if at, ok := m.typedVar(); ok {
 		return m.settledOn(at)
 	}
@@ -319,6 +348,10 @@ func (m configForm) press(key string) (configForm, tea.Cmd) {
 // save ends the form when nothing changed, and otherwise shows what
 // saving changes in the stored config first.
 func (m configForm) save() (configForm, tea.Cmd) {
+	if m.unnamed {
+		m.focus, m.problem = projectNameAt, "Type the project's name first."
+		return m, nil
+	}
 	if !m.dirty() {
 		return m, tea.Quit
 	}
@@ -372,8 +405,8 @@ func (r review) scrolledTo(top, height int) *review {
 func (m configForm) became(project domain.Project) configForm {
 	before, errBefore := encodeProject(m.project)
 	after, errAfter := encodeProject(project)
-	if errBefore != nil || errAfter != nil || !bytes.Equal(before, after) {
-		m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus})
+	if errBefore != nil || errAfter != nil || !bytes.Equal(before, after) || m.project.Name() != project.Name() {
+		m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus, unnamed: m.unnamed})
 		m.redos = nil
 	}
 	m.project = project
@@ -389,8 +422,8 @@ func (m configForm) undone() configForm {
 	}
 	last := m.undos[len(m.undos)-1]
 	m.undos = m.undos[:len(m.undos)-1]
-	m.redos = append(slices.Clip(m.redos), state{project: m.project, focus: m.focus})
-	m.project, m.focus = last.project, last.focus
+	m.redos = append(slices.Clip(m.redos), state{project: m.project, focus: m.focus, unnamed: m.unnamed})
+	m.project, m.focus, m.unnamed = last.project, last.focus, last.unnamed
 	return m.settled(1)
 }
 
@@ -402,8 +435,8 @@ func (m configForm) redone() configForm {
 	}
 	last := m.redos[len(m.redos)-1]
 	m.redos = m.redos[:len(m.redos)-1]
-	m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus})
-	m.project, m.focus = last.project, last.focus
+	m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus, unnamed: m.unnamed})
+	m.project, m.focus, m.unnamed = last.project, last.focus, last.unnamed
 	return m.settled(1)
 }
 
@@ -412,7 +445,11 @@ func (m configForm) leave() (configForm, tea.Cmd) {
 	if !m.dirty() {
 		return m, tea.Quit
 	}
-	m.asking = &question{text: "Discard your changes?", yes: func(m configForm) (configForm, tea.Cmd) {
+	text := "Discard your changes?"
+	if m.original == nil {
+		text = "Leave without saving the new project?"
+	}
+	m.asking = &question{text: text, yes: func(m configForm) (configForm, tea.Cmd) {
 		return m, tea.Quit
 	}}
 	return m, nil
@@ -824,6 +861,12 @@ func (m configForm) paneAt(at spot) (domain.Window, domain.Pane, bool) {
 // there.
 func (m configForm) applied(at spot, text string) (domain.Project, error) {
 	switch {
+	case at.window < 0 && at.field == fieldName:
+		name, err := domain.NewProjectName(text)
+		if err != nil {
+			return domain.Project{}, err
+		}
+		return m.project.Named(name), nil
 	case at.field == fieldRoot:
 		root, err := parseRoot(text)
 		if err != nil {
@@ -1010,6 +1053,8 @@ func (m configForm) current(at spot) string {
 	window, _ := m.windowAt(at.window)
 	_, pane, inPane := m.paneAt(at)
 	switch {
+	case at.window < 0 && at.field == fieldName:
+		return m.project.Name().String()
 	case at.field == fieldRoot:
 		return contractHome(root.String())
 	case isList(at.field):
@@ -1197,7 +1242,15 @@ func (m configForm) layout() section {
 func (m configForm) projectCard() section {
 	p := m.project
 	s := newSection()
-	shownText(&s, "name", keysStyle.Render(p.Name().String()))
+	if m.nameStays {
+		shownText(&s, "name", keysStyle.Render(p.Name().String()))
+	} else {
+		name := p.Name().String()
+		if m.unnamed {
+			name = keysStyle.Render("none yet")
+		}
+		m.put(&s, "name", name, "", projectNameAt)
+	}
 	m.put(&s, "root", contractHome(p.Root().String()), m.mark(p.Root().String()), spot{window: -1, pane: -1, field: fieldRoot})
 	m.list(&s, "before", lines(p.Before()), spot{window: -1, pane: -1, field: fieldBefore})
 	label := "env"
@@ -1490,6 +1543,9 @@ func (r review) styled(width int) []string {
 func (m configForm) trail() string {
 	project := m.shown()
 	parts := []string{project.Name().String()}
+	if m.unnamed && project.Name() == standInName {
+		parts[0] = "new project"
+	}
 	windows := project.Windows()
 	if f := m.focus; f.window >= 0 && f.window < len(windows) {
 		window := windows[f.window]

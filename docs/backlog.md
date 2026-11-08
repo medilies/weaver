@@ -33,16 +33,20 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 11 | Freeze through the config form | form | M | |
+| 12 | Replacing a registered project when freezing | form | S | |
 
-## 11. Freeze through the config form
+## 12. Replacing a registered project when freezing
 
-Freeze opens the config form on its draft (name, root and the captured
-windows, if any), and the freeze forms in `infra/huh_forms.go` go, with
-the form rules left in them. Freezing and changing a project then share
-one form. The config form keeps the draft's name, as editing needs:
-freezing needs it typed, checked with `NewProjectName`, and the draft
-saying which.
+Freeze asks "already registered. Replace it?" only once the config form
+has closed (`FreezeProject.Handle`), and No ends the freeze, losing
+everything done in the form. Answer No by opening the form again on the
+project as filled in, its name still typed, so another name can be
+given. The diff the form shows before saving is against no config
+(`ProjectDraft.Config` is empty when freezing), not the one being
+replaced. The name is typed in the form, so the use case can't hand the
+right config over before it opens: either the form asks for a project's
+config as its name is kept, through a port, or the diff says it is
+against nothing and the question comes after.
 
 ## By need
 
@@ -215,7 +219,7 @@ session behind.
 - The warnings check that `start` and teardown programs are on `PATH`,
   as they do for pane commands.
 - Freeze can't see either list: replacing a config drops them, as it
-  drops comments. Once #11 is done, freeze through the config form can keep
+  drops comments. Freeze goes through the config form, which could keep
   them from the existing config.
 - `d` deletes the config but keeps the session running, so no teardown
   there.
@@ -542,8 +546,6 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 - The drawing's border drawing (`infra/tea_drawing.go`) serves the live
   preview.
-- The domain's methods changing panes and windows, and the config
-  form's cards, serve #11.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.
 - The idle-shell check (`foreground`) serves the exited-command warning

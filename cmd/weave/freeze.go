@@ -16,16 +16,17 @@ func newFreezeCommand(weaver application) *cobra.Command {
 	var name, root string
 	cmd := &cobra.Command{
 		Use:   "freeze [session]",
-		Short: "Register a project through interactive forms, from a running session if given",
-		Long: `weave freeze asks for a project's name and root (the current
-directory unless --root says otherwise), the before commands and
-environment of every pane, and its windows and panes, then saves it.
+		Short: "Register a project through the config form, from a running session if given",
+		Long: `weave freeze opens the config form on a new project: its name, its
+root (the current directory unless --root says otherwise) and one
+window, to change as weave edit does, then saves it.
 
 Given a running tmux session, the windows and panes start as the session
 has them, and the name as the session's: lay them out by hand, then let
 weaver record them. "." is the session weave runs in. The command in each
 pane's foreground is kept, to be typed but not run: check it, as pipes,
-quotes and variables don't survive. Choose "Run it" to run it.`,
+quotes and variables don't survive. Set the pane to start "command" to
+run it.`,
 		Args: cobra.MaximumNArgs(1),
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			if len(args) > 0 {
