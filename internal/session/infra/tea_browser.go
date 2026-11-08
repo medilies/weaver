@@ -14,8 +14,8 @@ import (
 
 // TeaBrowser shows the registered projects full screen: their names and
 // roots on the left, narrowed by a filter, the selected one's summary and
-// config on the right, and what the last action did below. It only shows
-// and picks: the use case acts.
+// a drawing of its windows on the right, and what the last action did
+// below. It only shows and picks: the use case acts.
 type TeaBrowser struct{}
 
 // NewTeaBrowser constructs a TeaBrowser.
@@ -58,10 +58,12 @@ var (
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
-// projects the filter shows.
+// projects the filter shows, the window is the selected project's one
+// drawn.
 type browser struct {
 	projects      []app.ProjectOverview
 	cursor        int
+	window        int
 	filter        string
 	filtering     bool // typing the filter
 	notice        string
@@ -98,7 +100,25 @@ func (m browser) filtered(filter string) browser {
 			m.cursor = i
 		}
 	}
+	return m.reselected(selected)
+}
+
+// reselected is m drawing the first window again unless the project
+// selected before is still.
+func (m browser) reselected(before domain.ProjectName) browser {
+	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Name() != before {
+		m.window = 0
+	}
 	return m
+}
+
+// windowsShown is how many windows the selected project has.
+func (m browser) windowsShown() int {
+	shown := m.shown()
+	if len(shown) == 0 {
+		return 0
+	}
+	return len(shown[m.cursor].Project().Windows())
 }
 
 func (m browser) Init() tea.Cmd {
@@ -126,6 +146,10 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m = m.moved(-1)
 	case "down", "j":
 		m = m.moved(1)
+	case "left":
+		m.window = max(m.window-1, 0)
+	case "right":
+		m.window = max(min(m.window+1, m.windowsShown()-1), 0)
 	case "/":
 		m.filtering = true
 	case "esc":
@@ -177,8 +201,13 @@ func (m browser) typeFilter(msg tea.KeyPressMsg) browser {
 // moved is m with the cursor by up to by projects down, or up when by is
 // negative, staying in the projects shown.
 func (m browser) moved(by int) browser {
-	m.cursor = max(min(m.cursor+by, len(m.shown())-1), 0)
-	return m
+	shown := m.shown()
+	if len(shown) == 0 {
+		return m
+	}
+	before := shown[m.cursor].Name()
+	m.cursor = max(min(m.cursor+by, len(shown)-1), 0)
+	return m.reselected(before)
 }
 
 func (m browser) View() tea.View {
@@ -199,21 +228,26 @@ func (m browser) render() string {
 
 	list := lipgloss.NewStyle().Height(height).MaxHeight(height).
 		Border(lipgloss.NormalBorder(), false, true, false, false).Render(m.list(height))
-	details := lipgloss.NewStyle().PaddingLeft(1).Width(max(m.width-lipgloss.Width(list), 1)).
-		Height(height).MaxHeight(height).Render(m.details())
+	width := max(m.width-lipgloss.Width(list)-1, 1)
+	details := lipgloss.NewStyle().PaddingLeft(1).Width(width + 1).
+		Height(height).MaxHeight(height).Render(m.details(width, height))
 	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details), notice, keys)
 }
 
 // keys are the filter being typed and what its keys do, or the filter
-// kept and the keys acting on what it shows.
+// kept and the keys acting on what it shows, cut to the width. ←→ is
+// told beside the tabs.
 func (m browser) keys() string {
+	var keys string
 	switch {
 	case m.filtering:
-		return "/" + m.filter + keysStyle.Render("▏ enter keep · esc clear")
+		keys = "/" + m.filter + keysStyle.Render("▏ enter keep · esc clear")
 	case m.filter != "":
-		return "/" + m.filter + keysStyle.Render(" · enter open · f freeze · e edit · x kill · d delete · esc clear · q quit")
+		keys = "/" + m.filter + keysStyle.Render(" · enter open · f freeze · e edit · x kill · d delete · esc clear · q quit")
+	default:
+		keys = keysStyle.Render("enter open · f freeze · e edit · x kill · d delete · / filter · q quit")
 	}
-	return keysStyle.Render("enter open · f freeze · e edit · x kill · d delete · / filter · q quit")
+	return ansi.Truncate(keys, m.width, "…")
 }
 
 // list is the shown projects' names and dimmed roots, the selected one
@@ -265,9 +299,14 @@ func root(project app.ProjectOverview) string {
 	return contractHome(project.Project().Root().String())
 }
 
-// details are the selected project's summary and config as written, or
-// why it can't be read.
-func (m browser) details() string {
+// Below this size, the details list the selected window's panes
+// instead of drawing them.
+const minDrawingWidth, minDrawingHeight = 24, 6
+
+// details are the selected project's summary, or why its config can't
+// be read, then its windows' tabs and the selected one drawn in what is
+// left of width×height.
+func (m browser) details(width, height int) string {
 	shown := m.shown()
 	switch {
 	case len(m.projects) == 0:
@@ -276,15 +315,66 @@ func (m browser) details() string {
 		return fmt.Sprintf("No project's name contains %q.", m.filter)
 	}
 	project := shown[m.cursor]
-	config := project.Config()
-	if config.File == "" && project.Problem() != nil {
-		return titleStyle.Render(project.Name().String()) + "\n\n" + problemStyle.Render(project.Problem().Error())
+	title := project.Config().File
+	if title == "" {
+		title = project.Name().String()
 	}
 	header := summary(project)
 	if err := project.Problem(); err != nil {
 		header = problemStyle.Render(err.Error())
 	}
-	return titleStyle.Render(config.File) + "\n\n" + header + "\n\n" + strings.TrimRight(string(config.Content), "\n")
+	top := lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
+	windows := project.Project().Plan().Windows()
+	if len(windows) == 0 {
+		return top
+	}
+	index := min(m.window, len(windows)-1)
+	window, root := windows[index], project.Project().Root().String()
+	left := height - lipgloss.Height(top) - 2 // a blank line and the tabs
+	var panes []string
+	if width < minDrawingWidth || left < minDrawingHeight {
+		panes = paneList(window, root, width, left)
+	} else {
+		// A session opens at the browser's size, less tmux's status line.
+		panes = drawing(window, root, m.width, max(m.height-1, 1), width, left)
+	}
+	return top + "\n\n" + tabs(project, windows, index, width) + "\n" + strings.Join(panes, "\n")
+}
+
+// tabs are the names of windows, the selected one highlighted, ○ marking
+// those the project's owned session lacks, and which one of how many is
+// drawn, after ←→ when there are several to switch between. When they don't fit in width, the first ones make way for the
+// selected one.
+func tabs(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) string {
+	missing := map[domain.WindowName]bool{}
+	for _, name := range project.MissingWindows() {
+		missing[name] = true
+	}
+	labels := make([]string, len(windows))
+	for i, window := range windows {
+		label := " " + window.Name().String() + " "
+		if missing[window.Name()] {
+			label = " ○" + label
+		}
+		if i == selected {
+			label = cursorStyle.Render(label)
+		}
+		labels[i] = label
+	}
+	count := fmt.Sprintf("%d/%d", selected+1, len(windows))
+	if len(windows) > 1 {
+		count = "←→ " + count
+	}
+	count = keysStyle.Render(count)
+	first := 0
+	line := strings.Join(labels, "  ")
+	for first < selected && ansi.StringWidth(line)+1+ansi.StringWidth(count) > width {
+		first++
+		line = "…" + strings.Join(labels[first:], "  ")
+	}
+	line = ansi.Truncate(line, max(width-1-ansi.StringWidth(count), 0), "…")
+	gap := max(width-ansi.StringWidth(line)-ansi.StringWidth(count), 1)
+	return line + strings.Repeat(" ", gap) + count
 }
 
 // summary is where the project stands: its running session against its

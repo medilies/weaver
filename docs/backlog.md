@@ -33,111 +33,27 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 2 | Draw the layout | browser | M | |
-| 3 | Warnings on their pane | browser | S | 2 |
+| 3 | Warnings on their pane | browser | S | |
 | 5 | Window `dir`, and the form rules into `domain` | config, domain | M | |
-| 6 | Where a pane's settings come from | browser | S | 2, 5 |
+| 6 | Where a pane's settings come from | browser | S | 5 |
 | 7 | Changing panes in `domain` | domain | M | 5 |
 | 8 | The config form | form | L | 6, 7 |
-| 9 | The layout in the config form | form | M | 2, 8 |
+| 9 | The layout in the config form | form | M | 8 |
 | 10 | Freeze through the config form | form | M | 8, 9 |
 
 ```mermaid
 flowchart LR
-    T2[2 draw the layout] --> T3[3 warnings on panes]
-    T2 --> T6[6 where settings come from]
-    T5[5 window dir, form rules] --> T6
+    T3[3 warnings on panes]
+    T5[5 window dir, form rules] --> T6[6 where settings come from]
     T5 --> T7[7 changing panes]
     T7 --> T8[8 config form]
     T6 --> T8
     T8 --> T9[9 layout in the form] --> T10[10 freeze through the form]
-    T2 --> T9
 ```
-
-## 2. Draw the layout
-
-The details pane shows the summary, then the raw YAML
-(`infra/tea_browser.go`, `details()`). The YAML says little at a glance,
-and `e` already opens the file. A layout is the hardest part of a config
-to picture from YAML (`split: {of: editor, direction: below, size: 30%}`).
-
-Draw each window's panes as boxes in their real proportions, built from
-`Project.Plan()`. Each box shows what the pane looks like the moment it
-opens, so no legend is needed: its name in the top border, its dir when
-it isn't the root, its note, then its prompt. A command shows as typed
-and run (`$ task dev`); a prefill shows the cursor after it, not run
-(`$ nimbus emulator█`); a plain shell shows `$ █`.
-
-Window tabs above the drawing show the session's state. For an owned
-session, `○` marks a window it lacks, which enter restores. `←/→`
-switches windows.
-
-```text
- ● api   ● app   ○ repo                            1/3
-┌─ api shell ──────────────────┬─ task dev ──────────┐
-│ api/                         │ api/                │
-│ $ █                          │ $ task dev          │
-│                              │                     │
-│                              ├─ psql ──────────────┤
-│                              │ $ nimbus psql       │
-│                              │                     │
-└──────────────────────────────┴─────────────────────┘
-```
-
-Then drop the YAML from the details pane: `e` opens the file, and when a
-config can't be read the details pane already shows why. If it is
-missed, bring it back behind a toggle (`y`).
-
-**Notes**
-
-- The data is all there: `ProjectOverview.Project().Plan()` gives each
-  pane its `Split()` (`Of`, `Direction`, `Size`), `Dir()`, `Note()` and
-  `Startup()` (its command, and `Submits()` for a command or a prefill),
-  and `MissingWindows()` gives the tabs' marks. No new port, no change to
-  `domain` or `app`.
-- The geometry is pure: start from one rectangle; each later pane cuts
-  the rectangle of the pane it splits (`Right` into columns, `Below` into
-  rows) and takes `Size` of it, half by default. That is tmux's own
-  model, so no tree needs rebuilding. It lives in `infra` beside the
-  browser and is unit-tested as a function from a `WindowPlan` and a
-  size to rectangles, even though the browser itself isn't tested.
-- Borders are the bulk of the work. Draw each rectangle's edges into a
-  rune grid as direction bits (up, down, left, right), then map each
-  cell's bits to its box character: the junctions (`├ ┤ ┬ ┴ ┼`) come out
-  right with no special cases. lipgloss borders can't share edges, and
-  the grid needs no new dependency.
-- Sizes in cells (`size: 20`): scale them against the browser's own
-  terminal size. weaver starts a session at the size of the terminal
-  weave runs in (`TmuxOptions.Size`), which is the browser's, so the
-  drawing matches what opens. A restored window takes the running
-  session's size.
-- Small boxes: truncate labels to fit. Small terminals: below a minimum
-  size, fall back to a list of panes.
-- `←/→` is one more index in the `browser` model and two cases in
-  `press`; neither key is taken yet. Reset it when the cursor moves to
-  another project.
-- Check the drawing by hand in a throwaway tmux server, like the rest of
-  the browser.
-- Words: the tabs and the drawing are new on screen, and the tabs' `●`
-  means a window the session has, where the glossary's `●` means
-  running. Settle the marks and give the words glossary entries first.
-- Later, when the details pane is tall enough, the tabs can be small
-  drawings of every window, the selected one highlighted:
-
-  ```text
-   api              app              repo
-  ┌──────┬────┐    ┌──────┬────┐    ┌───────────┐
-  │      │    │    │      │    │    │           │
-  │      ├────┤    │      ├────┤    │           │
-  └──────┴────┘    └──────┴────┘    └───────────┘
-  ```
-
-**Effort**: one commit, roughly 150–250 lines plus geometry tests. The
-risk is in drawing the borders, not in the design.
 
 ## 3. Warnings on their pane
 
-Draw a warning on its pane in #2's drawing, not only in the summary: a
+Draw a warning on its pane in the browser's drawing (`infra/tea_drawing.go`), not only in the summary: a
 yellow border and `⚠` in the title for a program not found, a red border
 for a missing dir.
 
@@ -203,7 +119,7 @@ change reworks `PaneDir` and `dirOf` anyway:
 
 ## 6. Where a pane's settings come from
 
-`tab` moves between the panes of #2's drawing and highlights the
+The Tab key moves between the panes of the drawing and highlights the
 selected box. Below the drawing, list what that pane really gets, each
 line with the level it comes from:
 
@@ -344,7 +260,7 @@ own control instead:
 
 ## 9. The layout in the config form
 
-A window's card becomes #2's drawing, edited with tmux's own keys: `%`
+A window's card becomes the browser's drawing, edited with tmux's own keys: `%`
 splits the selected pane right, `"` below, `x` removes it, arrows
 select, `H/L` resize. The selected pane's fields show below.
 `split: {of, direction, size}` is never seen.
@@ -374,6 +290,31 @@ one form.
 
 Each waits for a config or a user that needs it; the trigger says what
 that looks like. They are listed from the smallest.
+
+### The config in the browser (XS)
+
+**When**: someone misses the config's YAML in the details pane, which
+the drawing replaced. `e` opens the file, and a config that can't be
+read shows why. Bring it back behind a key (`y`):
+`ProjectOverview.Config()` still carries it.
+
+### Window miniatures (S)
+
+**When**: projects with many windows, and a details pane tall enough
+to spare the lines.
+
+The tabs above the drawing become small drawings of every window, the
+selected one highlighted:
+
+```text
+ api              app              repo
+┌──────┬────┐    ┌──────┬────┐    ┌───────────┐
+│      │    │    │      │    │    │           │
+│      ├────┤    │      ├────┤    │           │
+└──────┴────┘    └──────┴────┘    └───────────┘
+```
+
+`drawing` already draws at any size; this is `tabs` calling it small.
 
 ### Window `env` (S)
 
@@ -568,7 +509,7 @@ server crashed or was interrupted.
 - Later: a browser key that types the pane's command again.
 
 **Live preview.** Like tmux's `choose-tree` preview: `capture-pane` each
-pane of a running session and fill #2's boxes with their last lines,
+pane of a running session and fill the drawing's boxes with their last lines,
 drawn from tmux's real geometry instead of the plan, so panes closed or
 added show against the config. `infra/tmux_layout.go` already parses
 `#{window_layout}` for freeze, so the geometry costs almost nothing;
@@ -807,8 +748,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 ## Shared groundwork
 
-- #2's geometry serves #3, #6 and #9, and its border drawing the live
-  preview.
+- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves #3,
+  #6 and #9, and its border drawing the live preview.
 - #7's domain methods serve #8, #9 and #10.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.

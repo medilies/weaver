@@ -40,6 +40,8 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | delete | Remove a config; a running session keeps running | key `d` | `ProjectRegistry.Delete`, `ActionDelete` |
 | browser | The project list `weave` shows without arguments | `weave` | `BrowseProjects`, `ProjectBrowser`, `ProjectOverview` |
 | summary | Where the selected project stands, at the top of the browser's details | browser | `summary` in `tea_browser.go` |
+| drawing | A window's panes drawn as boxes in their proportions, each as it looks the moment it opens | browser details | `drawing` in `tea_drawing.go` |
+| tab | A window's name above the drawing, ○ marking one an owned session lacks, which open restores | `←/→` in the browser | `tabs` in `tea_browser.go` |
 | filter | Text narrowing the browser's list to the projects whose names contain it, ignoring case | `/` in the browser | `filter` in `tea_browser.go` |
 | notice | The browser's status line: what the last action did, or why it failed | browser | the `notice` passed to `ProjectBrowser.Browse` |
 | warning | Something opening would likely fail on | browser summary | `ProjectOverview.Warnings()` |

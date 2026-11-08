@@ -42,18 +42,25 @@ source <(weave completion bash)
 ```
 
 `weave` alone lists the projects and their roots, a ● marking those whose session runs,
-beside the selected one's config, under a summary: how many of the
+beside a summary of the selected one: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a
 warning when it is gone; what would likely fail in the panes enter
 creates (a directory missing, or a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it; aliases and shell functions show as not found); and
-the `before` commands and variables every pane starts with:
+the `before` commands and variables every pane starts with. Below it,
+tabs name the project's windows, ○ marking those enter restores, and the
+selected window is drawn as it opens: each pane a box in its
+proportions, with its name when the window has several, its `dir`
+unless it is the root, its `note`, and its prompt, showing a `command`
+as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
+neither (`$ █`). In a small terminal the panes are listed instead.
 
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a project |
+| ← → | select a window to draw |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
