@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -401,6 +402,24 @@ func (s splitFile) toSplit(index int, siblings []paneFile) (domain.Split, error)
 		return domain.Split{}, err
 	}
 	return domain.NewSplit(of, direction, size)
+}
+
+// hasComments reports whether a config holds a comment, other than the
+// schema header first.
+func hasComments(raw []byte) (bool, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(bytes.TrimPrefix(raw, []byte(schemaHeader)), &doc); err != nil {
+		return false, err
+	}
+	return commented(&doc), nil
+}
+
+// commented reports whether node or a node under it carries a comment.
+func commented(node *yaml.Node) bool {
+	if node.HeadComment != "" || node.LineComment != "" || node.FootComment != "" {
+		return true
+	}
+	return slices.ContainsFunc(node.Content, commented)
 }
 
 // encodeProject writes a config in its canonical form: defaults left out,

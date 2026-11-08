@@ -53,3 +53,47 @@ func TestEnvOverlay(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestEnvSetting(t *testing.T) {
+	base := env(t, map[string]string{"PS1": "$ ", "APP_ENV": "local"})
+
+	t.Run("sets a variable over its value, keeping the others as they are", func(t *testing.T) {
+		set, err := base.Setting("APP_ENV", "dev")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := render(set.Vars()), []string{"APP_ENV=dev", "PS1=$ "}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("rejects an invalid name", func(t *testing.T) {
+		if _, err := base.Setting("APP-ENV", "dev"); !errors.Is(err, domain.ErrInvalidEnvName) {
+			t.Fatalf("got %v, want ErrInvalidEnvName", err)
+		}
+	})
+
+	t.Run("leaves the env it is called on unchanged", func(t *testing.T) {
+		if _, err := base.Setting("PORT", "8080"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := len(base.Vars()); got != 2 {
+			t.Fatalf("got %d variables, want 2", got)
+		}
+	})
+}
+
+func TestEnvWithout(t *testing.T) {
+	base := env(t, map[string]string{"A": "1", "B": "2", "C": "3"})
+
+	if got, want := render(base.Without("A", "C", "D").Vars()), []string{"B=2"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestEnvNames(t *testing.T) {
+	got := env(t, map[string]string{"B": "2", "A": "1"}).Names()
+	if want := []string{"A", "B"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}

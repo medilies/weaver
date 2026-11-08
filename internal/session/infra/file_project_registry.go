@@ -129,6 +129,20 @@ func (r FileProjectRegistry) ReplaceDocument(name domain.ProjectName, content []
 	return writeFileAtomic(path, content)
 }
 
+// Commented implements app.ProjectDocuments: any comment counts but the
+// schema header weaver writes first.
+func (r FileProjectRegistry) Commented(name domain.ProjectName) (bool, error) {
+	document, err := r.Document(name)
+	if err != nil {
+		return false, err
+	}
+	commented, err := hasComments(document.Content)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w: %w", document.File, domain.ErrInvalidConfig, err)
+	}
+	return commented, nil
+}
+
 // Save implements domain.ProjectRegistry. It writes the config and
 // saves the JSON Schema next to it, which it points to so editors
 // complete and check it.

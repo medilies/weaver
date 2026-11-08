@@ -46,7 +46,8 @@ func (TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Project
 
 // browserKeys are the keys making a choice.
 var browserKeys = map[string]app.Action{
-	"enter": app.ActionOpen, "f": app.ActionFreeze, "e": app.ActionEdit, "x": app.ActionKill, "d": app.ActionDelete,
+	"enter": app.ActionOpen, "f": app.ActionFreeze, "e": app.ActionEdit, "E": app.ActionEditRaw,
+	"x": app.ActionKill, "d": app.ActionDelete,
 }
 
 var (
@@ -411,8 +412,8 @@ type keyTold struct {
 
 var (
 	typingKeys   = []keyTold{{"enter", "keep"}, {"esc", "clear"}}
-	filteredKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
-	browsingKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
+	filteredKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
+	browsingKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
 )
 
 // paneKey is tab told, before the last two keys, when the drawn window

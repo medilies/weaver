@@ -151,6 +151,32 @@ func TestProjectPlanDirs(t *testing.T) {
 	}
 }
 
+func TestProjectRootedAt(t *testing.T) {
+	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
+		WithWindows(window(t, "api").In(paneDir(t, "api")))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	moved := project.RootedAt(projectRoot(t, "/home/ilies/shop"))
+
+	if got := moved.Plan().Windows()[0].Panes()[0].Dir(); got != "/home/ilies/shop/api" {
+		t.Fatalf("got %q, want the window's dir under the new root", got)
+	}
+}
+
+func TestPaneInWindowDir(t *testing.T) {
+	pane := domain.NewPane().In(paneDir(t, "web")).InWindowDir()
+	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
+		WithWindows(window(t, "api", pane).In(paneDir(t, "api")))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := project.Plan().Windows()[0].Panes()[0].Dir(); got != "/srv/shop/api" {
+		t.Fatalf("got %q, want its window's dir", got)
+	}
+}
+
 // commands flattens commands to their text, in order.
 func commands(cmds []domain.Command) []string {
 	var out []string

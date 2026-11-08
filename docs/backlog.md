@@ -33,115 +33,29 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 9 | The config form | form | L | |
-| 10 | The layout in the config form | form | M | 9 |
-| 11 | Freeze through the config form | form | M | 9, 10 |
+| 9 | Undo and the diff before saving | form | S | |
+| 10 | The layout in the config form | form | M | |
+| 11 | Freeze through the config form | form | M | 10 |
 
 ```mermaid
 flowchart LR
-    T9[9 config form] --> T10[10 layout in the form] --> T11[11 freeze through the form]
+    T10[10 layout in the form] --> T11[11 freeze through the form]
+    T9[9 undo and diff]
 ```
 
-## 9. The config form
+## 9. Undo and the diff before saving
 
-`e` opens the YAML in the editor; the freeze forms walk one screen per
-window and per pane, with no way back. Instead, one full-screen form
-shows the whole project as cards and edits it in place, checking each
-field with the domain's constructors as it is typed, as the huh forms
-do. huh only runs groups in sequence, so this is a Bubble Tea model of
-its own.
+The config form (`infra/tea_config_form.go`, `weave edit`, key `e`)
+changes a project in place, but a deleted pane or window can only come
+back by leaving without saving.
 
-### Cards
-
-The project, then each window, then its panes, at most two boxes deep:
-fields below a pane are labelled rows, not boxes, or the borders eat the
-width. The card being edited has a heavy border; the other panes fold to
-one line. A trail at the top says where the cursor is.
-
-```text
- shop › window shop › pane front                      ● unsaved
-╭─ project ────────────────────────────────────────────────────╮
-│ name     shop                                                │
-│ root     ~/dev/shop                                    ✓     │
-│ ▸ env 1    ▸ before 1                                        │
-╰──────────────────────────────────────────────────────────────╯
-╭─ window shop ────────────────────────────────────────────────╮
-│ before   git fetch --quiet                                   │
-│                                                              │
-│ ╭─ pane back ────────────────────────────────────────────╮   │
-│ │ ▸ back/ · shell · 1 before                             │   │
-│ ╰────────────────────────────────────────────────────────╯   │
-│ ┏━ pane front ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓   │
-│ ┃ dir      front                                   ✓     ┃   │
-│ ┃ split    of back   [→ right] ↓ below  ▕███░░░░░░░▏ 30% ┃   │
-│ ┃ starts   ● shell  ○ command  ○ prefill                 ┃   │
-│ ┃ before   source ~/.shop_aliases         project        ┃   │
-│ ┃          git fetch --quiet              window         ┃   │
-│ ┃        › nvm use 20█                                   ┃   │
-│ ┃          + add                                         ┃   │
-│ ┃ env      APP_ENV  local → dev           over project   ┃   │
-│ ┃ note     Usual commands:                               ┃   │
-│ ┃            npm i                                       ┃   │
-│ ┃            npm run dev                                 ┃   │
-│ ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛   │
-│ + pane    + window                                           │
-╰──────────────────────────────────────────────────────────────╯
- ↑↓ move · enter edit · o add · d delete · J/K reorder · ctrl+s save
-```
-
-Before commands and env from the project and the window show dimmed in
-each pane, with their level, as in the browser; enter on an inherited variable
-overrides it for the pane.
-
-### A control per kind of field
-
-Today most fields are text areas parsed line by line. Each kind gets its
-own control instead:
-
-```text
- text     root       ~/dev/shop█                        ✓ exists
- choice   direction  [→ right]  ↓ below
- size     size       ◂ ███████░░░░░░░ 40% ▸
- starts   ○ shell  ● command  ○ prefill     $ task dev
- list     before     1  nvm use 20
-                     2  npm ci█
-                     + add
- map      env        APP_ENV │ dev
-                     PORT    │ 8080
- error    size       ◂ ░░░░░░░░░░░░░░ 120% ▸
-                     ✗ invalid split size: 120% (want 1% to 99%)
-```
-
-- The three-way choice replaces `command`, `prefill` and the "Run the
-  command?" confirm, and can't set both.
-- `←/→` moves a size in 5% steps.
-- `✓` beside the root and a dir checks the directory exists as it is
-  typed, with the `Workspace` the warnings use.
-
-### Notes
-
-- **Words first.** "Editor" already means `$EDITOR` (the glossary's
-  *edit*, the `ConfigEditor` port), so the new UI needs its own name,
-  such as *config form*, and a glossary entry before any code. Decide
-  which of `weave edit` and `e` opens which; keeping `weave edit` on
-  `$EDITOR` keeps the README's promise that it keeps comments.
-- **Port.** Widen `app.ProjectForm` rather than add a second form port:
-  a `ProjectDraft` built from an existing project, and the use case
-  saves through `ProjectRegistry.Save`. Esc with changes asks before
-  discarding them, as editing does today. The structural changes are
-  the domain's: `Window.AddingPane`, `ReplacingPane`, `WithoutPane`,
-  `MovingPane` and their `Project` counterparts for windows. The form
-  only asks for them.
 - **Undo is cheap**: projects are immutable values, so undo is a stack
-  of earlier `Project`s. `ctrl+s` can show the YAML diff before writing.
-- **Comments are lost.** `Save` writes the config through
-  `encodeProject`, so comments and key order written by hand go. Keep
-  `$EDITOR` for raw edits, and warn when a config has comments beyond
-  the schema header.
-- **Dependencies**: the text inputs come from bubbles, which huh already
-  pulls in; it becomes a direct dependency, no new module.
-- **Words**: "card", "level" and the like need glossary entries before
-  they reach the screen.
+  of earlier `Project`s in the form's model, `u` popping it and
+  `ctrl+r` redoing.
+- **The diff**: `ctrl+s` can show what saving changes, the stored
+  config against `encodeProject`'s, before writing. Comments the user
+  wrote show as removed, which the warning before the form opens only
+  says in a sentence.
 
 ## 10. The layout in the config form
 
@@ -176,7 +90,9 @@ the form makes that visible.
 Freeze opens the config form on its draft (name, root and the captured
 windows, if any), and the freeze forms in `infra/huh_forms.go` go, with
 the form rules left in them. Freezing and changing a project then share
-one form.
+one form. The config form keeps the draft's name, as editing needs:
+freezing needs it typed, checked with `NewProjectName`, and the draft
+saying which.
 
 ## By need
 
@@ -186,7 +102,7 @@ that looks like. They are listed from the smallest.
 ### The config in the browser (XS)
 
 **When**: someone misses the config's YAML in the details pane, which
-the drawing replaced. `e` opens the file, and a config that can't be
+the drawing replaced. `E` opens the file, and a config that can't be
 read shows why. Bring it back behind a key (`y`):
 `ProjectOverview.Config()` still carries it.
 
@@ -661,8 +577,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 - The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves
   #10, and its border drawing the live preview.
-- The domain's methods changing panes and windows serve #9, #10 and
-  #11.
+- The domain's methods changing panes and windows, and the config
+  form's cards, serve #10 and #11.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.
 - The idle-shell check (`foreground`) serves the exited-command warning

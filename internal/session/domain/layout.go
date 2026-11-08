@@ -368,6 +368,14 @@ func (p Pane) In(dir PaneDir) Pane {
 	return p
 }
 
+// InWindowDir starts the pane's shell in its window's dir, as it does
+// until In gives it its own.
+func (p Pane) InWindowDir() Pane {
+	p.dir = PaneDir{}
+	p.dirSet = false
+	return p
+}
+
 // Splitting creates the pane by splitting an earlier pane of its window.
 func (p Pane) Splitting(split Split) Pane {
 	p.split = split
@@ -385,6 +393,12 @@ func (p Pane) Running(cmd Command) Pane {
 // Prefilling types cmd at the pane's prompt without running it.
 func (p Pane) Prefilling(cmd Command) Pane {
 	p.startup = Startup{command: cmd}
+	return p
+}
+
+// WithoutCommand starts a plain shell in the pane, typing nothing.
+func (p Pane) WithoutCommand() Pane {
+	p.startup = Startup{}
 	return p
 }
 
@@ -549,6 +563,13 @@ func paneRef(index int, pane Pane) string {
 // its project's and before the pane's own.
 func (w Window) RunningFirst(cmds ...Command) Window {
 	w.before = slices.Clone(cmds)
+	return w
+}
+
+// Named renames the window. Window names are unique within a project,
+// which the project checks.
+func (w Window) Named(name WindowName) Window {
+	w.name = name
 	return w
 }
 

@@ -26,7 +26,8 @@ weave freeze .        # same, from the session you're in
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
 weave                 # browse the projects, to open, freeze, edit, kill or delete them
-weave edit nimbus     # edit its config in $VISUAL or $EDITOR; only a valid config is saved
+weave edit nimbus     # change its config in the config form, each field checked as you type
+weave edit --raw nimbus  # edit it in $VISUAL or $EDITOR instead, keeping comments; only a valid config is saved
 weave kill nimbus     # kill the session and everything running in it
 weave kill            # same, for the session you're in, if weave started it
 weave list            # registered projects, and which sessions run
@@ -73,7 +74,8 @@ window's `dir` or a project variable.
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
-| e | edit its config, like `weave edit <project>` |
+| e | change its config in the config form, like `weave edit <project>` |
+| E | edit its config in your editor, like `weave edit --raw <project>` |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc clears the filter first) |
@@ -81,6 +83,26 @@ window's `dir` or a project variable.
 After freezing, editing, killing or deleting, the list comes back,
 unfiltered, with what happened. Since the browser takes the mouse, most
 terminals select text with shift held.
+
+The config form shows a project as cards: the project's, then one per
+window, holding one per pane. The pane with the cursor is open, the
+others folded to a line. Each field is checked as you type it, and a
+root or dir is marked ✓ when it exists. A pane lists the project's and
+its window's before commands and the project's variables dimmed, with
+the level they come from; enter on such a variable sets it for the pane
+instead. A window laid out by a `grid` keeps its panes' names and
+places.
+
+| Key | Does |
+| --- | --- |
+| ↑ ↓ or k j | select a field |
+| enter | type into it, or pick the next choice; on `+ add`, `+ pane` or `+ window`, add one |
+| ← → | change a choice: the pane split, the direction, the size by 5%, or whether the pane starts a shell, runs a command or prefills it |
+| o | add an item to the list selected, a pane to the window selected, or a window |
+| d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields, the window, after you confirm |
+| J K | move the item, pane or window selected down or up |
+| ctrl+s | save; the config is rewritten, without its comments |
+| esc | cancel typing, or leave, asking first when there are changes |
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it, from a `display-popup` too). When the session isn't
@@ -252,10 +274,11 @@ d c c
 `weave freeze` writes splits.
 
 Unknown fields are errors: they are usually typos. Comments are kept by
-`weave edit`, but not when `weave freeze` replaces a config.
+`weave edit --raw`, but not when `weave freeze` replaces a config or the
+config form saves it: weave edit asks first when a config has some.
 
 Configs from v0.1.0 may still have `repositories:`, which weaver no
-longer reads: delete it with `weave edit <project>`. Saving also
+longer reads: delete it with `weave edit --raw <project>`. Saving also
 refreshes `weaver.schema.json`, which until then still allows it.
 
 When weaver saves a config, it writes `weaver.schema.json` next to it
@@ -285,7 +308,7 @@ graph TD
         DP["ProjectRegistry, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhForms, TeaBrowser"]
+        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhForms, TeaBrowser, TeaConfigForm"]
     end
 
     CLI --> UC

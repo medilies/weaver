@@ -50,7 +50,7 @@ func wire() (application, error) {
 
 	weaver := application{
 		freezeProject: app.NewFreezeProject(projects, tmux, workspace, forms, forms),
-		editProject:   app.NewEditProject(projects, infra.NewEditor(), forms),
+		editProject:   app.NewEditProject(projects, projects, infra.NewTeaConfigForm(workspace), infra.NewEditor(), forms),
 		sessions:      tmux,
 		openProject:   app.NewOpenProject(projects, tmux, workspace),
 		killProject:   app.NewKillProject(tmux, tmux),

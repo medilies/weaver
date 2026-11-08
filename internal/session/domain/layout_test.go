@@ -243,6 +243,13 @@ func TestPaneStartup(t *testing.T) {
 			t.Fatal("got the command run, want it only prefilled")
 		}
 	})
+
+	t.Run("a pane without its command types nothing", func(t *testing.T) {
+		pane := domain.NewPane().Running(command(t, "task dev")).WithoutCommand()
+		if _, ok := pane.Startup().Command(); ok {
+			t.Fatal("got a command, want none")
+		}
+	})
 }
 
 func TestPaneNote(t *testing.T) {
@@ -253,6 +260,23 @@ func TestPaneNote(t *testing.T) {
 
 		if got := pane.Note(); !slices.Equal(got, []string{"Usual commands:", "  npm i"}) {
 			t.Fatalf("got %q, want the original lines", got)
+		}
+	})
+}
+
+func TestWindowNamed(t *testing.T) {
+	renamed := window(t, "api", domain.NewPane().Named(paneName(t, "shell"))).
+		RunningFirst(command(t, "nvm use 20")).Named(windowName(t, "backend"))
+
+	t.Run("takes the new name", func(t *testing.T) {
+		if got := renamed.Name().String(); got != "backend" {
+			t.Fatalf("got %q, want backend", got)
+		}
+	})
+
+	t.Run("keeps its panes and before commands", func(t *testing.T) {
+		if len(renamed.Panes()) != 1 || len(renamed.Before()) != 1 {
+			t.Fatalf("got %d panes and %d before commands, want 1 and 1", len(renamed.Panes()), len(renamed.Before()))
 		}
 	})
 }

@@ -340,7 +340,12 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		}
 		return project.Name(), fmt.Sprintf("Saved %s.", project.Name()), nil
 	case ActionEdit:
-		changed, err := uc.edit.Handle(name.String())
+		if err := uc.edit.Handle(name.String()); err != nil {
+			return name, "", err
+		}
+		return name, fmt.Sprintf("Saved %s.", name), nil
+	case ActionEditRaw:
+		changed, err := uc.edit.HandleRaw(name.String())
 		if err != nil || !changed {
 			return name, "No changes.", err
 		}

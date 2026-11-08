@@ -2,6 +2,7 @@ package infra_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,6 +46,24 @@ func TestFileProjectRegistryDocuments(t *testing.T) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
+
+	for config, want := range map[string]bool{
+		"root: /srv/shop\n": false,
+		"# yaml-language-server: $schema=./weaver.schema.json\nroot: /srv/shop\n": false,
+		"# shop's config\nroot: /srv/shop\n":                                      true,
+		"root: /srv/shop  # moved\n":                                              true,
+		"root: /srv/shop\nwindows:\n  - name: api\n    # later: a db window\n":    true,
+	} {
+		t.Run(fmt.Sprintf("tells whether %q is commented", config), func(t *testing.T) {
+			configs, dir, name := setup(t)
+			if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte(config), 0o600); err != nil {
+				t.Fatalf("writing fixture: %v", err)
+			}
+			if got, err := configs.Commented(name); err != nil || got != want {
+				t.Fatalf("got %v (%v), want %v", got, err, want)
+			}
+		})
+	}
 
 	t.Run("stores a valid config as written", func(t *testing.T) {
 		configs, dir, name := setup(t)

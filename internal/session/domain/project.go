@@ -154,6 +154,13 @@ func (p Project) WithWindows(windows ...Window) (Project, error) {
 	return p, nil
 }
 
+// RootedAt is the project rooted at root instead: its windows' and
+// panes' relative dirs follow it.
+func (p Project) RootedAt(root ProjectRoot) Project {
+	p.root = root
+	return p
+}
+
 // WithEnv sets variables for every pane of the project.
 func (p Project) WithEnv(env Env) Project {
 	p.env = env

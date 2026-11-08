@@ -29,40 +29,60 @@ func levels(project domain.Project, window, pane, width int) []string {
 	w := project.Windows()[window]
 	p := w.Panes()[pane]
 	plan := project.Plan().Windows()[window].Panes()[pane]
-	windowLevel := "window " + w.Name().String()
 
 	lines := []levelLine{{label: plan.Name().String(), value: contractHome(plan.Dir()), level: dirLevel(w, p)}}
-	label := "before"
-	for _, from := range []struct {
-		cmds  []domain.Command
-		level string
-	}{{project.Before(), "project"}, {w.Before(), windowLevel}, {p.Before(), "pane"}} {
-		for _, cmd := range from.cmds {
-			lines = append(lines, levelLine{label: label, value: cmd.String(), level: from.level})
-			label = ""
-		}
+	before := higherBefore(project, w)
+	for _, cmd := range p.Before() {
+		before = append(before, levelLine{value: cmd.String(), level: "pane"})
 	}
-	projectVars := map[string]string{}
-	for _, v := range project.Env().Vars() {
-		projectVars[v.Name()] = v.Value()
+	for i, line := range before {
+		if i == 0 {
+			line.label = "before"
+		}
+		lines = append(lines, line)
 	}
 	paneVars := map[string]bool{}
 	for _, v := range p.Env().Vars() {
 		paneVars[v.Name()] = true
 	}
-	label = "env"
+	label := "env"
 	for _, v := range plan.Env() {
 		level := "project"
 		if paneVars[v.Name()] {
 			level = "pane"
-			if over, ok := projectVars[v.Name()]; ok {
-				level += ", over project's " + shownValue(over)
+			if over := overProject(project, v.Name()); over != "" {
+				level += ", " + over
 			}
 		}
 		lines = append(lines, levelLine{label: label, value: v.Name() + "=" + shownValue(v.Value()), level: level})
 		label = ""
 	}
 	return levelTable(lines, width)
+}
+
+// higherBefore are the before commands a pane of window runs ahead of
+// its own, from the levels above it: its project's, then window's, each
+// with its level.
+func higherBefore(project domain.Project, window domain.Window) []levelLine {
+	var lines []levelLine
+	for _, cmd := range project.Before() {
+		lines = append(lines, levelLine{value: cmd.String(), level: "project"})
+	}
+	for _, cmd := range window.Before() {
+		lines = append(lines, levelLine{value: cmd.String(), level: "window " + window.Name().String()})
+	}
+	return lines
+}
+
+// overProject is what a pane's variable named name is over: the
+// project's value, or nothing when the project doesn't set it.
+func overProject(project domain.Project, name string) string {
+	for _, v := range project.Env().Vars() {
+		if v.Name() == name {
+			return "over project's " + shownValue(v.Value())
+		}
+	}
+	return ""
 }
 
 // dirLevel is the level the dir p starts in comes from: p's own, over its
@@ -81,9 +101,10 @@ func dirLevel(w domain.Window, p domain.Pane) string {
 }
 
 // shownValue is a variable's value as written, or quoted when it is
-// empty or holds control characters, which would break the lines.
+// empty, starts or ends with spaces, which wouldn't show, or holds
+// control characters, which would break the lines.
 func shownValue(value string) string {
-	if value == "" || strings.IndexFunc(value, unicode.IsControl) >= 0 {
+	if value == "" || value != strings.TrimSpace(value) || strings.IndexFunc(value, unicode.IsControl) >= 0 {
 		return strconv.Quote(value)
 	}
 	return value

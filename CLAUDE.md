@@ -3,7 +3,7 @@
 ## Design
 
 - SOLID and DDD: `internal/session/{domain,app,infra}` plus a thin `cmd/weave` Cobra layer. `domain` imports only the standard library, and `app` only that and `domain`; enforced by the `depguard` allow-lists in `.golangci.yml`.
-- Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, the local filesystem, the editor, the huh forms and the Bubble Tea project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
+- Ports about domain concepts (projects, tmux sessions, the workspace) live in `domain`; ports for talking to the user (forms, confirmation, editor, raw config documents, the project browser) live in `app`. `infra` holds every adapter: YAML configs and their schema, tmux, the local filesystem, the editor, the huh forms, the Bubble Tea config form and project browser. Keep logic out of the forms and the browser: they only collect answers checked by domain constructors, or a choice for a use case to carry out.
 - Rich domain model, immutable value objects, expressive named constructors, fluent intention-revealing APIs. Unexported fields with getters, no setters, explicit error returns.
 - Minimalism: add only what is needed now. No speculative abstractions, unused dependencies or placeholder files.
 - Minimal and explicit in what weaver executes: it runs only what the user wrote in a config, and does nothing on their behalf. It knows nothing of git: no cloning, no repository status. Users add commands for that themselves.
@@ -26,7 +26,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | dir | A window's or pane's directory, relative to the root; a pane's replaces its window's, `.` going back to the root | `dir:` | `PaneDir`, `Window.In`, `Pane.In` |
 | env | Environment variables, a pane's overriding the project's | `env:` | `Env`, `WithEnv` |
 | before commands | Commands typed and run in a pane before its own | `before:` | `Project`, `Window` and `Pane.Before()`, `RunningFirst` |
-| command / prefill | What a pane runs, or types without running | `command:` / `prefill:` | `Startup`, `Pane.Running`, `Pane.Prefilling` |
+| command / prefill | What a pane runs, or types without running; with neither, it starts a plain shell | `command:` / `prefill:`; `starts` (shell, command, prefill) in the config form | `Startup`, `Pane.Running`, `Pane.Prefilling`, `Pane.WithoutCommand` |
 | note | Lines printed in a pane before its shell starts | `note:` | `Pane.WithNote` |
 | session | A tmux session; a project's session is named after it | `weave freeze [session]` | `RunningSession`, `Session*` ports |
 | running / not running | Whether a project's session exists | ● in the browser | `ProjectStatus.Running()` |
@@ -35,16 +35,19 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |
 | restoration | Putting back the configured windows an owned session lost | | `Project.Restoration`, `WindowPlacement` |
 | freeze | Register a project through forms, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
-| draft | What the freeze form starts from: a name, a root, and the captured windows if any | | `ProjectDraft` |
+| draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project when editing, whose name stays | | `ProjectDraft` |
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
-| edit | Change a config in the editor, keeping it only if valid | `weave edit`, key `e` | `EditProject`, `ActionEdit` |
+| edit | Change a config in the config form, or raw in the editor, keeping it only if valid | `weave edit`, key `e`; `weave edit --raw`, key `E` | `EditProject`, `ActionEdit`, `ActionEditRaw` |
+| config form | A full-screen form changing a project in place, a card each for the project, its windows and their panes, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e` | `TeaConfigForm`, `app.ProjectForm` |
+| card | The config form's box for the project, a window or a pane: the one with the cursor has a heavy border, the other panes fold to one line | config form | `card` in `tea_config_form.go` |
+| trail | The config form's top line: the project, window and pane the cursor is in, and ● unsaved when there are changes | config form | `trail` in `tea_config_form.go` |
 | kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
 | delete | Remove a config; a running session keeps running | key `d` | `ProjectRegistry.Delete`, `ActionDelete` |
 | browser | The project list `weave` shows without arguments | `weave` | `BrowseProjects`, `ProjectBrowser`, `ProjectOverview` |
 | summary | Where the selected project stands, at the top of the browser's details | browser | `summary` in `tea_browser.go` |
 | drawing | A window's panes drawn as boxes in their proportions, each as it looks the moment it opens | browser details | `drawing` in `tea_drawing.go` |
 | tab | A window's name above the drawing, ○ marking one an owned session lacks, which open restores | `←/→` in the browser | `tabs` in `tea_browser.go` |
-| level | Where a pane's dir, before commands or env is set: the project, the pane's window or the pane. The Tab key selects a pane in the drawing, and below it the browser lists what that pane gets, each with the level it comes from and, when it replaces a higher level's, what it is over | Tab key in the browser | `levels` in `tea_levels.go` |
+| level | Where a pane's dir, before commands or env is set: the project, the pane's window or the pane. The Tab key selects a pane in the drawing, and below it the browser lists what that pane gets, each with the level it comes from and, when it replaces a higher level's, what it is over. A pane's card in the config form shows the same, the higher levels' dimmed | Tab key in the browser; config form | `levels`, `higherBefore`, `overProject` in `tea_levels.go`, `fieldProjectEnv` |
 | filter | Text narrowing the browser's list to the projects whose names contain it, ignoring case | `/` in the browser | `filter` in `tea_browser.go` |
 | notice | The browser's status line: what the last action did, or why it failed | browser | the `notice` passed to `ProjectBrowser.Browse` |
 | warning | Something opening would likely fail on, in the panes it concerns | browser summary and drawing | `Warning`, `ProjectOverview.Warnings()` |
@@ -60,7 +63,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
-- The huh forms and the browser aren't unit-tested; check them by running `weave freeze` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
+- The huh forms, the config form and the browser aren't unit-tested; check them by running `weave freeze`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`.
 
 ## Workflow
 

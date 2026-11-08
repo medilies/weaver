@@ -163,6 +163,13 @@ windows:
 		}
 	})
 
+	t.Run("quotes a value ending with a space, which wouldn't show", func(t *testing.T) {
+		got := levelRows(shop(t, "env: { PS1: \"$ \" }\nwindows:\n  - name: main\n"), 0, 0)
+		if want := []string{"env", `PS1="$ "`, "project"}; !slices.Equal(got[1], want) {
+			t.Fatalf("got %q, want %q", got[1], want)
+		}
+	})
+
 	t.Run("quotes a value holding control characters, keeping it on its line", func(t *testing.T) {
 		got := levelRows(shop(t, "env: { MOTD: \"hi\\nthere\" }\nwindows:\n  - name: main\n"), 0, 0)
 		if want := []string{"env", `MOTD="hi\nthere"`, "project"}; !slices.Equal(got[1], want) {

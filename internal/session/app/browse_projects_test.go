@@ -118,7 +118,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace),
 		app.NewFreezeProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form, confirm),
-		app.NewEditProject(s.documents, s.editor, confirm),
+		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
 		app.NewKillProject(server, capturedSessions{}),
 	).Handle("/srv/new")
 }
@@ -605,8 +605,19 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("says when an edit saved the config", func(t *testing.T) {
+	t.Run("says when the config form saved the config", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionEdit, "shop"))
+		s.form.project = shop(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if notice := s.browser.last().notice; notice != "Saved shop." {
+			t.Fatalf("got notice %q, want %q", notice, "Saved shop.")
+		}
+	})
+
+	t.Run("says when a raw edit saved the config", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionEditRaw, "shop"))
 		s.editor.saves = []string{"root: /srv/store\n"}
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -616,8 +627,8 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("says when an edit changed nothing", func(t *testing.T) {
-		s := newBrowseSetup(t, choose(t, app.ActionEdit, "shop"))
+	t.Run("says when a raw edit changed nothing", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionEditRaw, "shop"))
 		s.editor.saves = []string{"root: /srv/shop\n"}
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)

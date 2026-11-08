@@ -12,8 +12,13 @@ import (
 )
 
 // storedDocuments is an in-memory app.ProjectDocuments, as YAML files,
-// where "invalid" is the only invalid document.
+// where "invalid" is the only invalid document and a document holding
+// "#" is commented.
 type storedDocuments map[string]string
+
+func (d storedDocuments) Commented(name domain.ProjectName) (bool, error) {
+	return strings.Contains(d[name.String()], "#"), nil
+}
 
 func (d storedDocuments) Document(name domain.ProjectName) (app.ConfigDocument, error) {
 	content, ok := d[name.String()]
@@ -63,8 +68,100 @@ func (c *countingConfirmer) Confirm(string) (bool, error) {
 }
 
 func TestEditProject(t *testing.T) {
+	// edit runs the form on shop, stored with documents.
+	edit := func(t *testing.T, documents storedDocuments, form *fakeForm, confirm app.Confirmer) (inMemoryRegistry, error) {
+		t.Helper()
+		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
+		return registry, app.NewEditProject(registry, documents, form, &scriptedEditor{}, confirm).Handle("shop")
+	}
+	moved := shop(t).RootedAt(mustRoot(t, "/srv/store"))
+
+	t.Run("saves the project the form returns", func(t *testing.T) {
+		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: moved}, answer(true))
+		if err != nil || registry.projects["shop"].Root().String() != "/srv/store" {
+			t.Fatalf("got %v, root %s; want /srv/store saved", err, registry.projects["shop"].Root())
+		}
+	})
+
+	t.Run("starts the form from the registered project", func(t *testing.T) {
+		env, err := domain.NewEnv(map[string]string{"APP_ENV": "local"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		nvm, err := domain.NewCommand("nvm use 20")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).RunningFirst(nvm)}}
+		form := &fakeForm{project: moved}
+		if err := app.NewEditProject(registry, storedDocuments{}, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		draft := form.draft
+		if draft.Name != "shop" || draft.Root != "/srv/shop" || len(draft.Windows) != 2 ||
+			len(draft.Before) != 1 || len(draft.Env.Vars()) != 1 {
+			t.Fatalf("got draft %+v, want shop's project", draft)
+		}
+	})
+
+	t.Run("saves nothing when the user leaves the form", func(t *testing.T) {
+		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{err: app.ErrAborted}, answer(true))
+		if !errors.Is(err, app.ErrAborted) || registry.projects["shop"].Root().String() != "/srv/shop" {
+			t.Fatalf("got %v, root %s; want ErrAborted and /srv/shop kept", err, registry.projects["shop"].Root())
+		}
+	})
+
+	t.Run("asks before dropping a config's comments, and stops on no", func(t *testing.T) {
+		confirm := &countingConfirmer{answer: false}
+		form := &fakeForm{project: moved}
+		_, err := edit(t, storedDocuments{"shop": "# mine\nroot: /srv/shop"}, form, confirm)
+		if !errors.Is(err, app.ErrAborted) || confirm.asked != 1 || form.draft.Name != "" {
+			t.Fatalf("got %v after %d questions, form opened on %q; want ErrAborted after one, no form", err, confirm.asked, form.draft.Name)
+		}
+	})
+
+	t.Run("saves a commented config once the user goes on", func(t *testing.T) {
+		registry, err := edit(t, storedDocuments{"shop": "# mine\nroot: /srv/shop"}, &fakeForm{project: moved}, answer(true))
+		if err != nil || registry.projects["shop"].Root().String() != "/srv/store" {
+			t.Fatalf("got %v, root %s; want /srv/store saved", err, registry.projects["shop"].Root())
+		}
+	})
+
+	t.Run("doesn't ask about a config without comments", func(t *testing.T) {
+		confirm := &countingConfirmer{answer: true}
+		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: moved}, confirm); err != nil || confirm.asked != 0 {
+			t.Fatalf("got %v after %d questions, want none", err, confirm.asked)
+		}
+	})
+
+	t.Run("refuses a project the form renamed", func(t *testing.T) {
+		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: project(t, "store")}, answer(true))
+		if err == nil || len(registry.projects) != 1 {
+			t.Fatalf("got %v with %d configs, want an error and shop alone", err, len(registry.projects))
+		}
+	})
+
+	t.Run("reports a project that isn't registered", func(t *testing.T) {
+		err := app.NewEditProject(inMemoryRegistry{projects: map[string]domain.Project{}}, storedDocuments{},
+			&fakeForm{}, &scriptedEditor{}, answer(true)).Handle("shop")
+		if !errors.Is(err, domain.ErrProjectNotFound) {
+			t.Fatalf("got %v, want ErrProjectNotFound", err)
+		}
+	})
+}
+
+func mustRoot(t *testing.T, raw string) domain.ProjectRoot {
+	t.Helper()
+	root, err := domain.NewProjectRoot(raw)
+	if err != nil {
+		t.Fatalf("NewProjectRoot(%q): %v", raw, err)
+	}
+	return root
+}
+
+func TestEditProjectRaw(t *testing.T) {
 	edit := func(documents storedDocuments, editor *scriptedEditor, confirm app.Confirmer) (bool, error) {
-		return app.NewEditProject(documents, editor, confirm).Handle("shop")
+		return app.NewEditProject(inMemoryRegistry{}, documents, &fakeForm{}, editor, confirm).HandleRaw("shop")
 	}
 
 	t.Run("stores a valid edit", func(t *testing.T) {

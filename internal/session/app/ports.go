@@ -14,11 +14,13 @@ var ErrAborted = errors.New("aborted")
 // Ports about domain concepts live in the domain package. The ones below
 // are about talking to the user, which only use cases do.
 
-// ProjectDraft is what the freeze form starts from: suggestions the user
-// can change.
+// ProjectDraft is what a form starts from: suggestions the user can
+// change when freezing, or a registered project when editing it.
 type ProjectDraft struct {
 	Name    string
 	Root    string
+	Env     domain.Env
+	Before  []domain.Command
 	Windows []domain.Window // a running session's, to start from; none to start blank
 }
 
@@ -56,6 +58,9 @@ type ProjectDocuments interface {
 	// stored config's file, if it is valid; otherwise the
 	// stored config stays and the error wraps domain.ErrInvalidConfig.
 	ReplaceDocument(name domain.ProjectName, content []byte) error
+	// Commented reports whether the project's config holds comments of
+	// the user's, which saving the project in place of it drops.
+	Commented(name domain.ProjectName) (bool, error)
 }
 
 // Action is what the user can do from the project browser.
@@ -66,8 +71,10 @@ const (
 	ActionOpen Action = iota + 1
 	// ActionFreeze registers a project rooted at the working directory.
 	ActionFreeze
-	// ActionEdit edits the chosen project's config.
+	// ActionEdit edits the chosen project's config in the config form.
 	ActionEdit
+	// ActionEditRaw edits the chosen project's config in the editor.
+	ActionEditRaw
 	// ActionKill kills the chosen project's session.
 	ActionKill
 	// ActionDelete unregisters the chosen project.

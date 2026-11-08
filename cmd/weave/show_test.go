@@ -24,6 +24,10 @@ func (d storedDocuments) ReplaceDocument(domain.ProjectName, []byte) error {
 	return nil
 }
 
+func (d storedDocuments) Commented(domain.ProjectName) (bool, error) {
+	return false, nil
+}
+
 func TestShowCommand(t *testing.T) {
 	const config = "# yaml-language-server: $schema=./weaver.schema.json\nroot: ~/dev/shop # kept as written\n"
 	root := newRootCommand(application{documents: storedDocuments{"shop": config}})
