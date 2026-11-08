@@ -82,6 +82,18 @@ func TestFileProjectRegistryFindByName(t *testing.T) {
 		}
 	})
 
+	t.Run("expands a leading ~ in a pane's dir to the home directory", func(t *testing.T) {
+		t.Setenv("HOME", "/home/someone")
+		project, err := load(t, "portable", "root: /srv/portable\nwindows: [{name: main, panes: [{name: notes, dir: ~/notes}]}]\n")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := paneNamed(t, project, "main", "notes").Dir().String(); got != "/home/someone/notes" {
+			t.Fatalf("got %q, want %q", got, "/home/someone/notes")
+		}
+	})
+
 	t.Run("reports a not-found error when the file is missing", func(t *testing.T) {
 		name, err := domain.NewProjectName("missing")
 		if err != nil {

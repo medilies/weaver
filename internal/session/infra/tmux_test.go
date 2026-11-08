@@ -349,19 +349,39 @@ func TestTmuxStartPassesTextVerbatim(t *testing.T) {
 	})
 }
 
-func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
-	server := newTmuxServer(t)
-	// Halving a 50-line pane twelve times runs out of lines.
+// tooManyPanes is the panes of a window that can't be laid out: halving
+// a 50-line pane twelve times runs out of lines.
+func tooManyPanes() string {
 	panes := []string{`{"name": "p0"}`}
 	for i := 1; i <= 12; i++ {
 		panes = append(panes, fmt.Sprintf(`{"name": "p%d", "split": {"direction": "below"}}`, i))
 	}
+	return strings.Join(panes, ",")
+}
+
+func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
+	server := newTmuxServer(t)
 	plan := planOf(t, "broken", fmt.Sprintf(`{"root": %q, "windows": [{"name": "main", "panes": [%s]}]}`,
-		t.TempDir(), strings.Join(panes, ",")))
+		t.TempDir(), tooManyPanes()))
 	name, _ := domain.NewProjectName("broken")
 
 	if err := server.tmux().Start(plan); err == nil {
 		t.Fatal("got no error, want a split to run out of space")
+	}
+
+	if server.running(t, name) {
+		t.Fatal("got the session running, want the half-built session gone")
+	}
+}
+
+func TestTmuxStartLeavesNothingWhenALaterWindowFails(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "broken", fmt.Sprintf(`{"root": %q, "windows": [{"name": "fine"}, {"name": "main", "panes": [%s]}]}`,
+		t.TempDir(), tooManyPanes()))
+	name, _ := domain.NewProjectName("broken")
+
+	if err := server.tmux().Start(plan); err == nil {
+		t.Fatal("got no error, want a split in the second window to run out of space")
 	}
 
 	if server.running(t, name) {
@@ -655,13 +675,8 @@ func TestTmuxRestore(t *testing.T) {
 		if err := server.tmux().Start(planOf(t, "shrunk", fmt.Sprintf(`{"root": %q, "windows": [{"name": "a"}]}`, root))); err != nil {
 			t.Fatalf("starting: %v", err)
 		}
-		// Halving a 50-line pane twelve times runs out of lines.
-		panes := []string{`{"name": "p0"}`}
-		for i := 1; i <= 12; i++ {
-			panes = append(panes, fmt.Sprintf(`{"name": "p%d", "split": {"direction": "below"}}`, i))
-		}
 		project, err := load(t, "shrunk", fmt.Sprintf(`{"root": %q, "windows": [{"name": "a"}, {"name": "tall", "panes": [%s]}]}`,
-			root, strings.Join(panes, ",")))
+			root, tooManyPanes()))
 		if err != nil {
 			t.Fatalf("loading: %v", err)
 		}

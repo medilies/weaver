@@ -33,7 +33,6 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 1 | Close the test gaps | tests | S | |
 | 2 | Draw the layout | browser | M | |
 | 3 | Warnings on their pane | browser | S | 2 |
 | 4 | Better list | browser | S | |
@@ -46,7 +45,6 @@ layers), XL (mostly open questions).
 
 ```mermaid
 flowchart LR
-    T1[1 test gaps]
     T2[2 draw the layout] --> T3[3 warnings on panes]
     T2 --> T6[6 where settings come from]
     T4[4 better list]
@@ -57,15 +55,6 @@ flowchart LR
     T8 --> T9[9 layout in the form] --> T10[10 freeze through the form]
     T2 --> T9
 ```
-
-## 1. Close the test gaps
-
-- `TestTmuxStartLeavesNothingWhenAStepFails` only fails inside the first
-  window. A failure in a later window, where cleanup has to kill the
-  session by ID, is not covered.
-- Decoding `~` is only tested for `root`, not for a pane's `dir:`. There
-  is no save/reload test for a relative dir starting with `~`.
-- Untested: `TerminalSize` when the terminal reports 0x0.
 
 ## 2. Draw the layout
 
