@@ -98,6 +98,50 @@ func TestFileProjectRegistrySave(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps the dir of a project's default window", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "weaver", "root: /srv/weaver\nwindows: [{name: weaver, dir: cmd}]\n"))
+		if !strings.HasSuffix(got, "windows:\n  - name: weaver\n    dir: cmd\n") {
+			t.Fatalf("got:\n%s\nwant the default window kept with its dir and no panes", got)
+		}
+	})
+
+	t.Run("writes a window's dir under the home but outside the root with ~", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "notes", "root: /srv/notes\nwindows: [{name: main, dir: /home/someone/notes}]\n"))
+		if !strings.Contains(got, "    dir: ~/notes\n") {
+			t.Fatalf("got:\n%s\nwant the window's dir written as ~/notes", got)
+		}
+	})
+
+	t.Run("writes a pane's dir only when it isn't its window's", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "shop", `root: /srv/shop
+windows:
+  - name: api
+    dir: api
+    panes:
+      - name: shell
+      - name: tests
+        dir: /srv/shop/api
+        split: { direction: right }
+      - name: psql
+        dir: .
+        split: { direction: below }
+`))
+		want := `    dir: api
+    panes:
+      - name: shell
+      - name: tests
+        split:
+          direction: right
+      - name: psql
+        dir: .
+        split:
+          direction: below
+`
+		if !strings.HasSuffix(got, want) {
+			t.Fatalf("got:\n%s\nwant to end with:\n%s", got, want)
+		}
+	})
+
 	t.Run("keeps commands to run first in a window's only pane", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "shop", "root: /srv/shop\nwindows: [{name: repo, panes: [{before: [git fetch]}]}]\n"))
 		if !strings.Contains(got, "    panes:\n      - before:\n          - git fetch\n") {
@@ -179,7 +223,7 @@ windows:
 			if err != nil {
 				t.Fatalf("reloading: %v", err)
 			}
-			if got := paneNamed(t, reloaded, "main", "notes").Dir().String(); got != want {
+			if got := ownDir(t, paneNamed(t, reloaded, "main", "notes")); got != want {
 				t.Fatalf("got %q after reloading, want %q, relative to the root", got, want)
 			}
 		})

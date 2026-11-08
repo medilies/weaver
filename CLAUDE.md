@@ -23,7 +23,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | grid | A window's panes placed by naming them in rows and columns, sized as shares of the window. A window has splits or a grid, never both | `grid:` (`areas:`, `columns:`, `rows:`) | `Grid`, `Track`, `NewGridWindow` |
 | layout cell | How tmux tiles a window: a pane, or cells side by side or stacked. Capture reads one and a grid is cut into one; both become splits | | `LayoutCell`, `CarvedPane` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
-| dir | A pane's directory, relative to the root | `dir:` | `PaneDir` |
+| dir | A window's or pane's directory, relative to the root; a pane's replaces its window's, `.` going back to the root | `dir:` | `PaneDir`, `Window.In`, `Pane.In` |
 | env | Environment variables, a pane's overriding the project's | `env:` | `Env`, `WithEnv` |
 | before commands | Commands typed and run in a pane before its own | `before:` | `Project`, `Window` and `Pane.Before()`, `RunningFirst` |
 | command / prefill | What a pane runs, or types without running | `command:` / `prefill:` | `Startup`, `Pane.Running`, `Pane.Prefilling` |

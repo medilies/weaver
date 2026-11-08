@@ -172,7 +172,7 @@ func TestFreezeProject(t *testing.T) {
 		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/home/me/shop", Session: "resolved"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := s.form.draft.Windows[0].Panes()[0].Dir().String(); got != "/home/me/shop/api" {
+		if got, _ := s.form.draft.Windows[0].Panes()[0].Dir(); got.String() != "/home/me/shop/api" {
 			t.Fatalf("got dir %q, want /home/me/shop/api", got)
 		}
 	})

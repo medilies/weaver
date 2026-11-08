@@ -68,6 +68,10 @@
           "type": "string",
           "minLength": 1
         },
+        "dir": {
+          "description": "Where the window's panes start, unless they have their own dir: relative to root, absolute, or starting with ~/.",
+          "type": "string"
+        },
         "before": {
           "$ref": "#/definitions/before"
         },
@@ -96,7 +100,7 @@
           "minLength": 1
         },
         "dir": {
-          "description": "Where the pane's shell starts: relative to root, absolute, or starting with ~/.",
+          "description": "Where the pane's shell starts, instead of its window's dir: relative to root (. for root itself), absolute, or starting with ~/.",
           "type": "string"
         },
         "split": {

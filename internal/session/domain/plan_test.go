@@ -19,6 +19,23 @@ func TestProjectRootResolve(t *testing.T) {
 	}
 }
 
+func TestProjectRootRelative(t *testing.T) {
+	root := projectRoot(t, "/srv/shop")
+
+	for raw, want := range map[string]string{
+		"/srv/shop/back": "back",
+		"/srv/shop":      "",
+		"/srv/shopping":  "/srv/shopping",
+		"back":           "back",
+	} {
+		t.Run(`makes "`+raw+`" relative`, func(t *testing.T) {
+			if got := root.Relative(paneDir(t, raw)).String(); got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestProjectRootContains(t *testing.T) {
 	root := projectRoot(t, "/srv/shop")
 
@@ -108,6 +125,30 @@ func TestProjectPlan(t *testing.T) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
+}
+
+func TestProjectPlanDirs(t *testing.T) {
+	shell := domain.NewPane().Named(paneName(t, "shell"))
+	web := domain.NewPane().Named(paneName(t, "web")).In(paneDir(t, "web")).Splitting(split(t, 0, domain.Right, ""))
+	psql := domain.NewPane().Named(paneName(t, "psql")).In(paneDir(t, ".")).Splitting(split(t, 0, domain.Below, ""))
+	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
+		WithWindows(window(t, "api", shell, web, psql).In(paneDir(t, "api")))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	panes := project.Plan().Windows()[0].Panes()
+
+	for i, want := range map[int]string{
+		0: "/srv/shop/api", // its window's
+		1: "/srv/shop/web", // its own, relative to the root
+		2: "/srv/shop",     // the root, leaving its window's
+	} {
+		t.Run("starts "+panes[i].Name().String()+" in "+want, func(t *testing.T) {
+			if got := panes[i].Dir(); got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
 }
 
 // commands flattens commands to their text, in order.

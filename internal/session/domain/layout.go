@@ -78,8 +78,26 @@ func (n PaneName) IsZero() bool {
 	return n.value == ""
 }
 
-// PaneDir is the directory a pane's shell starts in: relative to the
-// project root, or absolute. The zero value is the project root itself.
+// NamePanes names the panes of a window, in creation order, from the
+// names given: a single pane may stay unnamed, but when there are several
+// each needs a name for its border, so an unnamed one gets its default.
+// The names must then be unique.
+func NamePanes(names ...PaneName) ([]PaneName, error) {
+	named := slices.Clone(names)
+	for i, name := range named {
+		if name.IsZero() && len(named) > 1 {
+			named[i] = DefaultPaneName(i)
+		}
+		if slices.Contains(named[:i], named[i]) {
+			return nil, fmt.Errorf("%q: %w", named[i].value, ErrDuplicatePaneName)
+		}
+	}
+	return named, nil
+}
+
+// PaneDir is the directory a pane's shell starts in, set on the pane or
+// on its window: relative to the project root, or absolute. The zero
+// value is the project root itself.
 type PaneDir struct {
 	path string
 }
@@ -322,6 +340,7 @@ func (s Startup) Submits() bool {
 type Pane struct {
 	name    PaneName
 	dir     PaneDir
+	dirSet  bool
 	split   Split
 	splits  bool
 	startup Startup
@@ -330,7 +349,7 @@ type Pane struct {
 	env     Env
 }
 
-// NewPane is an unnamed shell in the project root.
+// NewPane is an unnamed shell in its window's directory.
 func NewPane() Pane {
 	return Pane{}
 }
@@ -341,9 +360,11 @@ func (p Pane) Named(name PaneName) Pane {
 	return p
 }
 
-// In starts the pane's shell in dir.
+// In starts the pane's shell in dir, instead of its window's: the root
+// itself is a dir too, so a pane can leave its window's.
 func (p Pane) In(dir PaneDir) Pane {
 	p.dir = dir
+	p.dirSet = true
 	return p
 }
 
@@ -391,8 +412,9 @@ func (p Pane) Name() PaneName {
 	return p.name
 }
 
-func (p Pane) Dir() PaneDir {
-	return p.dir
+// Dir is the pane's own directory, unless it starts in its window's.
+func (p Pane) Dir() (PaneDir, bool) {
+	return p.dir, p.dirSet
 }
 
 // Split is how the pane is created, unless it is its window's first pane.
@@ -425,6 +447,7 @@ func (p Pane) Env() Env {
 // say how they split, or its grid places them.
 type Window struct {
 	name    WindowName
+	dir     PaneDir
 	panes   []Pane
 	before  []Command
 	grid    Grid
@@ -432,7 +455,7 @@ type Window struct {
 }
 
 // NewWindow validates and constructs a Window. With no panes, it holds one
-// shell in the project root. Panes must be named, uniquely, when there are
+// shell in its directory. Panes must be named, uniquely, when there are
 // several: the names label their borders.
 func NewWindow(name WindowName, panes ...Pane) (Window, error) {
 	if len(panes) == 0 {
@@ -529,8 +552,28 @@ func (w Window) RunningFirst(cmds ...Command) Window {
 	return w
 }
 
+// In starts the window's panes in dir, except those with their own.
+func (w Window) In(dir PaneDir) Window {
+	w.dir = dir
+	return w
+}
+
 func (w Window) Name() WindowName {
 	return w.name
+}
+
+// Dir is the directory the window's panes start in, unless they have
+// their own: the project root by default.
+func (w Window) Dir() PaneDir {
+	return w.dir
+}
+
+// dirOf is the directory a pane starts in: its own, else its window's.
+func (w Window) dirOf(pane Pane) PaneDir {
+	if pane.dirSet {
+		return pane.dir
+	}
+	return w.dir
 }
 
 // Panes are the window's panes in creation order.
@@ -549,11 +592,13 @@ func (w Window) Before() []Command {
 	return slices.Clone(w.before)
 }
 
-// Rebased is the window with its panes' directories moved from one
-// directory to another: an absolute directory at or under from becomes
-// the same path under to, as when from is to with its symlinks resolved.
-// Relative directories, and ones elsewhere, are kept as they are.
+// Rebased is the window with its and its panes' directories moved from
+// one directory to another: an absolute directory at or under from
+// becomes the same path under to, as when from is to with its symlinks
+// resolved. Relative directories, and ones elsewhere, are kept as they
+// are.
 func (w Window) Rebased(from, to string) Window {
+	w.dir = w.dir.rebased(from, to)
 	w.panes = slices.Clone(w.panes)
 	for i := range w.panes {
 		w.panes[i].dir = w.panes[i].dir.rebased(from, to)

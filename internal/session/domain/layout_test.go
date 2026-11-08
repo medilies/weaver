@@ -30,6 +30,43 @@ func TestDefaultPaneName(t *testing.T) {
 	}
 }
 
+func TestNamePanes(t *testing.T) {
+	unnamed := domain.PaneName{}
+
+	t.Run("leaves a single pane unnamed", func(t *testing.T) {
+		names, err := domain.NamePanes(unnamed)
+		if err != nil || len(names) != 1 || !names[0].IsZero() {
+			t.Fatalf("got %v, %v, want one unnamed pane", names, err)
+		}
+	})
+
+	t.Run("gives the unnamed panes of several their defaults", func(t *testing.T) {
+		names, err := domain.NamePanes(unnamed, paneName(t, "logs"), unnamed)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var got []string
+		for _, name := range names {
+			got = append(got, name.String())
+		}
+		if want := []string{"pane 1", "logs", "pane 3"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("rejects a name given twice", func(t *testing.T) {
+		if _, err := domain.NamePanes(paneName(t, "logs"), paneName(t, "logs")); !errors.Is(err, domain.ErrDuplicatePaneName) {
+			t.Fatalf("got %v, want ErrDuplicatePaneName", err)
+		}
+	})
+
+	t.Run("rejects a default taken by a given name", func(t *testing.T) {
+		if _, err := domain.NamePanes(paneName(t, "pane 2"), unnamed); !errors.Is(err, domain.ErrDuplicatePaneName) {
+			t.Fatalf("got %v, want ErrDuplicatePaneName", err)
+		}
+	})
+}
+
 func TestNewPaneName(t *testing.T) {
 	t.Run("rejects blank names", func(t *testing.T) {
 		_, err := domain.NewPaneName("")
@@ -233,11 +270,18 @@ func TestWindowRebased(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			w := window(t, "main", domain.NewPane().In(dir))
-			if got := w.Rebased("/srv/shop", "/home/me/shop").Panes()[0].Dir().String(); got != c.want {
+			if got, _ := w.Rebased("/srv/shop", "/home/me/shop").Panes()[0].Dir(); got.String() != c.want {
 				t.Fatalf("got %q, want %q", got, c.want)
 			}
 		})
 	}
+
+	t.Run("moves the window's dir", func(t *testing.T) {
+		w := window(t, "main").In(paneDir(t, "/srv/shop/api"))
+		if got := w.Rebased("/srv/shop", "/home/me/shop").Dir().String(); got != "/home/me/shop/api" {
+			t.Fatalf("got %q, want /home/me/shop/api", got)
+		}
+	})
 
 	t.Run("keeps the window's own commands", func(t *testing.T) {
 		cmd, _ := domain.NewCommand("nvm use")
@@ -252,10 +296,13 @@ func TestNewWindow(t *testing.T) {
 	apiShell := domain.NewPane().Named(paneName(t, "api shell"))
 	taskDev := domain.NewPane().Named(paneName(t, "task dev")).Splitting(split(t, 0, domain.Right, "40%"))
 
-	t.Run("holds one shell in the project root when given no panes", func(t *testing.T) {
+	t.Run("holds one shell in its dir when given no panes", func(t *testing.T) {
 		panes := window(t, "repo").Panes()
-		if len(panes) != 1 || !panes[0].Dir().IsRoot() {
-			t.Fatalf("got %d panes, want one shell in the root", len(panes))
+		if len(panes) != 1 {
+			t.Fatalf("got %d panes, want one", len(panes))
+		}
+		if _, set := panes[0].Dir(); set {
+			t.Fatal("got a pane with its own dir, want one starting in the window's")
 		}
 	})
 

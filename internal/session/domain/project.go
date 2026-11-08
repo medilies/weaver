@@ -80,6 +80,21 @@ func (r ProjectRoot) Contains(path string) bool {
 	return ok
 }
 
+// Relative is dir relative to the root when it is an absolute directory
+// at or under it, the zero PaneDir for the root itself. Other directories
+// are kept as they are.
+func (r ProjectRoot) Relative(dir PaneDir) PaneDir {
+	if !filepath.IsAbs(dir.path) {
+		return dir
+	}
+	rel, ok := under(r.path, dir.path)
+	if !ok {
+		return dir
+	}
+	relative, _ := NewPaneDir(rel) // a cleaned path, already one line
+	return relative
+}
+
 // under is path relative to base, if path is base or a directory under
 // it: "." for base itself.
 func under(base, path string) (string, bool) {

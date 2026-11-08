@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -195,19 +195,19 @@ func askWindow(
 	case captured != nil:
 		raw = captured.Name().String()
 	case len(earlier) == 0:
-		raw = project.Name().String()
+		raw = project.Windows()[0].Name().String() // the window it opens until given others
 	}
 	fields := []huh.Field{huh.NewInput().Title("Window name").Value(&raw).Validate(func(s string) error {
 		name, err := domain.NewWindowName(s)
 		if err != nil {
 			return err
 		}
-		for _, w := range earlier {
-			if w.Name() == name {
-				return domain.ErrDuplicateWindowName
-			}
+		window, err := domain.NewWindow(name)
+		if err != nil {
+			return err
 		}
-		return nil
+		_, err = project.WithWindows(append(slices.Clone(earlier), window)...)
+		return err
 	})}
 	fields = append(fields, beforeField("Before commands for every pane of this window", &before))
 	if captured != nil {
@@ -246,12 +246,13 @@ func askWindow(
 			break
 		}
 	}
+	names, err := domain.NamePanes(paneNames(panes)...)
+	if err != nil {
+		return domain.Window{}, false, err
+	}
 	built := make([]domain.Pane, 0, len(panes))
 	for i, pane := range panes {
-		if len(panes) > 1 {
-			pane.name = pane.paneName(i) // borders need a name
-		}
-		p, err := pane.pane(i)
+		p, err := pane.pane(i, names[i])
 		if err != nil {
 			return domain.Window{}, false, fmt.Errorf("pane %d: %w", i+1, err)
 		}
@@ -271,9 +272,9 @@ func askWindow(
 // capturedAnswers pre-fills a pane screen from a captured pane, with its
 // directory relative to the root when under it and the command it runs.
 func capturedAnswers(root domain.ProjectRoot, pane domain.Pane) *paneAnswers {
-	answers := &paneAnswers{name: pane.Name().String(), dir: pane.Dir().String(), direction: "right", run: true, fixed: true}
-	if root.Contains(answers.dir) {
-		answers.dir, _ = filepath.Rel(root.String(), answers.dir)
+	answers := &paneAnswers{name: pane.Name().String(), direction: "right", run: true, fixed: true}
+	if dir, ok := pane.Dir(); ok {
+		answers.dir = root.Relative(dir).String()
 	}
 	if split, ok := pane.Split(); ok {
 		answers.of, answers.direction, answers.size = split.Of(), split.Direction().String(), split.Size().String()
@@ -304,23 +305,12 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 		huh.NewInput().Title("Pane name").
 			Description("Shown in the pane's top border; a window with several panes needs one per pane.").
 			Value(&a.name).Validate(func(s string) error {
-			want := domain.DefaultPaneName(index)
-			switch {
-			case strings.TrimSpace(s) != "":
-				name, err := domain.NewPaneName(s)
-				if err != nil {
-					return err
-				}
-				want = name
-			case index == 0:
-				return nil // a single pane needs no name
+			name, err := optionalPaneName(s)
+			if err != nil {
+				return err
 			}
-			for i, e := range earlier {
-				if e.paneName(i) == want.String() {
-					return domain.ErrDuplicatePaneName
-				}
-			}
-			return nil
+			_, err = domain.NamePanes(append(paneNames(earlier), name)...)
+			return err
 		}),
 		huh.NewInput().Title("Directory").
 			Description("Relative to the project root; empty for the root itself.").
@@ -329,7 +319,7 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 	if index > 0 {
 		targets := make([]huh.Option[int], 0, index)
 		for i, e := range earlier {
-			targets = append(targets, huh.NewOption(e.paneName(i), i))
+			targets = append(targets, huh.NewOption(e.nameAt(i), i))
 		}
 		layout = append(layout,
 			huh.NewSelect[int]().Title("Split").Description("The pane this one is carved out of.").
@@ -370,24 +360,36 @@ func (a *paneAnswers) groups(window domain.WindowName, earlier []*paneAnswers) [
 	}
 }
 
-// paneName is the name of the pane at index, or its default in a window
-// with several panes.
-func (a *paneAnswers) paneName(index int) string {
+// nameAt is the name of the pane at index among the panes a new one may
+// split, as they are named once there are several.
+func (a *paneAnswers) nameAt(index int) string {
 	if name := strings.TrimSpace(a.name); name != "" {
 		return name
 	}
 	return domain.DefaultPaneName(index).String()
 }
 
-func (a *paneAnswers) pane(index int) (domain.Pane, error) {
-	pane := domain.NewPane()
-	if strings.TrimSpace(a.name) != "" {
-		name, err := domain.NewPaneName(a.name)
-		if err != nil {
-			return domain.Pane{}, err
-		}
-		pane = pane.Named(name)
+// optionalPaneName reads a pane name, blank for none.
+func optionalPaneName(raw string) (domain.PaneName, error) {
+	if strings.TrimSpace(raw) == "" {
+		return domain.PaneName{}, nil
 	}
+	return domain.NewPaneName(raw)
+}
+
+// paneNames are the names given to the panes' screens, the zero
+// PaneName for each left blank. Each was checked as it was typed.
+func paneNames(panes []*paneAnswers) []domain.PaneName {
+	names := make([]domain.PaneName, len(panes))
+	for i, pane := range panes {
+		names[i], _ = optionalPaneName(pane.name)
+	}
+	return names
+}
+
+// pane is the pane at index, named as its window names it.
+func (a *paneAnswers) pane(index int, name domain.PaneName) (domain.Pane, error) {
+	pane := domain.NewPane().Named(name)
 	dir, err := domain.NewPaneDir(a.dir)
 	if err != nil {
 		return domain.Pane{}, err

@@ -705,12 +705,13 @@ func (s tmuxServer) running(t *testing.T, name domain.ProjectName) bool {
 }
 
 // layoutOf describes windows as "window: pane@dir | pane@dir right of #1 40%".
-func layoutOf(windows []domain.Window, root string) []string {
+func layoutOf(t *testing.T, windows []domain.Window, root string) []string {
+	t.Helper()
 	var out []string
 	for _, w := range windows {
 		var panes []string
 		for _, p := range w.Panes() {
-			text := p.Name().String() + "@" + strings.TrimPrefix(strings.TrimPrefix(p.Dir().String(), root), "/")
+			text := p.Name().String() + "@" + strings.TrimPrefix(strings.TrimPrefix(ownDir(t, p), root), "/")
 			if s, ok := p.Split(); ok {
 				text += fmt.Sprintf(" %s of #%d %s", s.Direction(), s.Of()+1, s.Size())
 			}
@@ -752,7 +753,7 @@ func TestTmuxCapture(t *testing.T) {
 			"api: api shell@api | task dev@api right of #1 40% | psql@ below of #2 30%",
 			"app: side@app | main@ right of #1 70% | under side@ below of #1 20%",
 		}
-		if got := layoutOf(windows, root); !slices.Equal(got, want) {
+		if got := layoutOf(t, windows, root); !slices.Equal(got, want) {
 			t.Fatalf("got  %q\nwant %q", got, want)
 		}
 	})
@@ -765,7 +766,7 @@ func TestTmuxCapture(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got, want := layoutOf(windows, root)[0], "pane 1@ | pane 2@app right of #1 25%"; !strings.HasSuffix(got, want) {
+		if got, want := layoutOf(t, windows, root)[0], "pane 1@ | pane 2@app right of #1 25%"; !strings.HasSuffix(got, want) {
 			t.Fatalf("got %q, want it to end with %q", got, want)
 		}
 	})
@@ -781,7 +782,7 @@ func TestTmuxCapture(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got, want := layoutOf(windows, root), []string{"w ${X}: run $HOME@d $HOME"}; !slices.Equal(got, want) {
+		if got, want := layoutOf(t, windows, root), []string{"w ${X}: run $HOME@d $HOME"}; !slices.Equal(got, want) {
 			t.Fatalf("got  %q\nwant %q", got, want)
 		}
 	})
@@ -805,7 +806,7 @@ func TestTmuxCapture(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := windows[0].Panes()[0].Dir(); got.String() != root {
+		if got := ownDir(t, windows[0].Panes()[0]); got != root {
 			t.Fatalf("got dir %q, want the shell's %q", got, root)
 		}
 	})
@@ -824,7 +825,7 @@ func TestTmuxCapture(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := windows[0].Panes()[0].Dir(); got.String() != gone {
+		if got := ownDir(t, windows[0].Panes()[0]); got != gone {
 			t.Fatalf("got dir %q, want %q", got, gone)
 		}
 	})
@@ -886,7 +887,7 @@ func TestTmuxCapture(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := windows[0].Panes()[0].Dir(); got.String() != root {
+		if got := ownDir(t, windows[0].Panes()[0]); got != root {
 			t.Fatalf("got dir %q, want where the command started, %q", got, root)
 		}
 	})

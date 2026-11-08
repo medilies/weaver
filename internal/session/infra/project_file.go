@@ -39,6 +39,7 @@ type projectFile struct {
 
 type windowFile struct {
 	Name   string     `yaml:"name"`
+	Dir    string     `yaml:"dir,omitempty"`
 	Before []string   `yaml:"before,omitempty"`
 	Grid   *gridFile  `yaml:"grid,omitempty"`
 	Panes  []paneFile `yaml:"panes,omitempty"`
@@ -141,13 +142,14 @@ func nullGrid(raw []byte) error {
 type homeFile struct {
 	Root    yaml.Node `yaml:"root"`
 	Windows []struct {
+		Dir   yaml.Node `yaml:"dir"`
 		Panes []struct {
 			Dir yaml.Node `yaml:"dir"`
 		} `yaml:"panes"`
 	} `yaml:"windows"`
 }
 
-// bareHome reports a root or pane dir written as a bare ~ in raw, the
+// bareHome reports a root, window dir or pane dir written as a bare ~ in raw, the
 // config f was decoded from.
 func (f projectFile) bareHome(raw []byte) error {
 	var paths homeFile
@@ -158,6 +160,9 @@ func (f projectFile) bareHome(raw []byte) error {
 		return fmt.Errorf("root: %w", ErrUnquotedHome)
 	}
 	for i, window := range paths.Windows {
+		if isBareHome(window.Dir) {
+			return fmt.Errorf("window %q: dir: %w", f.Windows[i].Name, ErrUnquotedHome)
+		}
 		for j, pane := range window.Panes {
 			if isBareHome(pane.Dir) {
 				w := f.Windows[i]
@@ -228,6 +233,10 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	if err != nil {
 		return domain.Window{}, fmt.Errorf("before: %w", err)
 	}
+	dir, err := toDir(w.Dir)
+	if err != nil {
+		return domain.Window{}, err
+	}
 	var window domain.Window
 	if w.Grid != nil {
 		grid, err := w.Grid.toGrid()
@@ -241,7 +250,20 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	} else if window, err = domain.NewWindow(name, panes...); err != nil {
 		return domain.Window{}, err
 	}
-	return window.RunningFirst(before...), nil
+	return window.In(dir).RunningFirst(before...), nil
+}
+
+// toDir reads a window or pane dir, "~" expanded.
+func toDir(raw string) (domain.PaneDir, error) {
+	path, err := ExpandHome(raw)
+	if err != nil {
+		return domain.PaneDir{}, err
+	}
+	dir, err := domain.NewPaneDir(path)
+	if err != nil {
+		return domain.PaneDir{}, fmt.Errorf("dir: %w", err)
+	}
+	return dir, nil
 }
 
 func (g gridFile) toGrid() (domain.Grid, error) {
@@ -290,15 +312,13 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 		pane = pane.Named(name)
 	}
 
-	dirPath, err := ExpandHome(p.Dir)
-	if err != nil {
-		return domain.Pane{}, err
+	if strings.TrimSpace(p.Dir) != "" { // blank is the window's dir, as no dir is
+		dir, err := toDir(p.Dir)
+		if err != nil {
+			return domain.Pane{}, err
+		}
+		pane = pane.In(dir)
 	}
-	dir, err := domain.NewPaneDir(dirPath)
-	if err != nil {
-		return domain.Pane{}, fmt.Errorf("dir: %w", err)
-	}
-	pane = pane.In(dir)
 
 	if p.Split != nil {
 		split, err := p.Split.toSplit(index, siblings)
@@ -385,9 +405,10 @@ func (s splitFile) toSplit(index int, siblings []paneFile) (domain.Split, error)
 
 // encodeProject writes a config in its canonical form: defaults left out,
 // a grid as written, with its window's panes in creation order and no
-// splits, "split.of" only when it isn't the previous pane, pane directories under
-// the root relative to it, the home directory as "~", and pointing to the
-// schema saved next to it with a header line.
+// splits, "split.of" only when it isn't the previous pane, a pane's dir
+// only when it isn't its window's, directories under the root relative to
+// it, the home directory as "~", and pointing to the schema saved next to
+// it with a header line.
 func encodeProject(project domain.Project) ([]byte, error) {
 	root := project.Root()
 	file := projectFile{
@@ -395,8 +416,8 @@ func encodeProject(project domain.Project) ([]byte, error) {
 		Env:    envMap(project.Env()),
 		Before: lines(project.Before()),
 	}
-	if windows := project.Windows(); !onlyDefaultWindow(project.Name(), windows) {
-		for _, window := range windows {
+	if !onlyDefaultWindow(project) {
+		for _, window := range project.Windows() {
 			file.Windows = append(file.Windows, windowFileOf(root, window))
 		}
 	}
@@ -415,16 +436,16 @@ func encodeProject(project domain.Project) ([]byte, error) {
 }
 
 func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
-	file := windowFile{Name: window.Name().String(), Before: lines(window.Before())}
+	file := windowFile{Name: window.Name().String(), Dir: dirOf(root, window.Dir()), Before: lines(window.Before())}
 	panes := window.Panes()
 	grid, gridded := window.Grid()
 	if gridded {
 		file.Grid = gridFileOf(grid)
-	} else if len(panes) == 1 && isPlain(panes[0]) {
+	} else if len(panes) == 1 && isPlain(root, window, panes[0]) {
 		return file
 	}
 	for i := range panes {
-		pane := paneFileOf(root, i, panes)
+		pane := paneFileOf(root, window, i)
 		if gridded {
 			pane.Split = nil // the grid's
 		}
@@ -457,12 +478,13 @@ func trackTexts(tracks []domain.Track) []string {
 	return out
 }
 
-// paneFileOf is the file shape of panes[index].
-func paneFileOf(root domain.ProjectRoot, index int, panes []domain.Pane) paneFile {
+// paneFileOf is the file shape of the window's pane at index.
+func paneFileOf(root domain.ProjectRoot, window domain.Window, index int) paneFile {
+	panes := window.Panes()
 	pane := panes[index]
 	file := paneFile{
 		Name:   pane.Name().String(),
-		Dir:    dirOf(root, pane.Dir()),
+		Dir:    paneDirOf(root, window, pane),
 		Before: lines(pane.Before()),
 		Note:   pane.Note(),
 		Env:    envMap(pane.Env()),
@@ -483,20 +505,28 @@ func paneFileOf(root domain.ProjectRoot, index int, panes []domain.Pane) paneFil
 	return file
 }
 
-// dirOf writes a pane directory under the root relative to it.
+// dirOf writes a directory under the root relative to it, and the root
+// itself as "".
 func dirOf(root domain.ProjectRoot, dir domain.PaneDir) string {
-	path := dir.String()
-	if !filepath.IsAbs(path) {
-		return keepRelative(path)
-	}
-	if !root.Contains(path) {
+	path := root.Relative(dir).String()
+	if filepath.IsAbs(path) {
 		return contractHome(path)
 	}
-	rel, err := filepath.Rel(root.String(), path)
-	if err != nil || rel == "." {
+	return keepRelative(path)
+}
+
+// paneDirOf writes the pane's own dir, unless it starts where its window
+// would start it anyway. The root is then written ".", as "" would mean
+// the window's dir.
+func paneDirOf(root domain.ProjectRoot, window domain.Window, pane domain.Pane) string {
+	dir, set := pane.Dir()
+	if !set || root.Resolve(dir) == root.Resolve(window.Dir()) {
 		return ""
 	}
-	return keepRelative(rel)
+	if written := dirOf(root, dir); written != "" {
+		return written
+	}
+	return "."
 }
 
 // keepRelative writes a relative path starting with a directory named ~
@@ -508,23 +538,30 @@ func keepRelative(rel string) string {
 	return rel
 }
 
-// isPlain reports whether pane is a bare shell in the root, which a
-// window without panes means.
-func isPlain(pane domain.Pane) bool {
+// isPlain reports whether pane is a bare shell in its window's dir, which
+// a window without panes means.
+func isPlain(root domain.ProjectRoot, window domain.Window, pane domain.Pane) bool {
 	_, splits := pane.Split()
 	_, types := pane.Startup().Command()
-	return pane.Name().IsZero() && pane.Dir().IsRoot() && !splits && !types &&
+	return pane.Name().IsZero() && paneDirOf(root, window, pane) == "" && !splits && !types &&
 		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Before()) == 0
 }
 
-// onlyDefaultWindow reports whether windows are what a project without
-// windows opens: one window named after it, holding a bare shell.
-func onlyDefaultWindow(name domain.ProjectName, windows []domain.Window) bool {
-	if len(windows) != 1 || windows[0].Name().String() != name.String() || len(windows[0].Before()) > 0 {
+// onlyDefaultWindow reports whether the project's windows are what it
+// opens without any: one window named after it, holding a bare shell in
+// the root.
+func onlyDefaultWindow(project domain.Project) bool {
+	windows := project.Windows()
+	if len(windows) != 1 {
 		return false
 	}
-	panes := windows[0].Panes()
-	return len(panes) == 1 && isPlain(panes[0])
+	window := windows[0]
+	if window.Name().String() != project.Name().String() || len(window.Before()) > 0 ||
+		project.Root().Resolve(window.Dir()) != project.Root().String() {
+		return false
+	}
+	panes := window.Panes()
+	return len(panes) == 1 && isPlain(project.Root(), window, panes[0])
 }
 
 func envMap(env domain.Env) map[string]string {

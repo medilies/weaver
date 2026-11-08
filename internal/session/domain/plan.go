@@ -102,7 +102,7 @@ func (p Project) planWindow(window Window) WindowPlan {
 func (p Project) planPane(window Window, pane Pane) PanePlan {
 	return PanePlan{
 		name:    pane.name,
-		dir:     p.root.Resolve(pane.dir),
+		dir:     p.root.Resolve(window.dirOf(pane)),
 		split:   pane.split,
 		splits:  pane.splits,
 		env:     p.env.Overlay(pane.env).Vars(),

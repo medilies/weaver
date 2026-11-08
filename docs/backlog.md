@@ -33,71 +33,18 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 6 | Window `dir`, and the form rules into `domain` | config, domain | M | |
-| 7 | Where a pane's settings come from | browser | S | 6 |
-| 8 | Changing panes in `domain` | domain | M | 6 |
+| 7 | Where a pane's settings come from | browser | S | |
+| 8 | Changing panes in `domain` | domain | M | |
 | 9 | The config form | form | L | 7, 8 |
 | 10 | The layout in the config form | form | M | 9 |
 | 11 | Freeze through the config form | form | M | 9, 10 |
 
 ```mermaid
 flowchart LR
-    T6[6 window dir, form rules] --> T7[7 where settings come from]
-    T6 --> T8[8 changing panes]
-    T8 --> T9[9 config form]
-    T7 --> T9
+    T8[8 changing panes] --> T9[9 config form]
+    T7[7 where settings come from] --> T9
     T9 --> T10[10 layout in the form] --> T11[11 freeze through the form]
 ```
-
-## 6. Window `dir`, and the form rules into `domain`
-
-```yaml
-  - name: api
-    dir: api
-    panes:
-      - name: api shell
-      - name: task dev
-        split: { direction: right, size: 40% }
-        command: task dev
-      - name: psql
-        dir: .
-        split: { direction: below }
-        command: nimbus psql
-```
-
-The nimbus example in the README sets `dir: api` and `dir: app` twice
-each, so configs need it now. A pane's `dir` replaces its window's. Both
-are relative to `root`, not to each other, so a `dir` reads the same
-wherever it appears.
-
-**Implementation**
-
-- The catch: `PaneDir`'s zero value is the root, and `NewPaneDir(".")`
-  returns that zero value too, so "no `dir`" and `dir: .` can't be told
-  apart. `Pane` needs to know whether its dir was set (a flag set by
-  `Pane.In`), so that `dir: .` can opt out of the window's.
-- `encodeProject` writes the window's `dir` through `dirOf`, like a
-  pane's: relative under the root, `~` contracted. Freeze could
-  hoist a dir shared by every pane of a window, but needn't at first.
-- The directory checks and `ProjectOverview.Warnings()` read the plan,
-  so they follow without changes.
-- Schema: `dir` on windows.
-
-**The form rules, in the same change.** These sit in
-`internal/session/infra/huh_forms.go` against the layer rule, and this
-change reworks `PaneDir` and `dirOf` anyway:
-
-- The window-name validator re-checks that names are unique. It could
-  ask the domain instead, by calling `project.WithWindows` with the
-  earlier windows and the new one.
-- Captured dirs are turned into root-relative paths in the forms, and
-  `dirOf` (`project_file.go`) does the same when saving. Both could use
-  a `ProjectRoot.Relative(path)`.
-- The pane-name validator repeats the `label`/`DefaultPaneName` handling
-  and the rule that a single pane needs no name.
-- The first window's name is pre-filled with the project name, as
-  `defaultWindow` names it. This one is weak: it is only a suggestion
-  the user can change.
 
 ## 7. Where a pane's settings come from
 
@@ -120,8 +67,7 @@ line with the level it comes from:
 ```
 
 The YAML spreads before commands over three levels and env over two,
-and the plan merges them. Window `dir` (#6) adds one more thing to
-trace, so build this after it.
+and the plan merges them, and a pane's dir replaces its window's.
 
 - The levels come from the getters already there: `Project`, `Window`
   and `Pane.Before()`, `Project.Env()` against `Pane.Env()`, and the
@@ -133,9 +79,9 @@ trace, so build this after it.
 
 The config form (#9, #10) adds, removes, reorders and re-splits panes
 and windows. `Window` can do none of that yet: it has `NewWindow`,
-`RunningFirst`, `Rebased` and getters. It comes after #6, which adds
-`dir` to `Window` and the dir-set flag to `Pane`, both of which these
-methods must keep. Those changes are rules, not form code:
+`RunningFirst`, `In`, `Rebased` and getters. These methods must keep a
+window's `dir`, and whether a pane sets its own. The changes are rules,
+not form code:
 removing `back` while `front` splits it must re-target `front` or
 refuse, and moving a pane must keep every split pointing at an earlier
 one. They go into `domain`, as methods returning a new `Window` or

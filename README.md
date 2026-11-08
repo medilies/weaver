@@ -139,25 +139,25 @@ A fuller one, with three windows:
 root: ~/dev/nimbus
 windows:
   - name: api
+    dir: api
     panes:
       - name: api shell
-        dir: api
       - name: task dev
-        dir: api
         split: { direction: right, size: 40% }
         command: task dev
       - name: psql
+        dir: .
         split: { direction: below }
         command: nimbus psql
   - name: app
+    dir: app
     panes:
       - name: app shell
-        dir: app
       - name: flutter run
-        dir: app
         split: { direction: right, size: 40% }
         command: nimbus app
       - name: emulator
+        dir: .
         split: { direction: below, size: 30% }
         prefill: nimbus emulator
   - name: repo
@@ -193,11 +193,12 @@ windows:
 | `env` | Variables for every pane. Values are literal. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
+| `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see below. |
-| `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in `root`. |
+| `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
-| `dir` | Where the pane's shell starts, relative to `root` (or absolute, or starting with `~/`; `"~"` in quotes for the home directory). |
+| `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
@@ -211,6 +212,7 @@ window is the nimbus `app` window again:
 
 ```yaml
   - name: app
+    dir: app
     grid:
       columns: [60%, 40%]
       rows: [70%, 30%]
@@ -219,11 +221,10 @@ window is the nimbus `app` window again:
         - [app shell, emulator]
     panes:
       - name: app shell
-        dir: app
       - name: flutter run
-        dir: app
         command: nimbus app
       - name: emulator
+        dir: .
         prefill: nimbus emulator
 ```
 

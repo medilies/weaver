@@ -42,6 +42,33 @@ func loadFixture(t *testing.T, name string) domain.Project {
 	return project
 }
 
+// planDir is the absolute directory the pane starts in.
+func planDir(t *testing.T, project domain.Project, window, pane string) string {
+	t.Helper()
+	for _, w := range project.Plan().Windows() {
+		if w.Name().String() != window {
+			continue
+		}
+		for _, p := range w.Panes() {
+			if p.Name().String() == pane {
+				return p.Dir()
+			}
+		}
+	}
+	t.Fatalf("no pane %q in window %q", pane, window)
+	return ""
+}
+
+// ownDir is the pane's own dir, which it must have.
+func ownDir(t *testing.T, pane domain.Pane) string {
+	t.Helper()
+	dir, set := pane.Dir()
+	if !set {
+		t.Fatalf("pane %q has no dir of its own", pane.Name())
+	}
+	return dir.String()
+}
+
 func paneNamed(t *testing.T, project domain.Project, window, pane string) domain.Pane {
 	t.Helper()
 	for _, w := range project.Windows() {
@@ -90,7 +117,7 @@ func TestFileProjectRegistryFindByName(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if got := paneNamed(t, project, "main", "notes").Dir().String(); got != "/home/someone/notes" {
+		if got := ownDir(t, paneNamed(t, project, "main", "notes")); got != "/home/someone/notes" {
 			t.Fatalf("got %q, want %q", got, "/home/someone/notes")
 		}
 	})
@@ -131,9 +158,30 @@ func TestFileProjectRegistryReadsLayouts(t *testing.T) {
 		}
 	})
 
-	t.Run("reads pane directories", func(t *testing.T) {
-		if got := paneNamed(t, nimbus, "api", "api shell").Dir().String(); got != "api" {
-			t.Fatalf("got %q, want %q", got, "api")
+	t.Run("starts a pane without a dir in its window's", func(t *testing.T) {
+		want := filepath.Join(nimbus.Root().String(), "api")
+		if got := planDir(t, nimbus, "api", "api shell"); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("reads . as a pane's dir, starting it in the root rather than its window's dir", func(t *testing.T) {
+		if got, want := planDir(t, nimbus, "api", "psql"), nimbus.Root().String(); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("reads a blank pane dir as its window's", func(t *testing.T) {
+		project := mustLoad(t, "shop", "root: /srv/shop\nwindows: [{name: main, dir: api, panes: [{name: web, dir: \" \"}]}]\n")
+		if got := planDir(t, project, "main", "web"); got != "/srv/shop/api" {
+			t.Fatalf("got %q, want /srv/shop/api", got)
+		}
+	})
+
+	t.Run("reads a pane's dir relative to the root, not to its window's dir", func(t *testing.T) {
+		project := mustLoad(t, "shop", "root: /srv/shop\nwindows: [{name: main, dir: api, panes: [{name: web, dir: web}]}]\n")
+		if got := planDir(t, project, "main", "web"); got != "/srv/shop/web" {
+			t.Fatalf("got %q, want /srv/shop/web", got)
 		}
 	})
 
@@ -169,8 +217,11 @@ func TestFileProjectRegistryReadsLayouts(t *testing.T) {
 
 	t.Run("gives a window without panes one shell in the root", func(t *testing.T) {
 		panes := nimbus.Windows()[2].Panes()
-		if len(panes) != 1 || !panes[0].Dir().IsRoot() {
-			t.Fatalf("got %d panes, want one shell in the root", len(panes))
+		if len(panes) != 1 {
+			t.Fatalf("got %d panes, want one", len(panes))
+		}
+		if _, set := panes[0].Dir(); set {
+			t.Fatal("got a pane with its own dir, want one starting in the root")
 		}
 	})
 }
@@ -328,6 +379,13 @@ windows:
 		_, err := load(t, "home", "root: ~\n")
 		if !errors.Is(err, infra.ErrUnquotedHome) {
 			t.Fatalf("got %v, want ErrUnquotedHome", err)
+		}
+	})
+
+	t.Run("rejects a bare ~ as a window's dir, naming the window", func(t *testing.T) {
+		_, err := load(t, "dots", "root: /srv/dots\nwindows: [{name: main, dir: ~}]\n")
+		if !errors.Is(err, infra.ErrUnquotedHome) || !strings.Contains(err.Error(), `window "main": dir:`) {
+			t.Fatalf("got %v, want ErrUnquotedHome naming the window", err)
 		}
 	})
 

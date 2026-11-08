@@ -2,30 +2,30 @@
 root: ~/dev/nimbus
 windows:
   - name: api
+    dir: api
     panes:
       - name: api shell
-        dir: api
       - name: task dev
-        dir: api
         split:
           direction: right
           size: 40%
         command: task dev
       - name: psql
+        dir: .
         split:
           direction: below
         command: nimbus psql
   - name: app
+    dir: app
     panes:
       - name: app shell
-        dir: app
       - name: flutter run
-        dir: app
         split:
           direction: right
           size: 40%
         command: nimbus app
       - name: emulator
+        dir: .
         split:
           direction: below
           size: 30%
