@@ -14,6 +14,9 @@ Go 1.26 or newer:
 go install github.com/medilies/weaver/cmd/weave@latest   # puts weave in ~/go/bin
 ```
 
+weaver needs tmux, and is tested only with tmux 3.4. Other versions
+may work; if one doesn't, please open an issue.
+
 ## Usage
 
 ```sh
@@ -75,8 +78,7 @@ running, weaver first:
 weaver doesn't know git and clones nothing: clone what a project needs
 yourself before opening it.
 
-If a step fails, nothing is left half-built. weaver needs tmux 3.2 or
-newer.
+If a step fails, nothing is left half-built.
 
 When weaver started the running session (an owned session) and you
 closed some of its windows, `weave <project>` puts them back where the

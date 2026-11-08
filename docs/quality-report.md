@@ -6,7 +6,7 @@ Line numbers refer to `7f8a02f` unless stated, so some have drifted. Findings ma
 
 ## Triage
 
-Done against the project's aim of staying simple and small. macOS stays out of scope until it has users, and so does making sure weave works on tmux 3.2 (see Tooling). Severity is High, Med or Low. Fix size is XS (a line or two), S (up to about 30 lines plus a test) or M (several layers, or guesswork). Each item is **Open** (worth doing, not done yet), **Deferred** (until the idea named), **Left** (not worth the code) or **Ignored** (out of scope, as macOS). Left and ignored items stay listed so they aren't reported again.
+Done against the project's aim of staying simple and small. macOS stays out of scope until it has users, and so does making sure weave works on any tmux but 3.4, until a user reports a problem on one (see Tooling). Severity is High, Med or Low. Fix size is XS (a line or two), S (up to about 30 lines plus a test) or M (several layers, or guesswork). Each item is **Open** (worth doing, not done yet), **Deferred** (until the idea named), **Left** (not worth the code) or **Ignored** (out of scope, as macOS). Left and ignored items stay listed so they aren't reported again.
 
 ### Bugs
 
@@ -71,9 +71,9 @@ A schema stricter than the parser is the safe way round: the editor warns, and w
 - **Left.** GoReleaser stamps `{{.Version}}` (`0.2.0`), while `go install …@v0.2.0` reports `v0.2.0`. Stamp `{{.Tag}}` to get one form, and update `TestReleaseBuildsReportTheStampedVersion`, which expects `0.2.0`.
 - **Left.** The changelog filters (`^docs:`, `^test:`, `^chore:`) miss scoped and other types, so `build(deps): …`, `ci: …` and merge commits reach the release notes. If the intent is to drop those, use something like `^(docs|test|chore|ci|build)(\(.+\))?!?:` plus `^Merge`.
 - **Left.** `requireTool` lives in `local_workspace_test.go`, though the tmux tests use it too.
-- **Ignored**, tmux 3.2 only, until weave has users there. CI's main jobs install Ubuntu's tmux 3.4. Checking the version when weave runs is **Left**.
+- **Ignored**, any tmux but 3.4, until a user reports a problem on another version. The CI test job and the release job run on ubuntu-24.04 for Ubuntu's tmux 3.4, not on ubuntu-latest, whose tmux may move; re-pin when GitHub retires that runner. Checking the version when weave runs is **Left**.
 
-  tmux's changelog shows nothing weaver uses that is newer than 3.2: `new-window -b`, which restoration needs, arrived in exactly 3.2. A CI job on ubuntu-22.04 (tmux 3.2a) runs the tests with `continue-on-error`: a failure there is a hint, not a bug, until a 3.2 user reports one. GitHub will likely retire that runner around April 2027.
+  Other versions may differ in what weaver reads back: tmux 3.4 prints a `\` before some `$` (see `verbatim` in `internal/session/infra/tmux.go`), and another version may not, or may escape more. Older than 3.2 fails for sure: restoration needs `new-window -b`, which arrived in 3.2.
 - **Ignored**, macOS only: CI builds only for Linux, although darwin binaries ship.
 
 ## Test gaps
