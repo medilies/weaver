@@ -61,7 +61,8 @@ neither (`$ █`). In a small terminal the panes are listed instead.
 | --- | --- |
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
-| / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select, enter keeps the filter for the keys below and esc clears it |
+| click | select the project clicked in the list, or the window whose tab is clicked; on a key shown at the bottom, or on ← or → beside the tabs, do what the key does; on the kept filter, edit it again as / does |
+| / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project and ← → a window, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
 | e | edit its config, like `weave edit <project>` |
@@ -70,7 +71,8 @@ neither (`$ █`). In a small terminal the panes are listed instead.
 | q or esc | quit (esc clears the filter first) |
 
 After freezing, editing, killing or deleting, the list comes back,
-unfiltered, with what happened.
+unfiltered, with what happened. Since the browser takes the mouse, most
+terminals select text with shift held.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it, from a `display-popup` too). When the session isn't

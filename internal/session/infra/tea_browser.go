@@ -58,11 +58,12 @@ var (
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
-// projects the filter shows, the window is the selected project's one
-// drawn.
+// projects the filter shows, top is the first the list shows, and the
+// window is the selected project's one drawn.
 type browser struct {
 	projects      []app.ProjectOverview
 	cursor        int
+	top           int
 	window        int
 	filter        string
 	filtering     bool // typing the filter
@@ -112,6 +113,19 @@ func (m browser) reselected(before domain.ProjectName) browser {
 	return m
 }
 
+// windowMoved is m drawing the window by windows right of the one it
+// draws, or left when by is negative, staying in the selected project's.
+func (m browser) windowMoved(by int) browser {
+	m.window = max(min(m.window+by, m.windowsShown()-1), 0)
+	return m
+}
+
+// drawn is the index of the window m draws of windows, the selected
+// project's.
+func (m browser) drawn(windows []domain.WindowPlan) int {
+	return min(m.window, len(windows)-1)
+}
+
 // windowsShown is how many windows the selected project has.
 func (m browser) windowsShown() int {
 	shown := m.shown()
@@ -125,10 +139,23 @@ func (m browser) Init() tea.Cmd {
 	return nil
 }
 
+// Update is m after msg, its list scrolled to keep the cursor in view.
 func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	next := model.(browser)
+	_, _, height, _ := next.frame()
+	next.top = next.firstShown(height)
+	return next, cmd
+}
+
+func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+	case tea.MouseClickMsg:
+		if msg.Button == tea.MouseLeft {
+			return m.clicked(msg.X, msg.Y)
+		}
 	case tea.KeyPressMsg:
 		if m.filtering && msg.String() != "ctrl+c" {
 			return m.typeFilter(msg), nil
@@ -147,9 +174,9 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m = m.moved(1)
 	case "left":
-		m.window = max(m.window-1, 0)
+		m = m.windowMoved(-1)
 	case "right":
-		m.window = max(min(m.window+1, m.windowsShown()-1), 0)
+		m = m.windowMoved(1)
 	case "/":
 		m.filtering = true
 	case "esc":
@@ -174,28 +201,41 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// typeFilter edits the filter as it is typed: enter keeps it for the
-// keys to act on what it shows, esc clears it.
+// typeFilter edits the filter as it is typed.
 func (m browser) typeFilter(msg tea.KeyPressMsg) browser {
-	switch msg.String() {
-	case "up":
-		return m.moved(-1)
-	case "down":
-		return m.moved(1)
-	case "enter":
-		m.filtering = false
-		return m
-	case "esc":
-		m.filtering = false
-		return m.filtered("")
-	case "backspace":
-		runes := []rune(m.filter)
-		return m.filtered(string(runes[:max(len(runes)-1, 0)]))
+	if next, ok := m.filterKey(msg.String()); ok {
+		return next
 	}
 	if msg.Text == "" {
 		return m
 	}
 	return m.filtered(m.filter + msg.Text)
+}
+
+// filterKey is m after key, pressed while the filter is typed: the
+// arrows select, enter keeps the filter for the keys to act on what it
+// shows, esc clears it. False when key types text instead.
+func (m browser) filterKey(key string) (browser, bool) {
+	switch key {
+	case "up":
+		return m.moved(-1), true
+	case "down":
+		return m.moved(1), true
+	case "left":
+		return m.windowMoved(-1), true
+	case "right":
+		return m.windowMoved(1), true
+	case "enter":
+		m.filtering = false
+		return m, true
+	case "esc":
+		m.filtering = false
+		return m.filtered(""), true
+	case "backspace":
+		runes := []rune(m.filter)
+		return m.filtered(string(runes[:max(len(runes)-1, 0)])), true
+	}
+	return m, false
 }
 
 // moved is m with the cursor by up to by projects down, or up when by is
@@ -213,7 +253,93 @@ func (m browser) moved(by int) browser {
 func (m browser) View() tea.View {
 	view := tea.NewView(m.render())
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
+}
+
+// hotspot is the cells of a line a click acts on: a key told, doing
+// what the key does, or, without a key, a window's tab, selecting it.
+type hotspot struct {
+	from, to int
+	key      string
+	window   int
+}
+
+// hotspotAt is the hotspot of spots covering column x, if any.
+func hotspotAt(spots []hotspot, x int) (hotspot, bool) {
+	for _, spot := range spots {
+		if x >= spot.from && x < spot.to {
+			return spot, true
+		}
+	}
+	return hotspot{}, false
+}
+
+// cut is line cut to width cells, "…" in place of the rest, and the
+// spots on it clipped to what is still shown: the "…" acts on nothing.
+func cut(line string, spots []hotspot, width int) (string, []hotspot) {
+	limit := width
+	if ansi.StringWidth(line) > width {
+		limit = max(width-1, 0)
+	}
+	var kept []hotspot
+	for _, spot := range spots {
+		if spot.from < limit {
+			spot.to = min(spot.to, limit)
+			kept = append(kept, spot)
+		}
+	}
+	return ansi.Truncate(line, width, "…"), kept
+}
+
+// clicked is m after a click at (x, y): on a project or a window's tab,
+// selecting it as the arrow keys do, or on a key told, doing what the
+// key does.
+func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
+	shown := m.shown()
+	notice, list, height, width := m.frame()
+	listWidth := lipgloss.Width(list)
+	if y == height+lipgloss.Height(notice) {
+		_, spots := m.keys()
+		if spot, ok := hotspotAt(spots, x); ok {
+			return m.act(spot)
+		}
+		return m, nil
+	}
+	if len(shown) == 0 || y >= height {
+		return m, nil
+	}
+	if x < listWidth-1 { // left of the list's border
+		if i := m.firstShown(height) + y; i < len(shown) {
+			return m.moved(i - m.cursor), nil
+		}
+		return m, nil
+	}
+	project := shown[m.cursor]
+	windows := project.Project().Plan().Windows()
+	if len(windows) == 0 || y != tabsRow(detailsTop(project, width)) {
+		return m, nil
+	}
+	_, spots := tabs(project, windows, m.drawn(windows), width)
+	if spot, ok := hotspotAt(spots, x-listWidth-detailsPadding); ok {
+		return m.act(spot)
+	}
+	return m, nil
+}
+
+// act is m after spot is clicked: what its key does, or its window
+// selected.
+func (m browser) act(spot hotspot) (tea.Model, tea.Cmd) {
+	if spot.key == "" {
+		m.window = spot.window
+		return m, nil
+	}
+	if m.filtering {
+		if next, ok := m.filterKey(spot.key); ok {
+			return next, nil
+		}
+	}
+	return m.press(spot.key)
 }
 
 // render lays out the list beside the details, above the notice and the
@@ -222,32 +348,63 @@ func (m browser) render() string {
 	if m.width == 0 {
 		return "" // until the terminal's size is known
 	}
-	notice := lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
-	keys := m.keys()
-	height := max(m.height-lipgloss.Height(notice)-1, 1)
-
-	list := lipgloss.NewStyle().Height(height).MaxHeight(height).
-		Border(lipgloss.NormalBorder(), false, true, false, false).Render(m.list(height))
-	width := max(m.width-lipgloss.Width(list)-1, 1)
-	details := lipgloss.NewStyle().PaddingLeft(1).Width(width + 1).
+	notice, list, height, width := m.frame()
+	keysLine, _ := m.keys()
+	details := lipgloss.NewStyle().PaddingLeft(detailsPadding).Width(width + detailsPadding).
 		Height(height).MaxHeight(height).Render(m.details(width, height))
-	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details), notice, keys)
+	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details), notice, keysLine)
 }
 
+// frame is the notice and the list with its border, as render lays them
+// out, the height they leave the list and the details above the notice
+// and the keys, and the width the details' content has beside the list.
+func (m browser) frame() (notice, list string, height, width int) {
+	notice = lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
+	height = max(m.height-lipgloss.Height(notice)-1, 1)
+	list = lipgloss.NewStyle().Height(height).MaxHeight(height).
+		Border(lipgloss.NormalBorder(), false, true, false, false).Render(m.list(height))
+	return notice, list, height, max(m.width-lipgloss.Width(list)-detailsPadding, 1)
+}
+
+// detailsPadding is the cells between the list's border and the details.
+const detailsPadding = 1
+
+// keyTold is a key the keys line tells, and what it does.
+type keyTold struct {
+	key, does string
+}
+
+var (
+	typingKeys   = []keyTold{{"enter", "keep"}, {"esc", "clear"}}
+	filteredKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
+	browsingKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
+)
+
 // keys are the filter being typed and what its keys do, or the filter
-// kept and the keys acting on what it shows, cut to the width. ←→ is
-// told beside the tabs.
-func (m browser) keys() string {
-	var keys string
+// kept and the keys acting on what it shows, cut to the width; with the
+// cells each key told covers, and the filter kept, which / edits again,
+// to click them. ←→ is told beside the tabs.
+func (m browser) keys() (string, []hotspot) {
+	var line string
+	var spots []hotspot
+	told := browsingKeys
 	switch {
 	case m.filtering:
-		keys = "/" + m.filter + keysStyle.Render("▏ enter keep · esc clear")
+		line, told = "/"+m.filter+keysStyle.Render("▏ "), typingKeys
 	case m.filter != "":
-		keys = "/" + m.filter + keysStyle.Render(" · enter open · f freeze · e edit · x kill · d delete · esc clear · q quit")
-	default:
-		keys = keysStyle.Render("enter open · f freeze · e edit · x kill · d delete · / filter · q quit")
+		spots = append(spots, hotspot{from: 0, to: ansi.StringWidth("/" + m.filter), key: "/"})
+		line, told = "/"+m.filter+keysStyle.Render(" · "), filteredKeys
 	}
-	return ansi.Truncate(keys, m.width, "…")
+	for i, k := range told {
+		if i > 0 {
+			line += keysStyle.Render(" · ")
+		}
+		text := k.key + " " + k.does
+		from := ansi.StringWidth(line)
+		spots = append(spots, hotspot{from: from, to: from + ansi.StringWidth(text), key: k.key})
+		line += keysStyle.Render(text)
+	}
+	return cut(line, spots, m.width)
 }
 
 // list is the shown projects' names and dimmed roots, the selected one
@@ -262,7 +419,7 @@ func (m browser) list(height int) string {
 	}
 	// " ● name root " and the border fit in half the width.
 	rootWidth = min(rootWidth, max(m.width/2-nameWidth-6, 0))
-	first := max(m.cursor-height+1, 0) // scrolled down to the cursor
+	first := m.firstShown(height)
 	lines := make([]string, 0, len(shown)-first)
 	for i, project := range shown[first:] {
 		mark := " "
@@ -278,6 +435,13 @@ func (m browser) list(height int) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+// firstShown is the first project the list shows in height lines: top,
+// unless the cursor left the view, which scrolls the list as little as
+// brings it back, or the list would end before the last line.
+func (m browser) firstShown(height int) int {
+	return max(min(m.top, m.cursor, len(m.shown())-height), m.cursor-height+1, 0)
 }
 
 // shortened is path cut from the left to fit width cells, "…" taking the
@@ -315,6 +479,34 @@ func (m browser) details(width, height int) string {
 		return fmt.Sprintf("No project's name contains %q.", m.filter)
 	}
 	project := shown[m.cursor]
+	top := detailsTop(project, width)
+	windows := project.Project().Plan().Windows()
+	if len(windows) == 0 {
+		return top
+	}
+	index := m.drawn(windows)
+	window, root := windows[index], project.Project().Root().String()
+	left := height - tabsRow(top) - 1 // the tabs
+	var panes []string
+	if width < minDrawingWidth || left < minDrawingHeight {
+		panes = paneList(window, root, width, left)
+	} else {
+		// A session opens at the browser's size, less tmux's status line.
+		panes = drawing(window, root, m.width, max(m.height-1, 1), width, left)
+	}
+	tabLine, _ := tabs(project, windows, index, width)
+	return top + "\n\n" + tabLine + "\n" + strings.Join(panes, "\n")
+}
+
+// tabsRow is the details' line the tabs are on, below top and a blank
+// line.
+func tabsRow(top string) int {
+	return lipgloss.Height(top) + 1
+}
+
+// detailsTop is project's config file, then its summary or why its
+// config can't be read, wrapped to width.
+func detailsTop(project app.ProjectOverview, width int) string {
 	title := project.Config().File
 	if title == "" {
 		title = project.Name().String()
@@ -323,29 +515,15 @@ func (m browser) details(width, height int) string {
 	if err := project.Problem(); err != nil {
 		header = problemStyle.Render(err.Error())
 	}
-	top := lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
-	windows := project.Project().Plan().Windows()
-	if len(windows) == 0 {
-		return top
-	}
-	index := min(m.window, len(windows)-1)
-	window, root := windows[index], project.Project().Root().String()
-	left := height - lipgloss.Height(top) - 2 // a blank line and the tabs
-	var panes []string
-	if width < minDrawingWidth || left < minDrawingHeight {
-		panes = paneList(window, root, width, left)
-	} else {
-		// A session opens at the browser's size, less tmux's status line.
-		panes = drawing(window, root, m.width, max(m.height-1, 1), width, left)
-	}
-	return top + "\n\n" + tabs(project, windows, index, width) + "\n" + strings.Join(panes, "\n")
+	return lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
 }
 
 // tabs are the names of windows, the selected one highlighted, ○ marking
 // those the project's owned session lacks, and which one of how many is
-// drawn, after ←→ when there are several to switch between. When they don't fit in width, the first ones make way for the
-// selected one.
-func tabs(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) string {
+// drawn, after ←→ when there are several to switch between; with the
+// cells each tab shown and each arrow covers, to click them. When they
+// don't fit in width, the first ones make way for the selected one.
+func tabs(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) (string, []hotspot) {
 	missing := map[domain.WindowName]bool{}
 	for _, name := range project.MissingWindows() {
 		missing[name] = true
@@ -372,9 +550,24 @@ func tabs(project app.ProjectOverview, windows []domain.WindowPlan, selected, wi
 		first++
 		line = "…" + strings.Join(labels[first:], "  ")
 	}
-	line = ansi.Truncate(line, max(width-1-ansi.StringWidth(count), 0), "…")
+	limit := max(width-1-ansi.StringWidth(count), 0)
+	var spots []hotspot
+	from := 0
+	if first > 0 {
+		from = 1 // the "…"
+	}
+	for i := first; i < len(labels); i++ {
+		to := from + ansi.StringWidth(labels[i])
+		spots = append(spots, hotspot{from: from, to: to, window: i})
+		from = to + 2
+	}
+	line, spots = cut(line, spots, limit)
 	gap := max(width-ansi.StringWidth(line)-ansi.StringWidth(count), 1)
-	return line + strings.Repeat(" ", gap) + count
+	if len(windows) > 1 {
+		arrows := ansi.StringWidth(line) + gap
+		spots = append(spots, hotspot{from: arrows, to: arrows + 1, key: "left"}, hotspot{from: arrows + 1, to: arrows + 2, key: "right"})
+	}
+	return line + strings.Repeat(" ", gap) + count, spots
 }
 
 // summary is where the project stands: its running session against its
