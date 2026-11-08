@@ -146,10 +146,43 @@ func TestDrawingAlerts(t *testing.T) {
 		}
 	})
 
-	t.Run("colours only the border of a pane with an alert", func(t *testing.T) {
+	stacked := `      - name: top
+      - name: bottom
+        split: { direction: below }
+`
+
+	t.Run("colours the border of a pane with an alert", func(t *testing.T) {
 		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 81, 20, 21, 4)[1]
-		if !strings.HasPrefix(row, "│ $ █") || strings.HasSuffix(row, "│") {
-			t.Fatalf("got %q, want the left border plain and the right one coloured", row)
+		if want := problemStyle.Render("│"); !strings.HasSuffix(row, want) {
+			t.Fatalf("got %q, want it to end with %q", row, want)
+		}
+	})
+
+	t.Run("leaves plain the border of a pane without one", func(t *testing.T) {
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 81, 20, 21, 4)[1]
+		if !strings.HasPrefix(row, "│ $ █") {
+			t.Fatalf("got %q, want it to start plain", row)
+		}
+	})
+
+	t.Run("leaves plain what a pane with an alert shows inside", func(t *testing.T) {
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 81, 20, 21, 4)[1]
+		if !strings.Contains(row, "│ $ █     "+problemStyle.Render("│")) {
+			t.Fatalf("got %q, want the right pane's prompt plain", row)
+		}
+	})
+
+	t.Run("leaves plain a neighbour's name on a shared border", func(t *testing.T) {
+		row := drawing(firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, 81, 20, 21, 7)[3]
+		if want := problemStyle.Render("─") + " bottom "; !strings.Contains(row, want) {
+			t.Fatalf("got %q, want the border red and the name bottom plain: %q", row, want)
+		}
+	})
+
+	t.Run("colours a shared border with the worse alert", func(t *testing.T) {
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{dirAlert, programAlert}, 81, 20, 21, 4)[1]
+		if want := " $ █     " + problemStyle.Render("│") + " $ █"; !strings.Contains(row, want) {
+			t.Fatalf("got %q, want the shared border red: %q", row, want)
 		}
 	})
 

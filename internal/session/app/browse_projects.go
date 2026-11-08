@@ -98,11 +98,13 @@ type paneAt struct {
 }
 
 func (w Warning) Error() string {
+	if w.err == nil {
+		return ""
+	}
 	return w.err.Error()
 }
 
-// Unwrap is ErrMissingDirectory or ErrMissingProgram, with the
-// directory or program.
+// Unwrap is ErrMissingDirectory or ErrMissingProgram.
 func (w Warning) Unwrap() error {
 	return errors.Unwrap(w.err)
 }

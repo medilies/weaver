@@ -378,7 +378,11 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		blog, _ := s.browser.last().overview("blog")
-		warning := blog.Warnings()[0]
+		warnings := blog.Warnings()
+		if len(warnings) != 1 {
+			t.Fatalf("got %v, want one warning", warnings)
+		}
+		warning := warnings[0]
 		if !warning.Concerns(windowName(t, "one"), 0) || !warning.Concerns(windowName(t, "two"), 0) {
 			t.Fatalf("got %v, want it to concern the first pane of windows one and two", warning)
 		}
@@ -409,8 +413,12 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		overview, _ := s.browser.last().overview("blog")
-		if warning := overview.Warnings()[0]; warning.Concerns(windowName(t, "main"), 1) {
-			t.Fatalf("got %v concerning the shell pane, want only the docs pane", warning)
+		warnings := overview.Warnings()
+		if len(warnings) != 1 {
+			t.Fatalf("got %v, want one warning", warnings)
+		}
+		if warnings[0].Concerns(windowName(t, "main"), 1) {
+			t.Fatalf("got %v concerning the shell pane, want only the docs pane", warnings[0])
 		}
 	})
 

@@ -146,8 +146,11 @@ func drawing(window domain.WindowPlan, root string, alerts []alert, cols, rows, 
 		}
 	}
 	for i, f := range frames {
-		if a := alertOf(alerts, i); a != noAlert {
+		// A box scaled too small to show is left alone: colouring it would
+		// colour the boxes it collapsed into.
+		if a := alertOf(alerts, i); a != noAlert && f.right-f.left >= 2 && f.bottom-f.top >= 2 {
 			grid.alert(f.left, f.top, f.right, f.bottom, a)
+			grid.alertCell(f.left+2, f.top, a) // the title, if written
 		}
 	}
 	return grid.rows()
@@ -302,21 +305,30 @@ func (g grid) write(x, y int, text string, width int) {
 	if cells == 0 {
 		return
 	}
-	g.cells[y][x] = text
-	for i := x + 1; i < x+cells; i++ {
+	for i := x; i < x+cells; i++ {
 		g.cells[y][i] = ""
+		g.joins[y][i] = 0 // text, no longer border
 	}
+	g.cells[y][x] = text
 }
 
 // alert colours the border of the box from (left, top) to (right,
-// bottom) as a, unless a worse alert coloured it.
+// bottom) as a, unless a worse alert coloured it, but not the text
+// written over it, such as a neighbour's title.
 func (g grid) alert(left, top, right, bottom int, a alert) {
 	for y := max(top, 0); y <= bottom && y < len(g.alerts); y++ {
 		for x := max(left, 0); x <= right && x < len(g.alerts[y]); x++ {
-			if y == top || y == bottom || x == left || x == right {
+			if (y == top || y == bottom || x == left || x == right) && g.joins[y][x] != 0 {
 				g.alerts[y][x] = max(g.alerts[y][x], a)
 			}
 		}
+	}
+}
+
+// alertCell colours the text written at (x, y) as a, if any.
+func (g grid) alertCell(x, y int, a alert) {
+	if y >= 0 && y < len(g.cells) && x >= 0 && x < len(g.cells[y]) && g.joins[y][x] == 0 && g.cells[y][x] != "" {
+		g.alerts[y][x] = max(g.alerts[y][x], a)
 	}
 }
 
