@@ -409,7 +409,8 @@ func (m browser) keys() (string, []hotspot) {
 
 // list is the shown projects' names and dimmed roots, the selected one
 // highlighted and kept in view, and a mark for those whose session runs.
-// It takes at most half the width, cutting roots short from the left.
+// It takes at most half the width, cutting roots short from the left,
+// and keeps its width when the filter shows no project.
 func (m browser) list(height int) string {
 	shown := m.shown()
 	nameWidth, rootWidth := 0, 0 // of all projects, so filtering keeps the column still
@@ -434,7 +435,10 @@ func (m browser) list(height int) string {
 			lines = append(lines, name+rootStyle.Render(path))
 		}
 	}
-	return strings.Join(lines, "\n")
+	if len(m.projects) == 0 {
+		return ""
+	}
+	return lipgloss.NewStyle().Width(nameWidth + rootWidth + 5).Render(strings.Join(lines, "\n"))
 }
 
 // firstShown is the first project the list shows in height lines: top,
