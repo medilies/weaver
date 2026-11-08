@@ -193,3 +193,51 @@ func (p Project) Before() []Command {
 func (p Project) Windows() []Window {
 	return slices.Clone(p.windows)
 }
+
+// AddingWindow is the project with window opened last.
+func (p Project) AddingWindow(window Window) (Project, error) {
+	return p.WithWindows(append(p.Windows(), window)...)
+}
+
+// ReplacingWindow is the project with the window at index replaced, as
+// when its panes change.
+func (p Project) ReplacingWindow(index int, window Window) (Project, error) {
+	if err := p.checkWindowIndex(index); err != nil {
+		return Project{}, err
+	}
+	windows := p.Windows()
+	windows[index] = window
+	return p.WithWindows(windows...)
+}
+
+// WithoutWindow is the project without the window at index. A project
+// keeps at least one window.
+func (p Project) WithoutWindow(index int) (Project, error) {
+	if err := p.checkWindowIndex(index); err != nil {
+		return Project{}, err
+	}
+	if len(p.windows) == 1 {
+		return Project{}, ErrLastWindow
+	}
+	return p.WithWindows(slices.Delete(p.Windows(), index, index+1)...)
+}
+
+// MovingWindow is the project with the window at from moved to to, the
+// others shifting to make room.
+func (p Project) MovingWindow(from, to int) (Project, error) {
+	if err := p.checkWindowIndex(from); err != nil {
+		return Project{}, err
+	}
+	if err := p.checkWindowIndex(to); err != nil {
+		return Project{}, err
+	}
+	window := p.windows[from]
+	return p.WithWindows(slices.Insert(slices.Delete(p.Windows(), from, from+1), to, window)...)
+}
+
+func (p Project) checkWindowIndex(index int) error {
+	if index < 0 || index >= len(p.windows) {
+		return fmt.Errorf("%w: #%d of %d", ErrWindowNotFound, index+1, len(p.windows))
+	}
+	return nil
+}

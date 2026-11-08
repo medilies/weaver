@@ -59,6 +59,16 @@ var (
 	// ErrDuplicateWindowName is returned when two windows of a project
 	// share a name.
 	ErrDuplicateWindowName = errors.New("window names must be unique within a project")
+	// ErrPaneNotFound is returned when changing a pane a window doesn't
+	// have.
+	ErrPaneNotFound = errors.New("no such pane in the window")
+	// ErrWindowNotFound is returned when changing a window a project
+	// doesn't have.
+	ErrWindowNotFound = errors.New("no such window in the project")
+	// ErrLastPane is returned when removing a window's only pane.
+	ErrLastPane = errors.New("a window keeps at least one pane")
+	// ErrLastWindow is returned when removing a project's only window.
+	ErrLastWindow = errors.New("a project keeps at least one window")
 )
 
 var (
@@ -92,6 +102,10 @@ var (
 	// ErrUnknownGridPane is returned when a grid names a pane its window
 	// doesn't have.
 	ErrUnknownGridPane = errors.New("the grid names a pane this window doesn't have")
+	// ErrChangingGridPanes is returned when adding, removing, moving,
+	// renaming or re-splitting a pane of a window laid out by a grid: its
+	// grid places them.
+	ErrChangingGridPanes = errors.New("a window laid out by a grid can't add, remove, move, rename or re-split its panes")
 )
 
 var (

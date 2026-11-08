@@ -124,3 +124,102 @@ func TestProjectWindows(t *testing.T) {
 		}
 	})
 }
+
+func TestChangingProjectWindows(t *testing.T) {
+	shopProject := func(t *testing.T) domain.Project {
+		t.Helper()
+		p, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
+			WithWindows(window(t, "api"), window(t, "app"), window(t, "db"))
+		if err != nil {
+			t.Fatalf("WithWindows: %v", err)
+		}
+		return p
+	}
+	names := func(p domain.Project) []string {
+		var out []string
+		for _, w := range p.Windows() {
+			out = append(out, w.Name().String())
+		}
+		return out
+	}
+
+	t.Run("adds a window last", func(t *testing.T) {
+		added, err := shopProject(t).AddingWindow(window(t, "repo"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := names(added), []string{"api", "app", "db", "repo"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("rejects adding a window named as another", func(t *testing.T) {
+		if _, err := shopProject(t).AddingWindow(window(t, "db")); !errors.Is(err, domain.ErrDuplicateWindowName) {
+			t.Fatalf("got %v, want ErrDuplicateWindowName", err)
+		}
+	})
+
+	t.Run("replaces a window", func(t *testing.T) {
+		replaced, err := shopProject(t).ReplacingWindow(1, window(t, "web"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := names(replaced), []string{"api", "web", "db"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("removes a window", func(t *testing.T) {
+		removed, err := shopProject(t).WithoutWindow(0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := names(removed), []string{"app", "db"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("rejects removing a project's only window", func(t *testing.T) {
+		project := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop"))
+		if _, err := project.WithoutWindow(0); !errors.Is(err, domain.ErrLastWindow) {
+			t.Fatalf("got %v, want ErrLastWindow", err)
+		}
+	})
+
+	t.Run("moves a window, the others shifting", func(t *testing.T) {
+		moved, err := shopProject(t).MovingWindow(2, 0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got, want := names(moved), []string{"db", "api", "app"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("keeps the project's env and before commands", func(t *testing.T) {
+		env, err := domain.NewEnv(map[string]string{"APP_ENV": "dev"})
+		if err != nil {
+			t.Fatalf("NewEnv: %v", err)
+		}
+		project := shopProject(t).WithEnv(env).RunningFirst(command(t, "nvm use"))
+		removed, err := project.WithoutWindow(0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(removed.Env().Vars()) != 1 || len(removed.Before()) != 1 {
+			t.Fatalf("got %d variables and %d before commands, want 1 and 1", len(removed.Env().Vars()), len(removed.Before()))
+		}
+	})
+
+	for name, change := range map[string]func(domain.Project) (domain.Project, error){
+		"replacing": func(p domain.Project) (domain.Project, error) { return p.ReplacingWindow(3, window(t, "web")) },
+		"removing":  func(p domain.Project) (domain.Project, error) { return p.WithoutWindow(-1) },
+		"moving to": func(p domain.Project) (domain.Project, error) { return p.MovingWindow(0, 3) },
+	} {
+		t.Run("rejects "+name+" a window the project doesn't have", func(t *testing.T) {
+			if _, err := change(shopProject(t)); !errors.Is(err, domain.ErrWindowNotFound) {
+				t.Fatalf("got %v, want ErrWindowNotFound", err)
+			}
+		})
+	}
+}

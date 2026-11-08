@@ -33,28 +33,14 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 8 | Changing panes in `domain` | domain | M | |
-| 9 | The config form | form | L | 8 |
+| 9 | The config form | form | L | |
 | 10 | The layout in the config form | form | M | 9 |
 | 11 | Freeze through the config form | form | M | 9, 10 |
 
 ```mermaid
 flowchart LR
-    T8[8 changing panes] --> T9[9 config form]
-    T9 --> T10[10 layout in the form] --> T11[11 freeze through the form]
+    T9[9 config form] --> T10[10 layout in the form] --> T11[11 freeze through the form]
 ```
-
-## 8. Changing panes in `domain`
-
-The config form (#9, #10) adds, removes, reorders and re-splits panes
-and windows. `Window` can do none of that yet: it has `NewWindow`,
-`RunningFirst`, `In`, `Rebased` and getters. These methods must keep a
-window's `dir`, and whether a pane sets its own. The changes are rules,
-not form code:
-removing `back` while `front` splits it must re-target `front` or
-refuse, and moving a pane must keep every split pointing at an earlier
-one. They go into `domain`, as methods returning a new `Window` or
-`Project` and an error, with tests, before the config form uses them.
 
 ## 9. The config form
 
@@ -143,7 +129,9 @@ own control instead:
   a `ProjectDraft` built from an existing project, and the use case
   saves through `ProjectRegistry.Save`. Esc with changes asks before
   discarding them, as editing does today. The structural changes are
-  #8's domain methods; the form only asks for them.
+  the domain's: `Window.AddingPane`, `ReplacingPane`, `WithoutPane`,
+  `MovingPane` and their `Project` counterparts for windows. The form
+  only asks for them.
 - **Undo is cheap**: projects are immutable values, so undo is a stack
   of earlier `Project`s. `ctrl+s` can show the YAML diff before writing.
 - **Comments are lost.** `Save` writes the config through
@@ -673,7 +661,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 - The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves
   #10, and its border drawing the live preview.
-- #8's domain methods serve #9, #10 and #11.
+- The domain's methods changing panes and windows serve #9, #10 and
+  #11.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.
 - The idle-shell check (`foreground`) serves the exited-command warning

@@ -297,3 +297,63 @@ func TestNewWindowHasNoGrid(t *testing.T) {
 		t.Fatal("got a grid, want none")
 	}
 }
+
+func TestChangingGridWindowPanes(t *testing.T) {
+	gridWindow := func(t *testing.T) domain.Window {
+		t.Helper()
+		w, err := domain.NewGridWindow(windowName(t, "w"), grid(t, nil, nil, []string{"a", "b"}), named(t, "a", "b")...)
+		if err != nil {
+			t.Fatalf("NewGridWindow: %v", err)
+		}
+		return w
+	}
+
+	t.Run("replaces a pane keeping its name and split", func(t *testing.T) {
+		w := gridWindow(t)
+		replaced, err := w.ReplacingPane(1, w.Panes()[1].Running(command(t, "task dev")))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, gridded := replaced.Grid(); !gridded {
+			t.Fatal("lost its grid")
+		}
+		if cmd, _ := replaced.Panes()[1].Startup().Command(); cmd.String() != "task dev" {
+			t.Fatalf("got command %q, want task dev", cmd)
+		}
+		if got, want := splits(replaced), splits(w); !slices.Equal(got, want) {
+			t.Fatalf("got %q, want the grid's %q", got, want)
+		}
+	})
+
+	t.Run("rejects renaming a pane", func(t *testing.T) {
+		w := gridWindow(t)
+		if _, err := w.ReplacingPane(1, w.Panes()[1].Named(paneName(t, "c"))); !errors.Is(err, domain.ErrChangingGridPanes) {
+			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		}
+	})
+
+	t.Run("rejects re-splitting a pane", func(t *testing.T) {
+		w := gridWindow(t)
+		if _, err := w.ReplacingPane(1, w.Panes()[1].Splitting(split(t, 0, domain.Below, "50%"))); !errors.Is(err, domain.ErrChangingGridPanes) {
+			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		}
+	})
+
+	t.Run("rejects adding a pane", func(t *testing.T) {
+		if _, err := gridWindow(t).AddingPane(named(t, "c")[0].Splitting(split(t, 0, domain.Below, "50%"))); !errors.Is(err, domain.ErrChangingGridPanes) {
+			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		}
+	})
+
+	t.Run("rejects removing a pane", func(t *testing.T) {
+		if _, err := gridWindow(t).WithoutPane(1); !errors.Is(err, domain.ErrChangingGridPanes) {
+			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		}
+	})
+
+	t.Run("rejects moving a pane", func(t *testing.T) {
+		if _, err := gridWindow(t).MovingPane(1, 0); !errors.Is(err, domain.ErrChangingGridPanes) {
+			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		}
+	})
+}

@@ -605,3 +605,145 @@ func (w Window) Rebased(from, to string) Window {
 	}
 	return w
 }
+
+// AddingPane is the window with pane added last: it splits one of the
+// window's panes. An unnamed pane gets the first free default name,
+// since a window with several panes needs one for each border.
+func (w Window) AddingPane(pane Pane) (Window, error) {
+	if w.gridded {
+		return Window{}, ErrChangingGridPanes
+	}
+	return w.withPanes(append(slices.Clone(w.panes), pane))
+}
+
+// ReplacingPane is the window with the pane at index replaced, as when
+// one of its fields changes or it splits differently. Unnamed among
+// several, it gets the first free default name. In a window laid out by
+// a grid, the pane keeps its name and split: the grid gives them.
+func (w Window) ReplacingPane(index int, pane Pane) (Window, error) {
+	if err := w.checkPaneIndex(index); err != nil {
+		return Window{}, err
+	}
+	if old := w.panes[index]; w.gridded && (pane.name != old.name || pane.split != old.split || pane.splits != old.splits) {
+		return Window{}, ErrChangingGridPanes
+	}
+	panes := slices.Clone(w.panes)
+	panes[index] = pane
+	return w.withPanes(panes)
+}
+
+// WithoutPane is the window with the pane at index removed, its space
+// going back to the pane it split: the panes splitting it split that
+// pane instead. Without the first pane, the second fills the window and
+// the panes splitting the first split the second. A window keeps at
+// least one pane.
+func (w Window) WithoutPane(index int) (Window, error) {
+	if err := w.checkPaneIndex(index); err != nil {
+		return Window{}, err
+	}
+	if w.gridded {
+		return Window{}, ErrChangingGridPanes
+	}
+	if len(w.panes) == 1 {
+		return Window{}, ErrLastPane
+	}
+	panes := slices.Clone(w.panes)
+	heir := panes[index].split.of
+	if index == 0 {
+		heir = 1
+		panes[1].split, panes[1].splits = Split{}, false
+	}
+	for i := range panes {
+		if panes[i].splits && panes[i].split.of == index {
+			panes[i].split.of = heir
+		}
+	}
+	order := slices.Delete(seq(len(panes)), index, index+1)
+	return w.withPanes(reorder(panes, order))
+}
+
+// MovingPane is the window with the pane at from moved to to, the others
+// shifting to make room. Moving changes the order tmux creates the panes
+// in, so a pane can't move before the pane it splits, nor after a pane
+// that splits it. The first pane, which fills the window, stays first.
+func (w Window) MovingPane(from, to int) (Window, error) {
+	if err := w.checkPaneIndex(from); err != nil {
+		return Window{}, err
+	}
+	if err := w.checkPaneIndex(to); err != nil {
+		return Window{}, err
+	}
+	if w.gridded {
+		return Window{}, ErrChangingGridPanes
+	}
+	order := slices.Insert(slices.Delete(seq(len(w.panes)), from, from+1), to, from)
+	return w.withPanes(reorder(w.panes, order))
+}
+
+// nameUnnamed gives each unnamed pane the first default name no pane
+// has: "pane 1", "pane 2"…
+func nameUnnamed(panes []Pane) []Pane {
+	out := slices.Clone(panes)
+	taken := make(map[PaneName]bool, len(out))
+	for _, pane := range out {
+		taken[pane.name] = true
+	}
+	next := 0
+	for i := range out {
+		for out[i].name.IsZero() {
+			if name := DefaultPaneName(next); !taken[name] {
+				out[i].name, taken[name] = name, true
+			}
+			next++
+		}
+	}
+	return out
+}
+
+// reorder lists panes[order[0]], panes[order[1]]…, each split pointing
+// at its pane's new index.
+func reorder(panes []Pane, order []int) []Pane {
+	index := make(map[int]int, len(order))
+	for i, old := range order {
+		index[old] = i
+	}
+	out := make([]Pane, len(order))
+	for i, old := range order {
+		out[i] = panes[old]
+		if out[i].splits {
+			out[i].split.of = index[out[i].split.of]
+		}
+	}
+	return out
+}
+
+// seq is 0, 1… n-1.
+func seq(n int) []int {
+	out := make([]int, n)
+	for i := range out {
+		out[i] = i
+	}
+	return out
+}
+
+func (w Window) checkPaneIndex(index int) error {
+	if index < 0 || index >= len(w.panes) {
+		return fmt.Errorf("%w: #%d of %d", ErrPaneNotFound, index+1, len(w.panes))
+	}
+	return nil
+}
+
+// withPanes is the window holding panes instead, checked as NewWindow
+// checks them, keeping its dir, before commands and grid. Among several
+// panes, the unnamed ones get the first free default names.
+func (w Window) withPanes(panes []Pane) (Window, error) {
+	if len(panes) > 1 {
+		panes = nameUnnamed(panes)
+	}
+	checked, err := NewWindow(w.name, panes...)
+	if err != nil {
+		return Window{}, err
+	}
+	w.panes = checked.panes
+	return w, nil
+}
