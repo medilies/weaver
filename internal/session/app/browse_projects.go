@@ -25,7 +25,7 @@ type ProjectOverview struct {
 	session    domain.RunningSession
 	found      bool
 	missing    []domain.WindowName
-	warnings   []error
+	warnings   []Warning
 }
 
 // Name is the project's name.
@@ -75,12 +75,42 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 
 // Warnings are what would likely go wrong in the panes opening the
 // project creates: a directory missing, wrapping ErrMissingDirectory, or
-// a command whose program can't be found, wrapping ErrMissingProgram.
+// a command whose program can't be found, wrapping ErrMissingProgram;
+// each once, however many panes it concerns.
 // Opening a project that isn't running
 // creates every pane, an owned session the missing windows' panes, and a
 // session weaver didn't start none.
-func (o ProjectOverview) Warnings() []error {
+func (o ProjectOverview) Warnings() []Warning {
 	return slices.Clone(o.warnings)
+}
+
+// Warning is something opening a project would likely fail on, and the
+// panes it concerns. Its message names the first of them.
+type Warning struct {
+	err   error
+	panes []paneAt
+}
+
+// paneAt is a pane by its window and its index in it, from 0.
+type paneAt struct {
+	window domain.WindowName
+	pane   int
+}
+
+func (w Warning) Error() string {
+	return w.err.Error()
+}
+
+// Unwrap is ErrMissingDirectory or ErrMissingProgram, with the
+// directory or program.
+func (w Warning) Unwrap() error {
+	return errors.Unwrap(w.err)
+}
+
+// Concerns reports whether the warning is about the pane at index (from
+// 0) of window.
+func (w Warning) Concerns(window domain.WindowName, pane int) bool {
+	return slices.Contains(w.panes, paneAt{window: window, pane: pane})
 }
 
 // WindowCount is how many of the configured windows the running session
@@ -226,39 +256,57 @@ func (uc BrowseProjects) restoration(overview *ProjectOverview) []domain.WindowP
 	return opening
 }
 
-// warnings are what would likely go wrong in the panes of windows.
-// Directories under a missing root aren't checked: the summary already
-// says the root is gone. Nor are the programs of panes whose before
-// commands or PATH may change what runs, as a version manager does.
-func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.WindowPlan) ([]error, error) {
+// warnings are what would likely go wrong in the panes of windows, each
+// warned once with every pane it concerns. Directories under a missing
+// root aren't checked: the summary already says the root is gone. Nor
+// are the programs of panes whose before commands or PATH may change
+// what runs, as a version manager does.
+func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.WindowPlan) ([]Warning, error) {
 	project := overview.project
-	seen := map[string]bool{}
-	var warnings []error
+	// What is checked, a directory or a program, and the warning about it,
+	// or -1 when it is fine.
+	checked := map[string]int{}
+	var warnings []Warning
+	warn := func(key string, at paneAt, failed func() bool, err func() error) {
+		i, seen := checked[key]
+		switch {
+		case !seen && failed():
+			checked[key] = len(warnings)
+			warnings = append(warnings, Warning{err: err(), panes: []paneAt{at}})
+		case !seen:
+			checked[key] = -1
+		case i >= 0:
+			warnings[i].panes = append(warnings[i].panes, at)
+		}
+	}
 	for _, window := range windows {
-		for _, pane := range window.Panes() {
+		for index, pane := range window.Panes() {
+			at := paneAt{window: window.Name(), pane: index}
 			exists, err := uc.workspace.Exists(pane.Dir())
 			if err != nil {
 				return nil, err
 			}
 			if !exists {
-				if !seen[pane.Dir()] && (overview.rootExists || !project.Root().Contains(pane.Dir())) {
-					warnings = append(warnings, fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingDirectory, pane.Dir()))
-				}
-				seen[pane.Dir()] = true
+				warn("dir\x00"+pane.Dir(), at, func() bool {
+					return overview.rootExists || !project.Root().Contains(pane.Dir())
+				}, func() error {
+					return fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingDirectory, pane.Dir())
+				})
 				continue
 			}
 			program, ok := runs(pane)
 			if !ok {
 				continue
 			}
-			key := program
+			key := "program\x00" + program
 			if strings.Contains(program, "/") {
-				key = pane.Dir() + "\x00" + program
+				key += "\x00" + pane.Dir()
 			}
-			if !seen[key] && !uc.workspace.Executable(program, pane.Dir()) {
-				warnings = append(warnings, fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingProgram, program))
-			}
-			seen[key] = true
+			warn(key, at, func() bool {
+				return !uc.workspace.Executable(program, pane.Dir())
+			}, func() error {
+				return fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingProgram, program)
+			})
 		}
 	}
 	return warnings, nil

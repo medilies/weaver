@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -493,10 +494,10 @@ func (m browser) details(width, height int) string {
 	left := height - tabsRow(top) - 1 // the tabs
 	var panes []string
 	if width < minDrawingWidth || left < minDrawingHeight {
-		panes = paneList(window, root, width, left)
+		panes = paneList(window, root, alerts(project, window), width, left)
 	} else {
 		// A session opens at the browser's size, less tmux's status line.
-		panes = drawing(window, root, m.width, max(m.height-1, 1), width, left)
+		panes = drawing(window, root, alerts(project, window), m.width, max(m.height-1, 1), width, left)
 	}
 	tabLine, _ := tabs(project, windows, index, width)
 	return top + "\n\n" + tabLine + "\n" + strings.Join(panes, "\n")
@@ -506,6 +507,24 @@ func (m browser) details(width, height int) string {
 // line.
 func tabsRow(top string) int {
 	return lipgloss.Height(top) + 1
+}
+
+// alerts are, by pane, the worst of project's warnings about window's
+// panes: a directory missing before a program not found.
+func alerts(project app.ProjectOverview, window domain.WindowPlan) []alert {
+	panes := make([]alert, len(window.Panes()))
+	for _, warning := range project.Warnings() {
+		a := programAlert
+		if errors.Is(warning, app.ErrMissingDirectory) {
+			a = dirAlert
+		}
+		for i := range panes {
+			if warning.Concerns(window.Name(), i) {
+				panes[i] = max(panes[i], a)
+			}
+		}
+	}
+	return panes
 }
 
 // detailsTop is project's config file, then its summary or why its

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/medilies/weaver/internal/session/domain"
@@ -86,11 +87,27 @@ var borderRunes = map[int]string{
 	joinsDown:  "│",
 }
 
+// alert is the worst warning about a pane, which colours its box.
+type alert int
+
+const (
+	noAlert alert = iota
+	programAlert
+	dirAlert
+)
+
+var alertStyles = map[alert]lipgloss.Style{
+	programAlert: warningStyle,
+	dirAlert:     problemStyle,
+}
+
 // drawing is window's panes drawn as boxes in width×height cells, in the
 // proportions they take in a window of cols×rows. Each box shows what
 // its pane looks like the moment it opens: its name in the top border,
-// its dir when it isn't root, its note, then its prompt.
-func drawing(window domain.WindowPlan, root string, cols, rows, width, height int) []string {
+// its dir when it isn't root, its note, then its prompt. A pane with an
+// alert, from alerts by its index, gets ⚠ in its top border and a border
+// in the alert's colour, the worst winning on a border boxes share.
+func drawing(window domain.WindowPlan, root string, alerts []alert, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
 	// rows (the other one), maps to the same drawn line for every box it
@@ -114,7 +131,11 @@ func drawing(window domain.WindowPlan, root string, cols, rows, width, height in
 	panes := window.Panes()
 	for i, pane := range panes {
 		f := frames[i]
-		if title, width := paneTitle(pane, len(panes)), f.right-f.left-5; title != "" && width > 0 {
+		title := paneTitle(pane, len(panes))
+		if alertOf(alerts, i) != noAlert {
+			title = strings.TrimSpace("⚠ " + title)
+		}
+		if width := f.right - f.left - 5; title != "" && width > 0 {
 			grid.write(f.left+2, f.top, " "+ansi.Truncate(title, width, "…")+" ", width+2)
 		}
 		for j, text := range paneLines(pane, root) {
@@ -124,20 +145,37 @@ func drawing(window domain.WindowPlan, root string, cols, rows, width, height in
 			grid.write(f.left+2, f.top+1+j, text, f.right-f.left-3)
 		}
 	}
+	for i, f := range frames {
+		if a := alertOf(alerts, i); a != noAlert {
+			grid.alert(f.left, f.top, f.right, f.bottom, a)
+		}
+	}
 	return grid.rows()
 }
 
+// alertOf is the alert of the pane at index, none past the end of alerts.
+func alertOf(alerts []alert, index int) alert {
+	if index < len(alerts) {
+		return alerts[index]
+	}
+	return noAlert
+}
+
 // paneList is window's panes one a line, for a space too small to draw
-// them in: "api shell · api/ · $ task dev", each cut to width cells. When
+// them in: "api shell · api/ · $ task dev", each cut to width cells, ⚠
+// first for a pane with an alert. When
 // they take more than height lines, the last line says how many are left
 // out.
-func paneList(window domain.WindowPlan, root string, width, height int) []string {
+func paneList(window domain.WindowPlan, root string, alerts []alert, width, height int) []string {
 	panes := window.Panes()
 	lines := make([]string, 0, len(panes))
-	for _, pane := range panes {
+	for i, pane := range panes {
 		parts := paneLines(pane, root)
 		if title := paneTitle(pane, len(panes)); title != "" {
 			parts = append([]string{title}, parts...)
+		}
+		if alertOf(alerts, i) != noAlert {
+			parts = append([]string{"⚠"}, parts...)
 		}
 		lines = append(lines, ansi.Truncate(strings.Join(parts, " · "), width, "…"))
 	}
@@ -192,15 +230,17 @@ func scaled(n, total, to int) int {
 // grid is a drawing's cells, each holding what is drawn there and which
 // sides its border joins.
 type grid struct {
-	cells [][]string
-	joins [][]int
+	cells  [][]string
+	joins  [][]int
+	alerts [][]alert
 }
 
 func newGrid(width, height int) grid {
-	g := grid{cells: make([][]string, height), joins: make([][]int, height)}
+	g := grid{cells: make([][]string, height), joins: make([][]int, height), alerts: make([][]alert, height)}
 	for y := range g.cells {
 		g.cells[y] = make([]string, width)
 		g.joins[y] = make([]int, width)
+		g.alerts[y] = make([]alert, width)
 		for x := range g.cells[y] {
 			g.cells[y][x] = " "
 		}
@@ -268,10 +308,29 @@ func (g grid) write(x, y int, text string, width int) {
 	}
 }
 
+// alert colours the border of the box from (left, top) to (right,
+// bottom) as a, unless a worse alert coloured it.
+func (g grid) alert(left, top, right, bottom int, a alert) {
+	for y := max(top, 0); y <= bottom && y < len(g.alerts); y++ {
+		for x := max(left, 0); x <= right && x < len(g.alerts[y]); x++ {
+			if y == top || y == bottom || x == left || x == right {
+				g.alerts[y][x] = max(g.alerts[y][x], a)
+			}
+		}
+	}
+}
+
 func (g grid) rows() []string {
 	rows := make([]string, len(g.cells))
 	for y, row := range g.cells {
-		rows[y] = strings.Join(row, "")
+		var b strings.Builder
+		for x, cell := range row {
+			if style, ok := alertStyles[g.alerts[y][x]]; ok && cell != "" {
+				cell = style.Render(cell)
+			}
+			b.WriteString(cell)
+		}
+		rows[y] = b.String()
 	}
 	return rows
 }

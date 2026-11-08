@@ -33,7 +33,6 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 3 | Warnings on their pane | browser | S | |
 | 5 | Window `dir`, and the form rules into `domain` | config, domain | M | |
 | 6 | Where a pane's settings come from | browser | S | 5 |
 | 7 | Changing panes in `domain` | domain | M | 5 |
@@ -43,29 +42,12 @@ layers), XL (mostly open questions).
 
 ```mermaid
 flowchart LR
-    T3[3 warnings on panes]
     T5[5 window dir, form rules] --> T6[6 where settings come from]
     T5 --> T7[7 changing panes]
     T7 --> T8[8 config form]
     T6 --> T8
     T8 --> T9[9 layout in the form] --> T10[10 freeze through the form]
 ```
-
-## 3. Warnings on their pane
-
-Draw a warning on its pane in the browser's drawing (`infra/tea_drawing.go`), not only in the summary: a
-yellow border and `⚠` in the title for a program not found, a red border
-for a missing dir.
-
-`ProjectOverview.Warnings()` returns plain `[]error`, which names the
-window and pane only in its message (`where()` in
-`app/browse_projects.go`). It needs to carry them as values, in a small
-read-model type in `app`.
-
-Warnings cover only the windows opening would create: every window of a
-project not running, the missing (`○`) windows of an owned session, and
-none of a session weaver didn't start. While a session runs, warnings
-show only on `○` tabs.
 
 ## 5. Window `dir`, and the form rules into `domain`
 
@@ -477,7 +459,7 @@ answer without attaching. Two answers, cheapest first; the first may be
 enough.
 
 **Warn when a pane's command exited.** No config. In the browser
-summary, and on its pane once #3 is done:
+summary, and on its pane, as a `Warning` concerning it:
 
 ```text
  ⚠ api › task dev: back at the prompt, its command exited
@@ -748,8 +730,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 ## Shared groundwork
 
-- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves #3,
-  #6 and #9, and its border drawing the live preview.
+- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves #6
+  and #9, and its border drawing the live preview.
 - #7's domain methods serve #8, #9 and #10.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.

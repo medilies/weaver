@@ -362,23 +362,45 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("warns once about a directory several panes share", func(t *testing.T) {
 		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = sharingDocs(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) != 1 {
+			t.Fatalf("got %v, want one warning", blog.Warnings())
+		}
+	})
+
+	t.Run("names every pane a warning concerns", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = sharingDocs(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		warning := blog.Warnings()[0]
+		if !warning.Concerns(windowName(t, "one"), 0) || !warning.Concerns(windowName(t, "two"), 0) {
+			t.Fatalf("got %v, want it to concern the first pane of windows one and two", warning)
+		}
+	})
+
+	t.Run("names no pane a warning doesn't concern", func(t *testing.T) {
+		s := newBrowseSetup(t)
 		dir, err := domain.NewPaneDir("docs")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		var windows []domain.Window
-		for _, raw := range []string{"one", "two"} {
-			name, err := domain.NewWindowName(raw)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			window, err := domain.NewWindow(name, domain.NewPane().In(dir))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			windows = append(windows, window)
+		right, err := domain.NewSplit(0, domain.Right, domain.DefaultSize())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-		blog, err := project(t, "blog").WithWindows(windows...)
+		window, err := domain.NewWindow(windowName(t, "main"),
+			domain.NewPane().Named(paneName(t, "docs")).In(dir),
+			domain.NewPane().Named(paneName(t, "shell")).Splitting(right))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, err := project(t, "blog").WithWindows(window)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -386,8 +408,9 @@ func TestBrowseProjects(t *testing.T) {
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) != 1 {
-			t.Fatalf("got %v, want one warning", blog.Warnings())
+		overview, _ := s.browser.last().overview("blog")
+		if warning := overview.Warnings()[0]; warning.Concerns(windowName(t, "main"), 1) {
+			t.Fatalf("got %v concerning the shell pane, want only the docs pane", warning)
 		}
 	})
 
@@ -664,4 +687,45 @@ func (r invalidConfig) FindByName(name domain.ProjectName) (domain.Project, erro
 		return domain.Project{}, fmt.Errorf("%s: %w", name, domain.ErrInvalidConfig)
 	}
 	return r.inMemoryRegistry.FindByName(name)
+}
+
+// sharingDocs is a project blog whose windows one and two each have a
+// pane in the directory docs.
+func sharingDocs(t *testing.T) domain.Project {
+	t.Helper()
+	dir, err := domain.NewPaneDir("docs")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var windows []domain.Window
+	for _, raw := range []string{"one", "two"} {
+		window, err := domain.NewWindow(windowName(t, raw), domain.NewPane().In(dir))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		windows = append(windows, window)
+	}
+	blog, err := project(t, "blog").WithWindows(windows...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return blog
+}
+
+func windowName(t *testing.T, raw string) domain.WindowName {
+	t.Helper()
+	name, err := domain.NewWindowName(raw)
+	if err != nil {
+		t.Fatalf("NewWindowName(%q): %v", raw, err)
+	}
+	return name
+}
+
+func paneName(t *testing.T, raw string) domain.PaneName {
+	t.Helper()
+	name, err := domain.NewPaneName(raw)
+	if err != nil {
+		t.Fatalf("NewPaneName(%q): %v", raw, err)
+	}
+	return name
 }

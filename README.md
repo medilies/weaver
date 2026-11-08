@@ -55,7 +55,9 @@ selected window is drawn as it opens: each pane a box in its
 proportions, with its name when the window has several, its `dir`
 unless it is the root, its `note`, and its prompt, showing a `command`
 as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
-neither (`$ █`). In a small terminal the panes are listed instead.
+neither (`$ █`). A pane with a warning has ⚠ in its top border, and
+the border is red when its directory is missing, yellow when its
+program isn't found. In a small terminal the panes are listed instead.
 
 | Key | Does |
 | --- | --- |
