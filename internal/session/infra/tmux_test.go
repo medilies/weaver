@@ -248,6 +248,54 @@ func TestTmuxStart(t *testing.T) {
 	})
 }
 
+func TestTmuxStartEndsAPaneScriptWithTheDefaultCommand(t *testing.T) {
+	server := newTmuxServer(t)
+	// In the config, read by the server Start starts: there is none before.
+	config := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(config, []byte(`set -g default-command "echo by-default; exec /bin/sh"`+"\n"), 0o600); err != nil {
+		t.Fatalf("writing the config: %v", err)
+	}
+	server.global[3] = config
+	project, err := load(t, "dflt", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "first", "panes": [{"note": ["first note"]}]},
+		{"name": "second", "panes": [{"name": "a", "env": {"X": "1"}}, {"name": "b", "env": {"X": "1"}, "split": {"direction": "right"}}]},
+		{"name": "third", "panes": [{"note": ["third note"]}]}
+	]}`, t.TempDir()))
+	if err != nil {
+		t.Fatalf("loading: %v", err)
+	}
+
+	if err := server.tmux().Start(project.Plan()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("in the session's first pane", func(t *testing.T) {
+		server.waitFor(t, "=dflt:first", "first note")
+		server.waitFor(t, "=dflt:first", "by-default")
+	})
+
+	t.Run("in a later window's first pane", func(t *testing.T) {
+		server.waitFor(t, server.paneLabelled(t, "dflt", "a"), "by-default")
+	})
+
+	t.Run("in a split pane", func(t *testing.T) {
+		server.waitFor(t, server.paneLabelled(t, "dflt", "b"), "by-default")
+	})
+
+	t.Run("in a restored window", func(t *testing.T) {
+		server.query(t, "kill-window", "-t", "=dflt:third")
+		session, _, err := server.tmux().Find(project.Name())
+		if err != nil {
+			t.Fatalf("finding: %v", err)
+		}
+		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+			t.Fatalf("restoring: %v", err)
+		}
+		server.waitFor(t, "=dflt:third", "third note")
+		server.waitFor(t, "=dflt:third", "by-default")
+	})
+}
+
 func TestTmuxStartPassesTextVerbatim(t *testing.T) {
 	server := newTmuxServer(t)
 	root := t.TempDir()

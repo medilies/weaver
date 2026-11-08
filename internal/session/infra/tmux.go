@@ -76,20 +76,20 @@ func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error)
 
 // Start implements domain.SessionLauncher.
 func (t Tmux) Start(plan domain.SessionPlan) error {
-	var session, previous string
+	var session, previous, defaultCommand string
 	for i, window := range plan.Windows() {
 		var windowID, paneID string
 		var err error
 		if i == 0 {
-			session, windowID, paneID, err = t.newSession(plan.Name(), window)
+			session, windowID, paneID, defaultCommand, err = t.newSession(plan.Name(), window)
 			if err == nil {
 				_, err = t.run("set-option", "-t", session, "@weaver_project", plan.Name().String())
 			}
 		} else {
-			windowID, paneID, err = t.newWindow([]string{"-a", "-t", previous}, window)
+			windowID, paneID, err = t.newWindow([]string{"-a", "-t", previous}, window, defaultCommand)
 		}
 		if err == nil {
-			err = t.fill(windowID, paneID, window)
+			err = t.fill(windowID, paneID, window, defaultCommand)
 		}
 		if err != nil {
 			if session != "" {
@@ -106,6 +106,10 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 // gone too goes at the end.
 func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlacement) error {
 	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{window_id} "+sized("@weaver_window"))
+	if err != nil {
+		return err
+	}
+	defaultCommand, err := t.option("="+name.String(), "default-command")
 	if err != nil {
 		return err
 	}
@@ -127,9 +131,9 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 		} else if before, ok := placement.Before(); ok && ids[before.String()] != "" {
 			target, atEnd = []string{"-b", "-t", ids[before.String()]}, false
 		}
-		windowID, paneID, err := t.newWindow(target, window)
+		windowID, paneID, err := t.newWindow(target, window, defaultCommand)
 		if err == nil {
-			if err = t.fill(windowID, paneID, window); err != nil {
+			if err = t.fill(windowID, paneID, window, defaultCommand); err != nil {
 				// Tagged already, it would count as restored.
 				_, _ = t.run("kill-window", "-t", windowID)
 			}
@@ -264,6 +268,12 @@ func foreground(pid string) (domain.Command, bool) {
 	return cmd, err == nil
 }
 
+// option is the value of a tmux option as target sees it.
+func (t Tmux) option(target, name string) (string, error) {
+	out, err := t.run("display-message", "-p", "-t", target, sized(name))
+	return verbatim(out), err
+}
+
 // Current implements domain.SessionLocator. Without a pane of its own, as
 // in a popup or run-shell, it is the session tmux finds current: the most
 // recently active one, which the key that ran weaver just made so.
@@ -338,36 +348,56 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 	return syscall.Exec(path, append(argv, "attach-session", "-t", target), env)
 }
 
-func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (session, windowID, paneID string, err error) {
+// newSession starts the session with window's first pane, and returns
+// tmux's default-command too. tmux reads it from the user's config, which
+// a server starting for this session only loads now, so a first pane
+// needing a startup script, which ends by running that command, waits in
+// a placeholder until it is read, then restarts with its script. Keys a
+// hook of the user's config types into that pane, as on session-created,
+// go to the placeholder and are lost.
+func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (session, windowID, paneID, defaultCommand string, err error) {
 	pane := window.Panes()[0]
 	args := []string{
 		"new-session", "-d", "-s", name.String(),
 		"-n", formatArgument(window.Name().String()),
 		"-c", formatArgument(pane.Dir()),
-		"-P", "-F", "#{session_id} #{window_id} #{pane_id}",
+		"-P", "-F", "#{session_id} #{window_id} #{pane_id} " + sized("default-command"),
 	}
 	if t.opts.Size != nil {
 		if cols, rows, ok := t.opts.Size(); ok {
 			args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
 		}
 	}
-	ids, err := t.runIDs(3, append(args, shellCommand(pane)...)...)
-	if err != nil {
-		return "", "", "", err
+	scripted := shellCommand(pane, "") != nil
+	if scripted {
+		args = append(args, "--", "cat") // waits for input it never gets
 	}
-	return ids[0], ids[1], ids[2], nil
+	out, err := t.run(args...)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	fields := strings.SplitN(out, " ", 4)
+	if len(fields) != 4 {
+		return "", "", "", "", fmt.Errorf("tmux new-session: unexpected output %q", out)
+	}
+	session, windowID, paneID, defaultCommand = fields[0], fields[1], fields[2], verbatim(fields[3])
+	if scripted {
+		_, err = t.run(append([]string{"respawn-pane", "-k", "-t", paneID, "-c", formatArgument(pane.Dir())},
+			shellCommand(pane, defaultCommand)...)...)
+	}
+	return session, windowID, paneID, defaultCommand, err
 }
 
 // newWindow creates a window placed by target: "-a" (after) or "-b"
 // (before), "-t", and a window.
-func (t Tmux) newWindow(target []string, window domain.WindowPlan) (windowID, paneID string, err error) {
+func (t Tmux) newWindow(target []string, window domain.WindowPlan, defaultCommand string) (windowID, paneID string, err error) {
 	pane := window.Panes()[0]
 	args := append(append([]string{"new-window", "-d"}, target...),
 		"-n", formatArgument(window.Name().String()),
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{window_id} #{pane_id}",
 	)
-	ids, err := t.runIDs(2, append(args, shellCommand(pane)...)...)
+	ids, err := t.runIDs(2, append(args, shellCommand(pane, defaultCommand)...)...)
 	if err != nil {
 		return "", "", err
 	}
@@ -377,7 +407,7 @@ func (t Tmux) newWindow(target []string, window domain.WindowPlan) (windowID, pa
 // fill tags the window as the project's, splits its first pane into the
 // others, labels them in their borders, then types their commands: those
 // to run first, then the startup one.
-func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan) error {
+func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defaultCommand string) error {
 	if _, err := t.run("set-option", "-w", "-t", windowID, "@weaver_window", argument(window.Name().String())); err != nil {
 		return err
 	}
@@ -393,7 +423,7 @@ func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan) error
 		if !split.Size().IsDefault() {
 			args = append(args, "-l", split.Size().String())
 		}
-		id, err := t.run(append(args, shellCommand(pane)...)...)
+		id, err := t.run(append(args, shellCommand(pane, defaultCommand)...)...)
 		if err != nil {
 			return err
 		}
