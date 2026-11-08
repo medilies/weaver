@@ -513,6 +513,26 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("selects the project after a deleted one", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionDelete, "blog"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.browser.last().selected.String(); got != "shop" {
+			t.Fatalf("got %q selected, want shop", got)
+		}
+	})
+
+	t.Run("selects the project before a deleted last one", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionDelete, "shop"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.browser.last().selected.String(); got != "blog" {
+			t.Fatalf("got %q selected, want blog", got)
+		}
+	})
+
 	t.Run("keeps a project the user declines to delete", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionDelete, "blog"))
 		if err := s.browse(answer(false)); err != nil {

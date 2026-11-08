@@ -149,7 +149,7 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 		if err != nil {
 			return err
 		}
-		selected, notice, err = uc.act(choice, workingDir)
+		selected, notice, err = uc.act(choice, workingDir, overviews)
 		switch {
 		case err == nil && choice.Action == ActionOpen:
 			return nil
@@ -276,9 +276,9 @@ func runs(pane domain.PanePlan) (string, bool) {
 	return cmd.Program()
 }
 
-// act carries out choice and returns the project to select next and what
-// to tell the user. Declining to confirm is ErrAborted.
-func (uc BrowseProjects) act(choice Choice, workingDir string) (domain.ProjectName, string, error) {
+// act carries out choice on one of overviews, and returns the project to
+// select next and what to tell the user. Declining to confirm is ErrAborted.
+func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []ProjectOverview) (domain.ProjectName, string, error) {
 	name := choice.Project
 	switch choice.Action {
 	case ActionOpen:
@@ -309,9 +309,29 @@ func (uc BrowseProjects) act(choice Choice, workingDir string) (domain.ProjectNa
 		if err := uc.ask(fmt.Sprintf("Delete %s's config? A running session keeps running.", name)); err != nil {
 			return name, "", err
 		}
-		return name, fmt.Sprintf("Deleted %s.", name), uc.projects.Delete(name)
+		if err := uc.projects.Delete(name); err != nil {
+			return name, "", err
+		}
+		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)
+}
+
+// neighbour is the project after name in overviews, or before it when
+// name was the last, so the selection stays where a deleted project was.
+func neighbour(overviews []ProjectOverview, name domain.ProjectName) domain.ProjectName {
+	for i, overview := range overviews {
+		if overview.Name() != name {
+			continue
+		}
+		if i+1 < len(overviews) {
+			return overviews[i+1].Name()
+		}
+		if i > 0 {
+			return overviews[i-1].Name()
+		}
+	}
+	return name
 }
 
 // ask returns ErrAborted unless the user answers yes to question.

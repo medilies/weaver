@@ -6,14 +6,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// TeaBrowser shows the registered projects full screen: their names on
-// the left, the selected one's summary and config on the right, and what the last
-// action did below. It only shows and picks: the use case acts.
+// TeaBrowser shows the registered projects full screen: their names and
+// roots on the left, narrowed by a filter, the selected one's summary and
+// config on the right, and what the last action did below. It only shows
+// and picks: the use case acts.
 type TeaBrowser struct{}
 
 // NewTeaBrowser constructs a TeaBrowser.
@@ -48,19 +50,55 @@ var browserKeys = map[string]app.Action{
 var (
 	runningMark  = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
 	cursorStyle  = lipgloss.NewStyle().Reverse(true)
+	rootStyle    = lipgloss.NewStyle().Faint(true)
 	titleStyle   = lipgloss.NewStyle().Bold(true)
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 )
 
-// browser is TeaBrowser's Bubble Tea model.
+// browser is TeaBrowser's Bubble Tea model. The cursor is in the
+// projects the filter shows.
 type browser struct {
 	projects      []app.ProjectOverview
 	cursor        int
+	filter        string
+	filtering     bool // typing the filter
 	notice        string
 	width, height int
 	choice        app.Choice
+}
+
+// shown are the projects whose names contain the filter, ignoring case.
+func (m browser) shown() []app.ProjectOverview {
+	if m.filter == "" {
+		return m.projects
+	}
+	var shown []app.ProjectOverview
+	for _, project := range m.projects {
+		if strings.Contains(strings.ToLower(project.Name().String()), strings.ToLower(m.filter)) {
+			shown = append(shown, project)
+		}
+	}
+	return shown
+}
+
+// filtered is m with filter, keeping the selected project when it is
+// still shown, else selecting the first.
+func (m browser) filtered(filter string) browser {
+	shown := m.shown()
+	if len(shown) == 0 {
+		m.filter = filter
+		return m
+	}
+	selected := shown[m.cursor].Name()
+	m.filter, m.cursor = filter, 0
+	for i, project := range m.shown() {
+		if project.Name() == selected {
+			m.cursor = i
+		}
+	}
+	return m
 }
 
 func (m browser) Init() tea.Cmd {
@@ -72,32 +110,75 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case tea.KeyPressMsg:
+		if m.filtering && msg.String() != "ctrl+c" {
+			return m.typeFilter(msg), nil
+		}
 		return m.press(msg.String())
 	}
 	return m, nil
 }
 
-// press moves the cursor, or ends with the choice the key makes.
+// press moves the cursor, starts the filter or clears it, or ends with
+// the choice the key makes.
 func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "up", "k":
-		m.cursor = max(m.cursor-1, 0)
+		m = m.moved(-1)
 	case "down", "j":
-		m.cursor = max(min(m.cursor+1, len(m.projects)-1), 0)
-	case "q", "esc", "ctrl+c":
+		m = m.moved(1)
+	case "/":
+		m.filtering = true
+	case "esc":
+		if m.filter == "" {
+			return m, tea.Quit
+		}
+		m = m.filtered("")
+	case "q", "ctrl+c":
 		return m, tea.Quit
 	default:
+		shown := m.shown()
 		action, ok := browserKeys[key]
-		if !ok || (len(m.projects) == 0 && action != app.ActionFreeze) {
+		if !ok || (len(shown) == 0 && action != app.ActionFreeze) {
 			break
 		}
 		m.choice = app.Choice{Action: action}
-		if len(m.projects) > 0 {
-			m.choice.Project = m.projects[m.cursor].Name()
+		if len(shown) > 0 {
+			m.choice.Project = shown[m.cursor].Name()
 		}
 		return m, tea.Quit
 	}
 	return m, nil
+}
+
+// typeFilter edits the filter as it is typed: enter keeps it for the
+// keys to act on what it shows, esc clears it.
+func (m browser) typeFilter(msg tea.KeyPressMsg) browser {
+	switch msg.String() {
+	case "up":
+		return m.moved(-1)
+	case "down":
+		return m.moved(1)
+	case "enter":
+		m.filtering = false
+		return m
+	case "esc":
+		m.filtering = false
+		return m.filtered("")
+	case "backspace":
+		runes := []rune(m.filter)
+		return m.filtered(string(runes[:max(len(runes)-1, 0)]))
+	}
+	if msg.Text == "" {
+		return m
+	}
+	return m.filtered(m.filter + msg.Text)
+}
+
+// moved is m with the cursor by up to by projects down, or up when by is
+// negative, staying in the projects shown.
+func (m browser) moved(by int) browser {
+	m.cursor = max(min(m.cursor+by, len(m.shown())-1), 0)
+	return m
 }
 
 func (m browser) View() tea.View {
@@ -113,7 +194,7 @@ func (m browser) render() string {
 		return "" // until the terminal's size is known
 	}
 	notice := lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
-	keys := keysStyle.Render("enter open · f freeze · e edit · x kill · d delete · q quit")
+	keys := m.keys()
 	height := max(m.height-lipgloss.Height(notice)-1, 1)
 
 	list := lipgloss.NewStyle().Height(height).MaxHeight(height).
@@ -123,36 +204,78 @@ func (m browser) render() string {
 	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details), notice, keys)
 }
 
-// list is the projects' names, the selected one highlighted and kept in
-// view, and a mark for those whose session runs.
-func (m browser) list(height int) string {
-	width := 0
-	for _, project := range m.projects {
-		width = max(width, len(project.Name().String()))
+// keys are the filter being typed and what its keys do, or the filter
+// kept and the keys acting on what it shows.
+func (m browser) keys() string {
+	switch {
+	case m.filtering:
+		return "/" + m.filter + keysStyle.Render("▏ enter keep · esc clear")
+	case m.filter != "":
+		return "/" + m.filter + keysStyle.Render(" · enter open · f freeze · e edit · x kill · d delete · esc clear · q quit")
 	}
+	return keysStyle.Render("enter open · f freeze · e edit · x kill · d delete · / filter · q quit")
+}
+
+// list is the shown projects' names and dimmed roots, the selected one
+// highlighted and kept in view, and a mark for those whose session runs.
+// It takes at most half the width, cutting roots short from the left.
+func (m browser) list(height int) string {
+	shown := m.shown()
+	nameWidth, rootWidth := 0, 0 // of all projects, so filtering keeps the column still
+	for _, project := range m.projects {
+		nameWidth = max(nameWidth, len(project.Name().String()))
+		rootWidth = max(rootWidth, ansi.StringWidth(root(project)))
+	}
+	// " ● name root " and the border fit in half the width.
+	rootWidth = min(rootWidth, max(m.width/2-nameWidth-6, 0))
 	first := max(m.cursor-height+1, 0) // scrolled down to the cursor
-	lines := make([]string, 0, len(m.projects)-first)
-	for i, project := range m.projects[first:] {
+	lines := make([]string, 0, len(shown)-first)
+	for i, project := range shown[first:] {
 		mark := " "
 		if project.Running() {
 			mark = runningMark
 		}
-		line := fmt.Sprintf(" %s %-*s ", mark, width, project.Name())
+		name := fmt.Sprintf(" %s %-*s ", mark, nameWidth, project.Name())
+		path := lipgloss.NewStyle().Width(rootWidth + 1).Render(shortened(root(project), rootWidth))
 		if first+i == m.cursor {
-			line = cursorStyle.Render(line)
+			lines = append(lines, cursorStyle.Render(name)+cursorStyle.Faint(true).Render(path))
+		} else {
+			lines = append(lines, name+rootStyle.Render(path))
 		}
-		lines = append(lines, line)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// shortened is path cut from the left to fit width cells, "…" taking the
+// place of what is cut.
+func shortened(path string, width int) string {
+	over := ansi.StringWidth(path) - width
+	switch {
+	case over <= 0:
+		return path
+	case width == 0:
+		return ""
+	}
+	return ansi.TruncateLeft(path, over+1, "…")
+}
+
+// root is project's root with the home directory as "~", or nothing when
+// its config can't be read.
+func root(project app.ProjectOverview) string {
+	return contractHome(project.Project().Root().String())
 }
 
 // details are the selected project's summary and config as written, or
 // why it can't be read.
 func (m browser) details() string {
-	if len(m.projects) == 0 {
+	shown := m.shown()
+	switch {
+	case len(m.projects) == 0:
 		return "No projects yet: press f to freeze the current directory."
+	case len(shown) == 0:
+		return fmt.Sprintf("No project's name contains %q.", m.filter)
 	}
-	project := m.projects[m.cursor]
+	project := shown[m.cursor]
 	config := project.Config()
 	if config.File == "" && project.Problem() != nil {
 		return titleStyle.Render(project.Name().String()) + "\n\n" + problemStyle.Render(project.Problem().Error())
@@ -172,11 +295,11 @@ func summary(project app.ProjectOverview) string {
 	if session, ok := project.Session(); ok {
 		lines = append(lines, sessionLine(project, session))
 	}
-	root := contractHome(project.Project().Root().String())
+	rootLine := root(project)
 	if !project.RootExists() {
-		root += " " + problemStyle.Render("✗ missing")
+		rootLine += " " + problemStyle.Render("✗ missing")
 	}
-	lines = append(lines, root)
+	lines = append(lines, rootLine)
 
 	for _, warning := range project.Warnings() {
 		lines = append(lines, warningStyle.Render("⚠ "+warning.Error()))

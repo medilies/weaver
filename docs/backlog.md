@@ -35,7 +35,6 @@ layers), XL (mostly open questions).
 | --- | --- | --- | --- | --- |
 | 2 | Draw the layout | browser | M | |
 | 3 | Warnings on their pane | browser | S | 2 |
-| 4 | Better list | browser | S | |
 | 5 | Window `dir`, and the form rules into `domain` | config, domain | M | |
 | 6 | Where a pane's settings come from | browser | S | 2, 5 |
 | 7 | Changing panes in `domain` | domain | M | 5 |
@@ -47,7 +46,6 @@ layers), XL (mostly open questions).
 flowchart LR
     T2[2 draw the layout] --> T3[3 warnings on panes]
     T2 --> T6[6 where settings come from]
-    T4[4 better list]
     T5[5 window dir, form rules] --> T6
     T5 --> T7[7 changing panes]
     T7 --> T8[8 config form]
@@ -152,17 +150,6 @@ Warnings cover only the windows opening would create: every window of a
 project not running, the missing (`○`) windows of an owned session, and
 none of a session weaver didn't start. While a session runs, warnings
 show only on `○` tabs.
-
-## 4. Better list
-
-- `/` filters the list as you type.
-- The root path, dimmed, beside each name.
-- After a delete, select the deleted project's neighbour. Today the
-  cursor jumps to the top, because `act` selects the deleted name. The
-  filter changes how the selection works, so fix both together.
-
-Listing the most recently opened projects first is [Parked](#parked):
-weaver would have to keep a record besides the configs.
 
 ## 5. Window `dir`, and the form rules into `domain`
 
@@ -704,7 +691,7 @@ change to bring it back.
 
 - **Most recently opened first, in the list.** weaver would keep a
   record of when each project was opened, besides the configs. Back if
-  the list grows long enough that the filter (#4) isn't enough.
+  the list grows long enough that the filter isn't enough.
 - **`history`**: put a pane's usual commands in its shell history, so ↑
   brings them back. weaver would type into the shell's history and leave
   lines piling up in `$HISTFILE` (bash and zsh save it on exit), which

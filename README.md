@@ -41,7 +41,7 @@ To complete project names with Tab, load weave's completion in your
 source <(weave completion bash)
 ```
 
-`weave` alone lists the projects, a ● marking those whose session runs,
+`weave` alone lists the projects and their roots, a ● marking those whose session runs,
 beside the selected one's config, under a summary: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a
@@ -54,15 +54,16 @@ the `before` commands and variables every pane starts with:
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a project |
+| / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
 | e | edit its config, like `weave edit <project>` |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
-| q or esc | quit |
+| q or esc | quit (esc clears the filter first) |
 
-After freezing, editing, killing or deleting, the list comes back with
-what happened.
+After freezing, editing, killing or deleting, the list comes back,
+unfiltered, with what happened.
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it, from a `display-popup` too). When the session isn't
