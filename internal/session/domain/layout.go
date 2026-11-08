@@ -683,24 +683,6 @@ func (w Window) WithoutPane(index int) (Window, error) {
 	return w.withPanes(reorder(panes, order))
 }
 
-// MovingPane is the window with the pane at from moved to to, the others
-// shifting to make room. Moving changes the order tmux creates the panes
-// in, so a pane can't move before the pane it splits, nor after a pane
-// that splits it. The first pane, which fills the window, stays first.
-func (w Window) MovingPane(from, to int) (Window, error) {
-	if err := w.checkPaneIndex(from); err != nil {
-		return Window{}, err
-	}
-	if err := w.checkPaneIndex(to); err != nil {
-		return Window{}, err
-	}
-	if w.gridded {
-		return Window{}, ErrChangingGridPanes
-	}
-	order := slices.Insert(slices.Delete(seq(len(w.panes)), from, from+1), to, from)
-	return w.withPanes(reorder(w.panes, order))
-}
-
 // nameUnnamed gives each unnamed pane the first default name no pane
 // has: "pane 1", "pane 2"…
 func nameUnnamed(panes []Pane) []Pane {

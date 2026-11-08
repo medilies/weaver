@@ -69,22 +69,47 @@ const (
 	joinsRight
 )
 
-var borderRunes = map[int]string{
-	joinsLeft | joinsRight:                       "─",
-	joinsUp | joinsDown:                          "│",
-	joinsDown | joinsRight:                       "┌",
-	joinsDown | joinsLeft:                        "┐",
-	joinsUp | joinsRight:                         "└",
-	joinsUp | joinsLeft:                          "┘",
-	joinsUp | joinsDown | joinsRight:             "├",
-	joinsUp | joinsDown | joinsLeft:              "┤",
-	joinsDown | joinsLeft | joinsRight:           "┬",
-	joinsUp | joinsLeft | joinsRight:             "┴",
-	joinsUp | joinsDown | joinsLeft | joinsRight: "┼",
-	joinsLeft:  "─",
-	joinsRight: "─",
-	joinsUp:    "│",
-	joinsDown:  "│",
+// borderRunes are the characters joining a cell's sides, by the weight
+// of each side, up, down, left and right: 0 none, 1 light, 2 heavy.
+var borderRunes = map[[4]int]string{
+	{0, 0, 1, 1}: "─", {0, 0, 2, 2}: "━", {0, 0, 1, 2}: "╼", {0, 0, 2, 1}: "╾",
+	{1, 1, 0, 0}: "│", {2, 2, 0, 0}: "┃", {1, 2, 0, 0}: "╽", {2, 1, 0, 0}: "╿",
+	{0, 0, 1, 0}: "─", {0, 0, 0, 1}: "─", {1, 0, 0, 0}: "│", {0, 1, 0, 0}: "│",
+	{0, 0, 2, 0}: "━", {0, 0, 0, 2}: "━", {2, 0, 0, 0}: "┃", {0, 2, 0, 0}: "┃",
+
+	{0, 1, 0, 1}: "┌", {0, 1, 0, 2}: "┍", {0, 2, 0, 1}: "┎", {0, 2, 0, 2}: "┏",
+	{0, 1, 1, 0}: "┐", {0, 1, 2, 0}: "┑", {0, 2, 1, 0}: "┒", {0, 2, 2, 0}: "┓",
+	{1, 0, 0, 1}: "└", {1, 0, 0, 2}: "┕", {2, 0, 0, 1}: "┖", {2, 0, 0, 2}: "┗",
+	{1, 0, 1, 0}: "┘", {1, 0, 2, 0}: "┙", {2, 0, 1, 0}: "┚", {2, 0, 2, 0}: "┛",
+
+	{1, 1, 0, 1}: "├", {1, 1, 0, 2}: "┝", {2, 1, 0, 1}: "┞", {1, 2, 0, 1}: "┟",
+	{2, 2, 0, 1}: "┠", {2, 1, 0, 2}: "┡", {1, 2, 0, 2}: "┢", {2, 2, 0, 2}: "┣",
+	{1, 1, 1, 0}: "┤", {1, 1, 2, 0}: "┥", {2, 1, 1, 0}: "┦", {1, 2, 1, 0}: "┧",
+	{2, 2, 1, 0}: "┨", {2, 1, 2, 0}: "┩", {1, 2, 2, 0}: "┪", {2, 2, 2, 0}: "┫",
+	{0, 1, 1, 1}: "┬", {0, 1, 2, 1}: "┭", {0, 1, 1, 2}: "┮", {0, 1, 2, 2}: "┯",
+	{0, 2, 1, 1}: "┰", {0, 2, 2, 1}: "┱", {0, 2, 1, 2}: "┲", {0, 2, 2, 2}: "┳",
+	{1, 0, 1, 1}: "┴", {1, 0, 2, 1}: "┵", {1, 0, 1, 2}: "┶", {1, 0, 2, 2}: "┷",
+	{2, 0, 1, 1}: "┸", {2, 0, 2, 1}: "┹", {2, 0, 1, 2}: "┺", {2, 0, 2, 2}: "┻",
+
+	{1, 1, 1, 1}: "┼", {1, 1, 2, 1}: "┽", {1, 1, 1, 2}: "┾", {1, 1, 2, 2}: "┿",
+	{2, 1, 1, 1}: "╀", {1, 2, 1, 1}: "╁", {2, 2, 1, 1}: "╂", {2, 1, 2, 1}: "╃",
+	{2, 1, 1, 2}: "╄", {1, 2, 2, 1}: "╅", {1, 2, 1, 2}: "╆", {2, 1, 2, 2}: "╇",
+	{1, 2, 2, 2}: "╈", {2, 2, 2, 1}: "╉", {2, 2, 1, 2}: "╊", {2, 2, 2, 2}: "╋",
+}
+
+// borderRune is the character joining the sides joins, heavy those of
+// them also in heavy.
+func borderRune(joins, heavy int) string {
+	var weights [4]int
+	for i, side := range []int{joinsUp, joinsDown, joinsLeft, joinsRight} {
+		switch {
+		case joins&heavy&side != 0:
+			weights[i] = 2
+		case joins&side != 0:
+			weights[i] = 1
+		}
+	}
+	return borderRunes[weights]
 }
 
 // alert is the worst warning about a pane, which colours its box.
@@ -105,10 +130,11 @@ var alertStyles = map[alert]lipgloss.Style{
 // proportions they take in a window of cols×rows. Each box shows what
 // its pane looks like the moment it opens: its name in the top border,
 // its dir when it isn't root, its note, then its prompt. The selected
-// pane, by its index, has its name in brackets. A pane with an alert,
+// pane, by its index, has a heavy border when heavy is set, else its
+// name in brackets. A pane with an alert,
 // from alerts by its index, gets ⚠ in its top border and a border in the
 // alert's colour, the worst winning on a border boxes share.
-func drawing(window domain.WindowPlan, root string, alerts []alert, selected, cols, rows, width, height int) []string {
+func drawing(window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
 	// rows (the other one), maps to the same drawn line for every box it
@@ -122,10 +148,11 @@ func drawing(window domain.WindowPlan, root string, alerts []alert, selected, co
 	for i, b := range boxes {
 		f := frame{column(b.x - 1), row(b.y - 1), column(b.x + b.width), row(b.y + b.height)}
 		frames[i] = f
-		grid.line(f.left, f.top, f.right, f.top)
-		grid.line(f.left, f.bottom, f.right, f.bottom)
-		grid.line(f.left, f.top, f.left, f.bottom)
-		grid.line(f.right, f.top, f.right, f.bottom)
+		thick := heavy && i == selected
+		grid.line(f.left, f.top, f.right, f.top, thick)
+		grid.line(f.left, f.bottom, f.right, f.bottom, thick)
+		grid.line(f.left, f.top, f.left, f.bottom, thick)
+		grid.line(f.right, f.top, f.right, f.bottom, thick)
 	}
 	grid.drawBorders()
 
@@ -138,7 +165,7 @@ func drawing(window domain.WindowPlan, root string, alerts []alert, selected, co
 		}
 		room := f.right - f.left - 3
 		open, closing := " ", " "
-		if i == selected && len(panes) > 1 && room >= 5 { // else no room for the brackets
+		if i == selected && !heavy && len(panes) > 1 && room >= 5 { // else no room for the brackets
 			open, closing = "[ ", " ]"
 		}
 		if width := room - len(open) - len(closing); title != "" && width > 0 {
@@ -192,6 +219,30 @@ func paneList(window domain.WindowPlan, root string, alerts []alert, selected, w
 		lines = append(lines, ansi.Truncate(strings.Join(parts, " · "), width, "…"))
 	}
 	return fitted(lines, max(height, 1))
+}
+
+// neighbour is the pane whose box is next to boxes[from] across one
+// border, to the right for dx 1, the left for -1, below for dy 1 or
+// above for -1: the one sharing the most of that side, the first of
+// those sharing as much. There is none at the window's edge.
+func neighbour(boxes []box, from, dx, dy int) (int, bool) {
+	f := boxes[from]
+	found, shared := -1, 0
+	for i, b := range boxes {
+		var next bool
+		var overlap int
+		if dx != 0 {
+			next = (dx > 0 && b.x == f.x+f.width+1) || (dx < 0 && b.x+b.width+1 == f.x)
+			overlap = min(b.y+b.height, f.y+f.height) - max(b.y, f.y)
+		} else {
+			next = (dy > 0 && b.y == f.y+f.height+1) || (dy < 0 && b.y+b.height+1 == f.y)
+			overlap = min(b.x+b.width, f.x+f.width) - max(b.x, f.x)
+		}
+		if next && overlap > shared {
+			found, shared = i, overlap
+		}
+	}
+	return found, found >= 0
 }
 
 // fitted is lines in height lines at most, the last saying how many are
@@ -248,19 +299,21 @@ func scaled(n, total, to int) int {
 	return (2*n*to + total) / (2 * total)
 }
 
-// grid is a drawing's cells, each holding what is drawn there and which
-// sides its border joins.
+// grid is a drawing's cells, each holding what is drawn there, which
+// sides its border joins, and which of those are heavy.
 type grid struct {
 	cells  [][]string
 	joins  [][]int
+	heavy  [][]int
 	alerts [][]alert
 }
 
 func newGrid(width, height int) grid {
-	g := grid{cells: make([][]string, height), joins: make([][]int, height), alerts: make([][]alert, height)}
+	g := grid{cells: make([][]string, height), joins: make([][]int, height), heavy: make([][]int, height), alerts: make([][]alert, height)}
 	for y := range g.cells {
 		g.cells[y] = make([]string, width)
 		g.joins[y] = make([]int, width)
+		g.heavy[y] = make([]int, width)
 		g.alerts[y] = make([]alert, width)
 		for x := range g.cells[y] {
 			g.cells[y][x] = " "
@@ -270,8 +323,8 @@ func newGrid(width, height int) grid {
 }
 
 // line joins the cells from (x1, y1) to (x2, y2), on one row or one
-// column, each to its neighbours on the line.
-func (g grid) line(x1, y1, x2, y2 int) {
+// column, each to its neighbours on the line, heavy when thick is set.
+func (g grid) line(x1, y1, x2, y2 int, thick bool) {
 	if x1 == x2 && y1 == y2 {
 		return
 	}
@@ -280,20 +333,25 @@ func (g grid) line(x1, y1, x2, y2 int) {
 			if y < 0 || y >= len(g.joins) || x < 0 || x >= len(g.joins[y]) {
 				continue
 			}
+			var sides int // the sides of the cell this line joins
 			if y1 == y2 {
 				if x > x1 {
-					g.joins[y][x] |= joinsLeft
+					sides |= joinsLeft
 				}
 				if x < x2 {
-					g.joins[y][x] |= joinsRight
+					sides |= joinsRight
 				}
 			} else {
 				if y > y1 {
-					g.joins[y][x] |= joinsUp
+					sides |= joinsUp
 				}
 				if y < y2 {
-					g.joins[y][x] |= joinsDown
+					sides |= joinsDown
 				}
+			}
+			g.joins[y][x] |= sides
+			if thick {
+				g.heavy[y][x] |= sides
 			}
 		}
 	}
@@ -304,7 +362,7 @@ func (g grid) drawBorders() {
 	for y, row := range g.joins {
 		for x, joins := range row {
 			if joins != 0 {
-				g.cells[y][x] = borderRunes[joins]
+				g.cells[y][x] = borderRune(joins, g.heavy[y][x])
 			}
 		}
 	}

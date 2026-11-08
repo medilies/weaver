@@ -33,41 +33,7 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 10 | The layout in the config form | form | M | |
-| 11 | Freeze through the config form | form | M | 10 |
-
-```mermaid
-flowchart LR
-    T10[10 layout in the form] --> T11[11 freeze through the form]
-```
-
-## 10. The layout in the config form
-
-A window's card becomes the browser's drawing, edited with tmux's own keys: `%`
-splits the selected pane right, `"` below, `x` removes it, arrows
-select, `H/L` resize. The selected pane's fields show below.
-`split: {of, direction, size}` is never seen.
-
-```text
- [ api ]  app  repo  + window
-┌─ api shell ──────────────────┬─ task dev ──────────┐
-│ api/                         │ api/                │
-│ $ █                          │ $ task dev          │
-│                              │                     │
-│                              ┢━ psql ━━━━━━━━━━━━━━┪
-│                              ┃ $ nimbus psql       ┃
-│                              ┃                     ┃
-└──────────────────────────────┺━━━━━━━━━━━━━━━━━━━━━┛
- psql  splits task dev ↓ half
- % split right · " split below · x remove · ←→↑↓ select · H/L resize
-```
-
-A window with a `grid` is edited as a grid, never saved back as
-splits: `Window.Grid()` gives it, and `encodeProject` writes it.
-Turning a grid window into splits, or back, is an action of its own,
-never a side effect. Saving a grid window lists its panes in creation
-order, not as the config listed them; keep the config's order here if
-the form makes that visible.
+| 11 | Freeze through the config form | form | M | |
 
 ## 11. Freeze through the config form
 
@@ -177,6 +143,21 @@ as `focus: true`.
   a captured session keeps where you were.
 - Schema: `focus` boolean on windows and panes.
 - Test (tmux): after `Start`, the focused window and pane are active.
+
+### Grid windows in the config form (M)
+
+**When**: someone wants to change a grid window's layout without
+editing its YAML.
+
+The config form draws a grid window and selects its panes, but its
+keys that split, remove and resize panes are refused: the domain
+refuses changing a grid's panes (`ErrChangingGridPanes`), and the form
+shows its areas as text. Editing it as a grid means changing its
+`areas`, `columns` and `rows`, with new `Grid` methods in `domain`
+first. Turning a grid window into splits, or back, is an action of its
+own, never a side effect of another key. Saving a grid window lists its
+panes in creation order, not as the config listed them; keep the
+config's order if the form makes that visible.
 
 ### Start and teardown commands (M)
 
@@ -559,10 +540,10 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 ## Shared groundwork
 
-- The drawing's geometry (`layOut` in `infra/tea_drawing.go`) serves
-  #10, and its border drawing the live preview.
+- The drawing's border drawing (`infra/tea_drawing.go`) serves the live
+  preview.
 - The domain's methods changing panes and windows, and the config
-  form's cards, serve #10 and #11.
+  form's cards, serve #11.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.
 - The idle-shell check (`foreground`) serves the exited-command warning

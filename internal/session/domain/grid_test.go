@@ -350,10 +350,4 @@ func TestChangingGridWindowPanes(t *testing.T) {
 			t.Fatalf("got %v, want ErrChangingGridPanes", err)
 		}
 	})
-
-	t.Run("rejects moving a pane", func(t *testing.T) {
-		if _, err := gridWindow(t).MovingPane(1, 0); !errors.Is(err, domain.ErrChangingGridPanes) {
-			t.Fatalf("got %v, want ErrChangingGridPanes", err)
-		}
-	})
 }

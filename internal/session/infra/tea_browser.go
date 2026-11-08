@@ -542,7 +542,7 @@ func (m browser) details(width, height int) string {
 	} else {
 		// A session opens at the browser's size, less tmux's status line.
 		// The levels leave the drawing its least height.
-		panes = drawing(window, root, alerts(project, window), pane, m.width, max(m.height-1, 1),
+		panes = drawing(window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
 			width, max(below-len(levelLines), minDrawingHeight))
 	}
 	levelLines = fitted(levelLines, below-len(panes))

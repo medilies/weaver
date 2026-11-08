@@ -84,26 +84,37 @@ After freezing, editing, killing or deleting, the list comes back,
 unfiltered, with what happened. Since the browser takes the mouse, most
 terminals select text with shift held.
 
-The config form shows a project as cards: the project's, then one per
-window, holding one per pane. The pane with the cursor is open, the
-others folded to a line. Each field is checked as you type it, and a
-root or dir is marked ✓ when it exists. A pane lists the project's and
-its window's before commands and the project's variables dimmed, with
-the level they come from; enter on such a variable sets it for the pane
-instead. A window laid out by a `grid` keeps its panes' names and
-places.
+The config form shows a project as cards: the project's, then its
+windows', a tab each. The selected window's panes are drawn as they
+open, and the selected pane's card is below the drawing. Each field is
+checked as you type it, and a root or dir is marked ✓ when it exists. A
+pane lists the project's and its window's before commands and the
+project's variables dimmed, with the level they come from; enter on such
+a variable sets it for the pane instead. A window laid out by a `grid`
+keeps its panes' names and places.
 
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a field |
-| enter | type into it, or pick the next choice; on `+ add`, `+ pane` or `+ window`, add one |
-| ← → | change a choice: the pane split, the direction, the size by 5%, or whether the pane starts a shell, runs a command or prefills it |
-| o | add an item to the list selected, a pane to the window selected, or a window |
-| d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields, the window, after you confirm |
-| J K | move the item, pane or window selected down or up |
+| enter | type into it, or pick the next choice; on `+ add` or the `+ window` tab, add one |
+| ← → | on the tabs, select a window; on a pane's `starts`, whether it starts a shell, runs a command or prefills it |
+| o | add an item to the list selected, split the pane selected right, or add a window |
+| d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields or its tab, the window, after you confirm |
+| J K | move the item or window selected down or up |
 | u, ctrl+r | undo the last change, or redo the last change undone |
 | ctrl+s | show what saving changes in the config (↑ ↓ scroll), then y, enter or ctrl+s saves and n or esc goes back; the config is rewritten, without its comments |
 | esc | cancel typing, or leave, asking first when there are changes |
+
+On the drawing, the keys are tmux's. A window laid out by a `grid` only
+selects its panes there: its grid places them.
+
+| Key | Does |
+| --- | --- |
+| ← → ↑ ↓ or h l k j | select the pane next to the selected one; ↑ ↓ leave the drawing at its edge |
+| % or " | split the selected pane right or below, in half |
+| x | remove the selected pane, after you confirm; the pane it split takes its space |
+| H L | make the selected pane smaller or larger, by 5%, or by 5 cells when its size is in cells |
+| enter | go to the selected pane's card |
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
 it switches to it, from a `display-popup` too). When the session isn't

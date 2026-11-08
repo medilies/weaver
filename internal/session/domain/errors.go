@@ -102,10 +102,10 @@ var (
 	// ErrUnknownGridPane is returned when a grid names a pane its window
 	// doesn't have.
 	ErrUnknownGridPane = errors.New("the grid names a pane this window doesn't have")
-	// ErrChangingGridPanes is returned when adding, removing, moving,
-	// renaming or re-splitting a pane of a window laid out by a grid: its
-	// grid places them.
-	ErrChangingGridPanes = errors.New("a window laid out by a grid can't add, remove, move, rename or re-split its panes")
+	// ErrChangingGridPanes is returned when adding, removing, renaming
+	// or re-splitting a pane of a window laid out by a grid: its grid
+	// places them.
+	ErrChangingGridPanes = errors.New("a window laid out by a grid can't add, remove, rename or re-split its panes")
 )
 
 var (
