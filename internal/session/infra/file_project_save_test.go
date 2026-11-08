@@ -111,6 +111,28 @@ windows:
 		}
 	})
 
+	t.Run("writes a pane directory under the home but outside the root with ~", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "notes", "root: /srv/notes\nwindows: [{name: main, panes: [{name: notes, dir: ~/notes}]}]\n"))
+		if !strings.Contains(got, "dir: ~/notes\n") {
+			t.Fatalf("got:\n%s\nwant the dir written as ~/notes", got)
+		}
+	})
+
+	for dir, want := range map[string]string{"/srv/notes/~/x": "~/x", "./~/x": "~/x", "/srv/notes/~": "~"} {
+		t.Run("keeps "+dir+" under the root through a save and reload", func(t *testing.T) {
+			saved, _ := save(t, mustLoad(t, "notes", fmt.Sprintf("root: /srv/notes\nwindows: [{name: main, panes: [{name: notes, dir: %q}]}]\n", dir)))
+
+			name, _ := domain.NewProjectName("notes")
+			reloaded, err := infra.NewFileProjectRegistry(saved).FindByName(name)
+			if err != nil {
+				t.Fatalf("reloading: %v", err)
+			}
+			if got := paneNamed(t, reloaded, "main", "notes").Dir().String(); got != want {
+				t.Fatalf("got %q after reloading, want %q, relative to the root", got, want)
+			}
+		})
+	}
+
 	t.Run("keeps shell operators readable", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "ops", `root: /srv/ops
 windows:

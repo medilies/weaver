@@ -366,7 +366,7 @@ func paneFileOf(root domain.ProjectRoot, index int, panes []domain.Pane) paneFil
 func dirOf(root domain.ProjectRoot, dir domain.PaneDir) string {
 	path := dir.String()
 	if !filepath.IsAbs(path) {
-		return path
+		return keepRelative(path)
 	}
 	if !root.Contains(path) {
 		return contractHome(path)
@@ -374,6 +374,15 @@ func dirOf(root domain.ProjectRoot, dir domain.PaneDir) string {
 	rel, err := filepath.Rel(root.String(), path)
 	if err != nil || rel == "." {
 		return ""
+	}
+	return keepRelative(rel)
+}
+
+// keepRelative writes a relative path starting with a directory named ~
+// as "./~", which ExpandHome would otherwise read as the home directory.
+func keepRelative(rel string) string {
+	if rel == "~" || strings.HasPrefix(rel, "~/") {
+		return "./" + rel
 	}
 	return rel
 }
