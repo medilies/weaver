@@ -366,6 +366,12 @@ func TestTmuxStartInsideTmuxTakesTheClientsSize(t *testing.T) {
 	server := newTmuxServer(t)
 	server.query(t, "new-session", "-d", "-s", "home", "-x", "200", "-y", "50")
 	server.attached(t, "home") // a 200x50 client, in a detached viewer
+	for deadline := time.Now().Add(5 * time.Second); server.query(t, "list-clients", "-F", "#{client_session}") != "home"; {
+		if time.Now().After(deadline) {
+			t.Fatal("the viewer's client never attached")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	inside := infra.NewTmux(infra.TmuxOptions{
 		Global: server.global, Env: server.env, Inside: true,
 		Size: func() (int, int, bool) { return 80, 20, true }, // the pane weave runs in
