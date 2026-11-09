@@ -38,13 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 4. Setup and teardown in the config form (S)
-
-**When**: someone wants to change setup or teardown commands without
-`weave edit --raw`. The config form keeps them as they are; the project
-card would list them like `before`, added, edited, removed and
-reordered the same way.
-
 ### 5. The config in the browser (XS)
 
 **When**: someone misses the config's YAML in the details pane, which

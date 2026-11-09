@@ -127,14 +127,17 @@ typed there, and stays when editing. The selected window's panes are
 drawn as they open, the selected pane in cyan, heavy when the cursor is
 on the drawing; below them are the pane list, then the selected pane's
 card, starting with where the pane is placed. Click a window in the
-window list or a pane in the pane list to select it, or a `starts` or `clear` option
+window list or a pane in the pane list to select it, or a `starts`, `clear` or `focus` option
 to pick it; the selected ones are cyan blocks. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists; a
 command run that leaves a quote open is marked ⚠, as it would leave the
-shell waiting, but kept. A
-pane lists the project's and its window's before commands and the
-project's variables dimmed, with the level they come from; enter on such
-a variable sets it for the pane instead. A pane's tasks come last: each
+shell waiting, but kept. The
+project's card lists its setup and teardown commands, edited like its
+before commands. A window lists the project's variables dimmed, and a
+pane the project's and its window's before commands and variables, with
+the level they come from; enter on such a variable sets it for the
+window or pane instead. A window or pane among several has a `focus`:
+whether opening lands in it, or its window selects it. A pane's tasks come last: each
 its command, then its name, left blank to show the task by its command. A window
 laid out by a `grid` keeps its panes' names and places.
 
@@ -142,7 +145,7 @@ laid out by a `grid` keeps its panes' names and places.
 | --- | --- |
 | ↑ ↓ or k j | select a field |
 | enter | type into it, or pick the next choice; on the window list or the pane list, type the window's or pane's name; on `+ add` or `+ window`, add one |
-| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty; on `clear`, whether the `before` commands are cleared, or as the level above says |
+| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty; on `clear`, whether the `before` commands are cleared, or as the level above says; on `focus`, whether the window or pane is focused |
 | o | add an item to the list selected or a task to the pane's tasks, split the pane selected right, or add a window |
 | d | remove the item or task selected at once; on the pane list or a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
 | J K | move the item, task or window selected down or up |
@@ -286,7 +289,7 @@ windows:
 | --- | --- |
 | `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. The home directory itself is `"~"`, in quotes: YAML reads a bare `~` as null. |
 | `env` | Variables for every pane, and for the `setup` and `teardown` commands. Values are literal. |
-| `setup` | Commands run once in `root`, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. The config form keeps `setup` and `teardown` as they are: change them with `weave edit --raw`. |
+| `setup` | Commands run once in `root`, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. |
 | `teardown` | Commands run in `root`, in order, before `weave kill` ends a session weaver started, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, a space first so shells ignoring such lines keep it out of their history, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |

@@ -102,6 +102,8 @@ const (
 	fieldRoot
 	fieldDir
 	fieldBefore
+	fieldSetup
+	fieldTeardown
 	fieldEnv
 	fieldHigherEnv // a variable a higher level sets, shown in a window or pane, which enter sets there
 	fieldNote
@@ -118,7 +120,7 @@ const (
 
 // isList reports whether f holds a list, a row per item.
 func isList(f field) bool {
-	return f == fieldBefore || f == fieldEnv || f == fieldNote
+	return f == fieldBefore || f == fieldSetup || f == fieldTeardown || f == fieldEnv || f == fieldNote
 }
 
 // isTask reports whether f is a row of a pane's tasks, two rows each.
@@ -1187,6 +1189,10 @@ func (m configForm) items(at spot) []string {
 	switch {
 	case at.field == fieldEnv:
 		return envItems(m.ownEnv(at))
+	case at.field == fieldSetup:
+		return lines(m.project.Setup())
+	case at.field == fieldTeardown:
+		return lines(m.project.Teardown())
 	case at.window < 0:
 		return lines(m.project.Before())
 	case at.pane < 0:
@@ -1262,6 +1268,10 @@ func (m configForm) withItems(at spot, items []string) (domain.Project, error) {
 	switch {
 	case err != nil:
 		return domain.Project{}, err
+	case at.field == fieldSetup:
+		return m.project.SettingUp(cmds...), nil
+	case at.field == fieldTeardown:
+		return m.project.TearingDown(cmds...), nil
 	case at.window < 0:
 		return m.project.RunningFirst(cmds...), nil
 	case at.pane < 0:
@@ -1565,7 +1575,7 @@ func (m configForm) put(s *section, label, value, after string, at spot) {
 func (m configForm) quoteOpen(at spot) bool {
 	typed := m.editing && m.edit.at == at
 	switch at.field {
-	case fieldBefore, fieldTask:
+	case fieldBefore, fieldSetup, fieldTeardown, fieldTask:
 	case fieldCommand:
 		_, pane, _ := m.paneAt(at)
 		if (typed && !m.edit.run) || (!typed && !pane.Startup().Submits()) {
@@ -1718,6 +1728,8 @@ func (m configForm) projectCard() section {
 		m.put(&s, "name", name, "", projectNameAt)
 	}
 	m.put(&s, "root", contractHome(p.Root().String()), m.mark(p.Root().String()), spot{window: -1, pane: -1, field: fieldRoot})
+	m.list(&s, "setup", lines(p.Setup()), spot{window: -1, pane: -1, field: fieldSetup})
+	m.list(&s, "teardown", lines(p.Teardown()), spot{window: -1, pane: -1, field: fieldTeardown})
 	m.list(&s, "before", lines(p.Before()), spot{window: -1, pane: -1, field: fieldBefore})
 	m.putClear(&s, spot{window: -1, pane: -1, field: fieldClear})
 	m.envRows(&s, spot{window: -1, pane: -1, field: fieldEnv})
