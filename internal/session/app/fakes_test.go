@@ -42,3 +42,34 @@ func (r inMemoryRegistry) Names() ([]domain.ProjectName, error) {
 	}
 	return names, nil
 }
+
+// fakeCommands is a fake domain.CommandRunner recording the commands run,
+// and failing those in fails.
+type fakeCommands struct {
+	ran   []ranCommand
+	fails map[string]bool
+}
+
+// ranCommand is a command fakeCommands ran, where and with what env.
+type ranCommand struct {
+	cmd string
+	dir string
+	env domain.Env
+}
+
+func (c *fakeCommands) Run(cmd domain.Command, dir string, env domain.Env) error {
+	c.ran = append(c.ran, ranCommand{cmd: cmd.String(), dir: dir, env: env})
+	if c.fails[cmd.String()] {
+		return fmt.Errorf("%w (exit status 1): boom", domain.ErrCommandFailed)
+	}
+	return nil
+}
+
+// commandsRun is the text of the commands c ran, in order.
+func (c *fakeCommands) commandsRun() []string {
+	out := make([]string, 0, len(c.ran))
+	for _, r := range c.ran {
+		out = append(out, r.cmd)
+	}
+	return out
+}

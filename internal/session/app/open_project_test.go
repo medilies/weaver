@@ -112,7 +112,27 @@ func shop(t *testing.T) domain.Project {
 func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace) error {
 	t.Helper()
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-	return app.NewOpenProject(configs, sessions, workspace).Handle("shop")
+	return app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).Handle("shop")
+}
+
+// openSetUpShop runs OpenProject on the shop project, with APP_ENV=local
+// and two setup commands, running them with commands.
+func openSetUpShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace, commands *fakeCommands) error {
+	t.Helper()
+	env, err := domain.NewEnv(map[string]string{"APP_ENV": "local"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	var setup []domain.Command
+	for _, raw := range []string{"docker compose up -d", "php artisan migrate"} {
+		cmd, err := domain.NewCommand(raw)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		setup = append(setup, cmd)
+	}
+	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).SettingUp(setup...)}}
+	return app.NewOpenProject(configs, sessions, workspace, commands).Handle("shop")
 }
 
 // owned is a running session weaver started, which still has windows.
@@ -210,9 +230,63 @@ func TestOpenProject(t *testing.T) {
 		}
 	})
 
+	t.Run("runs the setup commands in the root, in order, with the project's env, then starts", func(t *testing.T) {
+		sessions, commands := &fakeSessions{}, &fakeCommands{}
+		if err := openSetUpShop(t, sessions, everything(), commands); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := commands.commandsRun(); !slices.Equal(got, []string{"docker compose up -d", "php artisan migrate"}) {
+			t.Fatalf("got %q run, want both setup commands in order", got)
+		}
+		for _, ran := range commands.ran {
+			if vars := ran.env.Vars(); ran.dir != "/srv/shop" || len(vars) != 1 || vars[0].Name() != "APP_ENV" {
+				t.Fatalf("got %q run in %s with %v, want it in /srv/shop with APP_ENV", ran.cmd, ran.dir, vars)
+			}
+		}
+		if !slices.Equal(sessions.started, []string{"shop"}) {
+			t.Fatalf("got %q started, want shop", sessions.started)
+		}
+	})
+
+	t.Run("stops at a failing setup command, starting nothing", func(t *testing.T) {
+		sessions := &fakeSessions{}
+		commands := &fakeCommands{fails: map[string]bool{"docker compose up -d": true}}
+		err := openSetUpShop(t, sessions, everything(), commands)
+		if !errors.Is(err, domain.ErrCommandFailed) || !strings.Contains(err.Error(), "setup: docker compose up -d: ") {
+			t.Fatalf("got %v, want the failing setup command named", err)
+		}
+		if len(commands.ran) != 1 || len(sessions.started)+len(sessions.attached) != 0 {
+			t.Fatalf("got %q run, %q started, %q attached; want nothing after the failure",
+				commands.commandsRun(), sessions.started, sessions.attached)
+		}
+	})
+
+	t.Run("runs the setup commands before checking directories, which they may create", func(t *testing.T) {
+		workspace := everything()
+		delete(workspace.dirs, "/srv/shop/logs")
+		commands := &fakeCommands{}
+		err := openSetUpShop(t, &fakeSessions{}, workspace, commands)
+		if !errors.Is(err, app.ErrMissingDirectory) || len(commands.ran) != 2 {
+			t.Fatalf("got %v with %q run, want both run before the missing directory", err, commands.commandsRun())
+		}
+	})
+
+	t.Run("doesn't run the setup commands for a running session", func(t *testing.T) {
+		for _, session := range []domain.RunningSession{owned(t, "shop"), domain.NewRunningSession(false)} {
+			sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": session}}
+			commands := &fakeCommands{}
+			if err := openSetUpShop(t, sessions, everything(), commands); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(commands.ran) != 0 {
+				t.Fatalf("got %q run, want none", commands.commandsRun())
+			}
+		}
+	})
+
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		configs := inMemoryRegistry{projects: map[string]domain.Project{}}
-		err := app.NewOpenProject(configs, &fakeSessions{}, everything()).Handle("shop")
+		err := app.NewOpenProject(configs, &fakeSessions{}, everything(), &fakeCommands{}).Handle("shop")
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
@@ -262,12 +336,12 @@ func TestOpenProjectHandleDir(t *testing.T) {
 	}
 	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
-		return app.NewOpenProject(registry(projects...), sessions, everything()).HandleDir(dir)
+		return app.NewOpenProject(registry(projects...), sessions, everything(), &fakeCommands{}).HandleDir(dir)
 	}
 	openPastBroken := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
 		t.Helper()
 		configs := withBrokenConfig{registry(projects...)}
-		return app.NewOpenProject(configs, sessions, everything()).HandleDir(dir)
+		return app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleDir(dir)
 	}
 
 	t.Run("opens the project whose root contains the directory", func(t *testing.T) {
@@ -295,7 +369,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		sessions := &fakeSessions{}
 		workspace := everything()
 		workspace.links = map[string]string{"/home/me/shop/front": "/srv/shop/front"}
-		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace).HandleDir("/home/me/shop/front"); err != nil {
+		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace, &fakeCommands{}).HandleDir("/home/me/shop/front"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.attached, []string{"shop"}) {
@@ -308,7 +382,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		workspace := everything()
 		workspace.links = map[string]string{"/home/me/blog": "/srv/blog"}
 		workspace.dirs["/home/me/blog"] = true
-		if err := app.NewOpenProject(registry(rootedAt(t, "blog", "/home/me/blog")), sessions, workspace).HandleDir("/srv/blog/posts"); err != nil {
+		if err := app.NewOpenProject(registry(rootedAt(t, "blog", "/home/me/blog")), sessions, workspace, &fakeCommands{}).HandleDir("/srv/blog/posts"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.attached, []string{"blog"}) {
@@ -322,7 +396,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		workspace.links = map[string]string{"/home/me/projects/shop": "/srv/shop", "/home/me/projects/shop/front": "/srv/shop/front"}
 		workspace.dirs["/home/me/projects/shop"] = true
 		configs := registry(rootedAt(t, "outer", "/home/me/projects/shop"), rootedAt(t, "inner", "/srv/shop/front"))
-		if err := app.NewOpenProject(configs, sessions, workspace).HandleDir("/home/me/projects/shop/front"); err != nil {
+		if err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleDir("/home/me/projects/shop/front"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.attached, []string{"inner"}) {
@@ -334,7 +408,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		sessions := &fakeSessions{}
 		workspace := everything()
 		workspace.links = map[string]string{"/srv/shop/vendor": "/opt/vendor"}
-		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace).HandleDir("/srv/shop/vendor"); err != nil {
+		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace, &fakeCommands{}).HandleDir("/srv/shop/vendor"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.attached, []string{"shop"}) {
@@ -348,7 +422,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		workspace.links = map[string]string{"/srv/shop/data": "/srv/big/data"}
 		workspace.dirs["/srv/big"] = true
 		configs := registry(shop(t), rootedAt(t, "big", "/srv/big"))
-		if err := app.NewOpenProject(configs, sessions, workspace).HandleDir("/srv/shop/data"); err != nil {
+		if err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleDir("/srv/shop/data"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(sessions.attached, []string{"big"}) {
@@ -384,7 +458,7 @@ func TestOpenProjectHandleDir(t *testing.T) {
 		workspace := everything()
 		workspace.links = map[string]string{"/home/me/blog": "/srv/blog"}
 		configs := registry(rootedAt(t, "blog", "/home/me/blog"), rootedAt(t, "notes", "/srv/blog"))
-		err := app.NewOpenProject(configs, &fakeSessions{}, workspace).HandleDir("/srv/blog")
+		err := app.NewOpenProject(configs, &fakeSessions{}, workspace, &fakeCommands{}).HandleDir("/srv/blog")
 		if !errors.Is(err, app.ErrAmbiguousProject) || !strings.Contains(err.Error(), "blog, rooted at /home/me/blog, and notes, rooted at /srv/blog") {
 			t.Fatalf("got %v, want each project named with its own root", err)
 		}

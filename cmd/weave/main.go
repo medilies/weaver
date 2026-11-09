@@ -45,6 +45,7 @@ func wire() (application, error) {
 	}
 	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize})
 	workspace := infra.NewLocalWorkspace()
+	commands := infra.NewShellRunner(os.Stdin, os.Stdout, os.Stderr)
 
 	confirm, configForm := infra.NewTeaConfirmer(), infra.NewTeaConfigForm(workspace, projects)
 
@@ -52,7 +53,7 @@ func wire() (application, error) {
 		freezeProject: app.NewFreezeProject(projects, tmux, workspace, configForm, confirm),
 		editProject:   app.NewEditProject(projects, projects, configForm, infra.NewEditor(), confirm),
 		sessions:      tmux,
-		openProject:   app.NewOpenProject(projects, tmux, workspace),
+		openProject:   app.NewOpenProject(projects, tmux, workspace, commands),
 		killProject:   app.NewKillProject(tmux, tmux),
 		listProjects:  app.NewListProjects(projects, tmux),
 		documents:     projects,

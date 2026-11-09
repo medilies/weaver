@@ -23,6 +23,9 @@ var (
 	// ErrInvalidConfig wraps whatever makes a stored project config
 	// unreadable, as opposed to failing to read it at all.
 	ErrInvalidConfig = errors.New("invalid config")
+	// ErrCommandFailed is returned when a setup or teardown command exits
+	// with an error or is interrupted.
+	ErrCommandFailed = errors.New("command failed")
 )
 
 var (

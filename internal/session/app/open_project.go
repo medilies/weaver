@@ -20,12 +20,13 @@ var (
 )
 
 // OpenProject puts the user in a project's tmux session, starting it
-// first when it isn't running, or re-creating the windows it lacks when
-// weaver started it.
+// first, after its setup commands, when it isn't running, or re-creating
+// the windows it lacks when weaver started it.
 type OpenProject struct {
 	projects  domain.ProjectRegistry
 	sessions  domain.SessionLauncher
 	workspace domain.Workspace
+	commands  domain.CommandRunner
 }
 
 // NewOpenProject constructs the use case against its ports.
@@ -33,8 +34,9 @@ func NewOpenProject(
 	projects domain.ProjectRegistry,
 	sessions domain.SessionLauncher,
 	workspace domain.Workspace,
+	commands domain.CommandRunner,
 ) OpenProject {
-	return OpenProject{projects: projects, sessions: sessions, workspace: workspace}
+	return OpenProject{projects: projects, sessions: sessions, workspace: workspace, commands: commands}
 }
 
 // Handle opens the project named rawName.
@@ -145,8 +147,15 @@ func (uc OpenProject) open(project domain.Project) error {
 	return uc.sessions.Attach(project.Name())
 }
 
-// start checks pane directories exist before changing anything.
+// start runs the setup commands, then checks pane directories exist,
+// which a setup command may create, before building the session. A
+// failing setup command stops it, with no session built.
 func (uc OpenProject) start(project domain.Project) error {
+	for _, cmd := range project.Setup() {
+		if err := uc.commands.Run(cmd, project.Root().String(), project.Env()); err != nil {
+			return fmt.Errorf("setup: %s: %w; %s's session wasn't started", cmd, err, project.Name())
+		}
+	}
 	plan := project.Plan()
 	if err := uc.checkDirs(project.Name(), plan); err != nil {
 		return err
