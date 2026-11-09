@@ -508,11 +508,11 @@ func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, ind
 		_, _ = t.run("kill-window", "-t", ids[0]) // untagged, freeze would capture it
 		return err
 	}
-	if _, err := t.run("set-option", "-w", "-t", ids[0], taskOfTag, source); err != nil {
-		return err
-	}
-	if _, err := t.run("set-option", "-p", "-t", ids[1], taskTag, argument(task.Command().String())); err != nil {
-		return err
+	for _, tag := range [][]string{{"-w", "-t", ids[0], taskOfTag, source}, {"-p", "-t", ids[1], taskTag, argument(task.Command().String())}} {
+		if _, err := t.run(append([]string{"set-option"}, tag...)...); err != nil {
+			_, _ = t.run("kill-window", "-t", ids[0]) // nothing runs in it yet
+			return err
+		}
 	}
 	for _, cmd := range append(pane.Before(), task.Command()) {
 		if err := t.typeCommand(ids[1], cmd.String(), true); err != nil {
@@ -562,7 +562,7 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 			}
 		}
 	}
-	shells, err := t.idleShells(project, slices.Collect(maps.Keys(found)))
+	shells, _, err := t.idleShells(project, slices.Collect(maps.Keys(found)))
 	if err != nil {
 		return nil, err
 	}
@@ -581,7 +581,8 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 // while the pane Type tagged with it, or the pane of the throwaway window
 // RunApart tagged with it and with the pane it ran apart from, isn't idle
 // as idleShells tells: it may be another job by then, which can't be told
-// apart.
+// apart. A pane whose process ps doesn't report isn't counted: the mark
+// is a hint, left out when it can't be told.
 func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.WindowPlan) ([]domain.RunningCommand, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
@@ -626,13 +627,13 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 			running[fields[1]] = typed{at: pane, command: command}
 		}
 	}
-	idle, err := t.idleShells(project, slices.Collect(maps.Keys(running)))
+	idle, seen, err := t.idleShells(project, slices.Collect(maps.Keys(running)))
 	if err != nil {
 		return nil, err
 	}
 	var commands []domain.RunningCommand
 	for pid, run := range running {
-		if !idle[pid] {
+		if seen[pid] && !idle[pid] {
 			commands = append(commands, domain.NewRunningCommand(run.at.window, run.at.index, run.command))
 		}
 	}
@@ -642,28 +643,32 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 // idleShells are those of pids, the processes of panes of the project's
 // session, whose shell idles at its prompt, checked with one ps: its
 // terminal's foreground process group is its own, and it is still the
-// shell, not a command it was replaced with by exec.
-func (t Tmux) idleShells(project domain.ProjectName, pids []string) (map[string]bool, error) {
-	idle := map[string]bool{}
+// shell, not a command it was replaced with by exec. Seen are those ps
+// reports at all.
+func (t Tmux) idleShells(project domain.ProjectName, pids []string) (idle, seen map[string]bool, err error) {
+	idle, seen = map[string]bool{}, map[string]bool{}
 	if len(pids) == 0 {
-		return idle, nil
+		return idle, seen, nil
 	}
 	shells, err := t.shellNames(project)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// One -o per column: POSIX ps takes all after "=" as the header.
 	out, err := exec.Command("ps", "-o", "pid=", "-o", "tpgid=", "-o", "comm=", "-p", strings.Join(pids, ",")).Output()
 	if err != nil && len(out) == 0 {
-		return idle, nil // ps fails when every process is gone
+		return idle, seen, nil // ps fails when every process is gone
 	}
 	for line := range strings.Lines(string(out)) {
 		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			seen[fields[0]] = true
+		}
 		if len(fields) >= 3 && fields[0] == fields[1] && shells[programName(strings.Join(fields[2:], " "))] {
 			idle[fields[0]] = true
 		}
 	}
-	return idle, nil
+	return idle, seen, nil
 }
 
 // shellNames are the names of the programs the panes of the project's
