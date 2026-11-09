@@ -38,28 +38,11 @@ v0.5.0 is done: window `env`, focus, setup and teardown in the config
 form, the config in the browser, a failed teardown seen from inside the
 session, rerun and a mark on a running task.
 
-v0.6.0, scheduled on 2026-11-09: settings, and grids finished. No new
-command; breaking changes are allowed, but none is planned. The
+v0.6.0, scheduled on 2026-11-09, is done: settings (the selected
+colour and the drawing keys), grid sizes in cells, grid windows edited
+and turned into splits in the config form, and window miniatures. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
-
-### 6. Window miniatures (S)
-
-The browser's window list becomes small drawings of every window, the
-selected one in the selected colour, when the details pane has about
-five lines to spare, and stays names otherwise:
-
-```text
- api              app              repo
-┌──────┬────┐    ┌──────┬────┐    ┌───────────┐
-│      │    │    │      │    │    │           │
-│      ├────┤    │      ├────┤    │           │
-└──────┴────┘    └──────┴────┘    └───────────┘
-```
-
-`drawing` already draws at any size; this is `windowList` calling it
-small, keeping ○ and clicks (`hotspot`). The config form keeps its
-window list of names, with `+ window`.
 
 ## Candidates
 

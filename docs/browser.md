@@ -40,6 +40,10 @@ run, whether they are cleared, and its variables, each with the level it comes f
 the window or the pane) and what it is over when it replaces the
 window's `dir`, or a project or window variable.
 
+With several windows and the lines to spare, each window is drawn small
+under its name, a miniature, the selected one in the selected colour;
+click one to select its window.
+
 ## Tasks
 
 Beside the project list, the task list shows the selected project's tasks under

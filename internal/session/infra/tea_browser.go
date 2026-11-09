@@ -397,10 +397,14 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	laid := m.laidOut(project, windows, width, height)
 	x -= listWidth + tasksWidth + detailsPadding
 	var spots []hotspot
-	switch y {
-	case windowListRow(laid.top):
-		_, spots = windowList(m.look, project, windows, laid.index, width)
-	case windowListRow(laid.top) + 1 + len(laid.panes):
+	switch row := y - windowListRow(laid.top); {
+	case row == 0:
+		_, spots = windowList(m.look, project, windows, laid.index, width, laid.miniWidth())
+	case row > 0 && row <= len(laid.miniatures):
+		// A miniature is clicked as the name above it.
+		_, spots = windowList(m.look, project, windows, laid.index, width, laid.miniWidth())
+		spots = slices.DeleteFunc(spots, func(s hotspot) bool { return s.key != "" })
+	case row == 1+len(laid.miniatures)+len(laid.panes):
 		if laid.paneList == "" {
 			return m, nil
 		}
@@ -633,8 +637,9 @@ func (m browser) details(width, height int) string {
 	if laid.paneList != "" {
 		panes = append(panes, laid.paneList)
 	}
-	listLine, _ := windowList(m.look, project, windows, laid.index, width)
-	return laid.top + "\n\n" + listLine + "\n" + strings.Join(append(panes, laid.levels...), "\n")
+	listLine, _ := windowList(m.look, project, windows, laid.index, width, laid.miniWidth())
+	below := append(slices.Clone(laid.miniatures), panes...)
+	return laid.top + "\n\n" + listLine + "\n" + strings.Join(append(below, laid.levels...), "\n")
 }
 
 // configText is a config's YAML as stored, each line cut to width, tabs
@@ -656,12 +661,13 @@ func configText(content []byte, width int) string {
 
 // detailsLayout is the parts of the details below the window list.
 type detailsLayout struct {
-	top       string // the config file and the summary
-	index     int    // the drawn window's
-	panes     []string
-	paneList  string // under a drawing, empty when the panes are listed
-	paneSpots []hotspot
-	levels    []string
+	top        string   // the config file and the summary
+	miniatures []string // small drawings of every window under the window list, when they fit
+	index      int      // the drawn window's
+	panes      []string
+	paneList   string // under a drawing, empty when the panes are listed
+	paneSpots  []hotspot
+	levels     []string
 }
 
 // laidOut is how the details of project, whose windows are windows, fit
@@ -674,13 +680,66 @@ func (m browser) laidOut(project app.ProjectOverview, windows []domain.WindowPla
 	pane := m.selectedPane(len(windows[index].Panes()))
 	below := height - windowListRow(top) - 1 // the window list
 	levelLines := levels(project.Project(), index, pane, width)
+	var miniatures []string
+	if below-miniatureHeight-1 >= minDrawingHeight+1+min(len(levelLines), 3) {
+		miniatures = m.miniatures(project, windows, index, width)
+		below -= len(miniatures)
+	}
 	panes, paneList, spots := m.panesShown(project, index, width, below, len(levelLines))
 	shown := len(panes)
 	if paneList != "" {
 		shown++
 	}
-	return detailsLayout{top: top, index: index, panes: panes, paneList: paneList, paneSpots: spots,
+	return detailsLayout{top: top, miniatures: miniatures, index: index, panes: panes, paneList: paneList, paneSpots: spots,
 		levels: fitted(levelLines, below-shown)}
+}
+
+// miniatureWidth and miniatureHeight are the size of a window's
+// miniature, the window list's names padded to its width above it.
+const miniatureWidth, miniatureHeight = 14, 4
+
+// miniWidth is the width the window list pads each name to: a
+// miniature's when they are drawn under it, else none.
+func (l detailsLayout) miniWidth() int {
+	if len(l.miniatures) == 0 {
+		return 0
+	}
+	return miniatureWidth
+}
+
+// miniatures are project's windows drawn small, side by side, each under
+// its name in the window list, the selected one in the selected colour:
+// none for a single window, which its drawing shows, nor when they don't
+// all fit in width.
+func (m browser) miniatures(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) []string {
+	if len(windows) < 2 {
+		return nil
+	}
+	_, spots := windowList(m.look, project, windows, selected, width, miniatureWidth)
+	var placed []hotspot
+	for _, spot := range spots {
+		if spot.key == "" {
+			placed = append(placed, spot)
+		}
+	}
+	if len(placed) != len(windows) || placed[0].item != 0 || placed[len(placed)-1].to > width {
+		return nil // scrolled or cut: the names alone
+	}
+	root := project.Project().Root().String()
+	rows := make([]string, miniatureHeight)
+	for _, spot := range placed {
+		window := windows[spot.item]
+		drawn := drawing(m.look, window, root, alerts(project, window), -1, false, m.width, max(m.height-1, 1),
+			miniatureWidth, miniatureHeight)
+		for y := range rows {
+			line := drawn[y]
+			if spot.item == selected {
+				line = m.look.picked.Render(ansi.Strip(line))
+			}
+			rows[y] += strings.Repeat(" ", max(spot.from-ansi.StringWidth(rows[y]), 0)) + line
+		}
+	}
+	return rows
 }
 
 // panesShown are the panes of the window at index of project's, drawn
@@ -762,12 +821,13 @@ func detailsTop(project app.ProjectOverview, width int) string {
 }
 
 // windowList is the names of windows, the selected one in a block of the
-// selected colour, ○ marking
-// those the project's owned session lacks, and which one of how many is
-// drawn, after ←→ when there are several to switch between; with the
-// cells each window's name and each arrow covers, to click them. When they
-// don't fit in width, the first ones make way for the selected one.
-func windowList(look look, project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) (string, []hotspot) {
+// selected colour, ○ marking those the project's owned session lacks,
+// each padded to pad cells to sit above its miniature, and which one of
+// how many is drawn, after ←→ when there are several to switch between;
+// with the cells each window's name and each arrow covers, to click
+// them. When they don't fit in width, the first ones make way for the
+// selected one.
+func windowList(look look, project app.ProjectOverview, windows []domain.WindowPlan, selected, width, pad int) (string, []hotspot) {
 	missing := map[domain.WindowName]bool{}
 	for _, name := range project.MissingWindows() {
 		missing[name] = true
@@ -781,7 +841,7 @@ func windowList(look look, project app.ProjectOverview, windows []domain.WindowP
 		if i == selected {
 			label = look.selected.Render(label)
 		}
-		labels[i] = label
+		labels[i] = label + strings.Repeat(" ", max(pad-ansi.StringWidth(label), 0))
 	}
 	count := fmt.Sprintf("%d/%d", selected+1, len(windows))
 	if len(windows) > 1 {
