@@ -33,9 +33,9 @@ its `columns` and `rows` sizes, separated by spaces (`30 1fr`), blank for
 equal ones. The drawing follows as you type. A name new to the window
 adds a pane, and a pane no longer named is removed with what it runs:
 rename a pane in its card instead, which renames it in the areas too.
-Changing how many columns or rows there are makes them equal. A pane
-name holding a comma or a `/` can't be typed there: use
-`weave edit --raw`. Panes are
+Changing how many columns or rows there are makes them equal. When a
+pane's name holds a comma or a `/`, the areas can't be typed there:
+use `weave edit --raw`. Panes are
 saved in the order the config lists them, new ones last.
 
 Saving rewrites the config, so its comments go: `weave edit` asks first

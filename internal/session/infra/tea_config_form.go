@@ -919,6 +919,11 @@ func (m configForm) startsClicked(at spot, option int) (configForm, tea.Cmd) {
 func (m configForm) entered() (configForm, tea.Cmd) {
 	at := m.focus
 	switch at.field {
+	case fieldGridAreas:
+		if window, ok := m.windowAt(at.window); ok && !areasTypable(window) {
+			m.problem = "A pane's name holds a comma or a /, which separate the areas typed here: change them with weave edit --raw."
+			return m, nil
+		}
 	case fieldStarts, fieldClear, fieldFocus:
 		return m.stepped(1)
 	case fieldWindowList:
@@ -1232,6 +1237,17 @@ func areasText(grid domain.Grid) string {
 		rows = append(rows, strings.Join(names, ", "))
 	}
 	return strings.Join(rows, " / ")
+}
+
+// areasTypable says whether window's grid areas can be typed as
+// areasText writes them: no pane's name holds a separator.
+func areasTypable(window domain.Window) bool {
+	for _, pane := range window.Panes() {
+		if strings.ContainsAny(pane.Name().String(), ",/") {
+			return false
+		}
+	}
+	return true
 }
 
 // tracksText is tracks as typed, separated by spaces, or "" for equal

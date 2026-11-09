@@ -527,6 +527,16 @@ func TestWindowLaidOutBy(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps a kept pane's place in the listing when the areas move it", func(t *testing.T) {
+		w, err := two(t).LaidOutBy(grid(t, nil, nil, []string{"server"}, []string{"editor"}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := listed(w); !slices.Equal(got, []string{"editor", "server"}) {
+			t.Fatalf("got %q, want editor still listed first", got)
+		}
+	})
+
 	t.Run("removes a pane the grid no longer names", func(t *testing.T) {
 		w, err := two(t).LaidOutBy(grid(t, nil, nil, []string{"editor"}))
 		if err != nil {
@@ -563,8 +573,22 @@ func TestGridWithAreas(t *testing.T) {
 
 	t.Run("keeps the sizes of as many columns and rows", func(t *testing.T) {
 		g, err := sized(t).WithAreas(areas(t, []string{"a", "c"}, []string{"a", "b"}))
-		if err != nil || len(g.Columns()) != 2 || len(g.Rows()) != 2 {
-			t.Fatalf("got %v, %v (%v), want both kept", g.Columns(), g.Rows(), err)
+		got := fmt.Sprint(g.Columns(), g.Rows())
+		if err != nil || got != "[60% 40%] [70% 30%]" {
+			t.Fatalf("got %s (%v), want both kept", got, err)
+		}
+	})
+
+	t.Run("makes columns equal when their count changes", func(t *testing.T) {
+		g, err := sized(t).WithAreas(areas(t, []string{"a", "b", "b"}, []string{"a", "c", "d"}))
+		if err != nil || len(g.Columns()) != 0 || len(g.Rows()) != 2 {
+			t.Fatalf("got columns %v, rows %v (%v), want columns equal, rows kept", g.Columns(), g.Rows(), err)
+		}
+	})
+
+	t.Run("refuses the zero grid's areas without panicking", func(t *testing.T) {
+		if _, err := (domain.Grid{}).WithAreas(nil); !errors.Is(err, domain.ErrEmptyGrid) {
+			t.Fatalf("got %v, want ErrEmptyGrid", err)
 		}
 	})
 

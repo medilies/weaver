@@ -369,7 +369,7 @@ func cloneAreas(areas [][]PaneName) [][]PaneName {
 // count makes them equal.
 func (g Grid) WithAreas(areas [][]PaneName) (Grid, error) {
 	columns, rows := g.columns, g.rows
-	if len(areas) == 0 || len(areas[0]) != len(g.areas[0]) {
+	if len(areas) == 0 || len(g.areas) == 0 || len(areas[0]) != len(g.areas[0]) {
 		columns = nil
 	}
 	if len(areas) != len(g.areas) {
