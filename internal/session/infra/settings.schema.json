@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "properties": {
     "selected-colour": {
-      "description": "The colour marking what is selected in the browser and the config form: an ANSI colour number, 0-255, or \"#rrggbb\". Cyan (6) unless set.",
+      "description": "The colour marking what is selected in the browser, the config form and the questions weave asks, its text black or white to stay readable: an ANSI colour number, 0-255, or \"#rrggbb\". Cyan (6) unless set.",
       "oneOf": [
         { "type": "integer", "minimum": 0, "maximum": 255 },
         { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }

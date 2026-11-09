@@ -863,8 +863,11 @@ func (w Window) ReplacingPane(index int, pane Pane) (Window, error) {
 		return Window{}, err
 	}
 	old := w.panes[index]
-	if w.gridded && (pane.split != old.split || pane.splits != old.splits || pane.name.IsZero()) {
+	switch {
+	case w.gridded && (pane.split != old.split || pane.splits != old.splits):
 		return Window{}, ErrChangingGridPanes
+	case w.gridded && pane.name.IsZero():
+		return Window{}, fmt.Errorf("pane %s: %w: its grid's areas name it", paneRef(index, old), ErrEmptyPaneName)
 	}
 	panes := slices.Clone(w.panes)
 	panes[index] = pane

@@ -24,7 +24,7 @@ to, only warns.
 The colour marking what is selected in the [browser](browser.md) and
 the [config form](config-form.md): the selected pane in the drawing, the
 selected window, pane or option in a list, and the chosen answer of a
-question. An ANSI colour number, `0` to `255`, or `"#rrggbb"` in
+question, its text black or white to stay readable. An ANSI colour number, `0` to `255`, or `"#rrggbb"` in
 quotes. Cyan (`6`) unless set. Warnings keep their own colours.
 
 ## `keys`

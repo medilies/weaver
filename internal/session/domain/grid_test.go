@@ -340,6 +340,13 @@ func TestChangingGridWindowPanes(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects clearing a pane's name, which its areas use", func(t *testing.T) {
+		w := gridWindow(t)
+		if _, err := w.ReplacingPane(1, w.Panes()[1].Named(domain.PaneName{})); !errors.Is(err, domain.ErrEmptyPaneName) {
+			t.Fatalf("got %v, want ErrEmptyPaneName", err)
+		}
+	})
+
 	t.Run("rejects renaming a pane to another's name", func(t *testing.T) {
 		w := gridWindow(t)
 		if _, err := w.ReplacingPane(1, w.Panes()[1].Named(w.Panes()[0].Name())); !errors.Is(err, domain.ErrDuplicatePaneName) {

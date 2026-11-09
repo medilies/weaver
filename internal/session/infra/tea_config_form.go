@@ -635,7 +635,9 @@ func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 		// Only a grid window has the row: either way, it becomes splits.
 		// At the size the drawing shows, so that it doesn't change.
 		cols, rows := m.width, max(m.height-1, 1)
-		return m.changedTo(m.windowChanged(m.focus, func(w domain.Window) (domain.Window, error) { return w.InSplits(cols, rows), nil })), nil
+		project, err := m.windowChanged(m.focus, func(w domain.Window) (domain.Window, error) { return w.InSplits(cols, rows), nil })
+		// The row goes with the grid: the cursor goes to the drawing below.
+		return m.changedAt(project, err, spot{window: m.focus.window, pane: 0, field: fieldDrawing}), nil
 	}
 	return m, nil
 }

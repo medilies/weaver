@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -109,7 +111,10 @@ var (
 	hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 	// keyName is a key as Bubble Tea names it: one character, or a name
 	// such as space or f5, after any modifiers.
-	keyName = regexp.MustCompile(`^((ctrl|alt|shift|super|hyper|meta)\+)*([^\s+]|\+|[a-z][a-z0-9]+)$`)
+	// shiftedCharacter is shift with a character, which terminals send as
+	// the shifted character itself: shift+a is A.
+	shiftedCharacter = regexp.MustCompile(`(^|\+)shift\+[^\s+]$`)
+	keyName          = regexp.MustCompile(`^((ctrl|alt|shift|super|hyper|meta)\+)*([^\s+]|\+|[a-z][a-z0-9]+)$`)
 )
 
 var (
@@ -167,7 +172,7 @@ func decodeSettings(raw []byte) (Settings, error) {
 		if *key.value == "" {
 			return Settings{}, fmt.Errorf("keys.%s: %w", key.field, ErrEmptyKey)
 		}
-		if !keyName.MatchString(*key.value) {
+		if !keyName.MatchString(*key.value) || shiftedCharacter.MatchString(*key.value) {
 			return Settings{}, fmt.Errorf("keys.%s: %w: %q (want a character, or a name such as space or ctrl+x)", key.field, ErrInvalidKey, *key.value)
 		}
 		*key.into = *key.value
@@ -220,6 +225,24 @@ type look struct {
 func (s Settings) look() look {
 	return look{
 		picked:   lipgloss.NewStyle().Foreground(s.colour),
-		selected: lipgloss.NewStyle().Background(s.colour).Foreground(lipgloss.Color("0")),
+		selected: lipgloss.NewStyle().Background(s.colour).Foreground(textOn(s.colour)),
 	}
+}
+
+// textOn is the text colour readable on a block of colour: black on a
+// light one, white on a dark one.
+func textOn(colour color.Color) color.Color {
+	if basic, ok := colour.(ansi.BasicColor); ok {
+		// Terminals choose their own basic colours: black, red, blue and
+		// magenta are dark in most, bright black too.
+		if slices.Contains([]ansi.BasicColor{0, 1, 4, 5, 8}, basic) {
+			return lipgloss.Color("15")
+		}
+		return lipgloss.Color("0")
+	}
+	r, g, b, _ := colour.RGBA() // 16 bits each
+	if 299*r+587*g+114*b >= 1000*0x8000 {
+		return lipgloss.Color("0")
+	}
+	return lipgloss.Color("15")
 }

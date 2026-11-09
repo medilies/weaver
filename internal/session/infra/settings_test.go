@@ -90,7 +90,7 @@ func TestLoadSettings(t *testing.T) {
 	})
 
 	t.Run("refuse a key no terminal sends as written", func(t *testing.T) {
-		for _, key := range []string{`" "`, "ctrl-x", "Space", "ctrl+"} {
+		for _, key := range []string{`" "`, "ctrl-x", "Space", "ctrl+", "shift+a"} {
 			if _, err := settingsIn(t, "keys:\n  remove: "+key+"\n"); !errors.Is(err, ErrInvalidKey) {
 				t.Errorf("%s: got %v, want ErrInvalidKey", key, err)
 			}
@@ -190,5 +190,15 @@ func TestSettingsSchemaDeclaresEveryField(t *testing.T) {
 	keysField, _ := file.FieldByName("Keys")
 	if got, want := keys(schema.Properties["keys"].Properties), fields(keysField.Type); !slices.Equal(got, want) {
 		t.Errorf("schema's keys have %q, the file %q", got, want)
+	}
+}
+
+func TestSelectedBlockText(t *testing.T) {
+	for colour, want := range map[string]string{"6": "0", "#ffd75f": "0", "4": "15", "#000080": "15"} {
+		t.Run("on "+colour, func(t *testing.T) {
+			if got := textOn(lipgloss.Color(colour)); got != lipgloss.Color(want) {
+				t.Fatalf("got %v, want colour %s", got, want)
+			}
+		})
 	}
 }

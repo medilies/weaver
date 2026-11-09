@@ -345,6 +345,23 @@ func TestTmuxStartSizesTheWindowBelowTheStatusLine(t *testing.T) {
 	}
 }
 
+func TestTmuxStartSizesTheWindowByTheStatusLinesTheConfigSets(t *testing.T) {
+	server := newTmuxServer(t)
+	conf := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(conf, []byte("set -g status off\n"), 0o600); err != nil {
+		t.Fatalf("writing the config: %v", err)
+	}
+	server.global[len(server.global)-1] = conf // the server isn't running: new-session reads it
+
+	if err := server.tmux().Start(planOf(t, "nostatus", fmt.Sprintf(`{"root": %q}`, t.TempDir()))); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := server.query(t, "display-message", "-p", "-t", "=nostatus:", "#{window_width}x#{window_height}"); got != "200x51" {
+		t.Fatalf("got %s, want the whole 200x51 terminal without a status line", got)
+	}
+}
+
 func TestTmuxStartInsideTmuxTakesTheClientsSize(t *testing.T) {
 	server := newTmuxServer(t)
 	server.query(t, "new-session", "-d", "-s", "home", "-x", "200", "-y", "50")

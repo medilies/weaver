@@ -52,7 +52,7 @@ func (t Track) String() string {
 const nominalCols, nominalRows = 80, 24
 
 // Grid places a window's panes by naming them in rows and columns: a pane
-// covers the rectangle of cells holding its name. Columns and rows are
+// covers the rectangle of slots holding its name. Columns and rows are
 // equal unless sized.
 type Grid struct {
 	areas   [][]PaneName

@@ -808,8 +808,10 @@ func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (ses
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{session_id} #{window_id} #{pane_id} " + sized("default-command"),
 	}
-	if cols, rows, ok := t.windowSize(); ok {
-		args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
+	cols, rows, sized := t.terminalSize()
+	guessed := t.statusLines("")
+	if sized {
+		args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(max(rows-guessed, 1)))
 	}
 	scripted := shellCommand(pane, "") != nil
 	if scripted {
@@ -824,6 +826,17 @@ func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (ses
 		return "", "", "", "", fmt.Errorf("tmux new-session: unexpected output %q", out)
 	}
 	session, windowID, paneID, defaultCommand = fields[0], fields[1], fields[2], verbatim(fields[3])
+	if actual := t.statusLines(session); sized && actual != guessed {
+		// Started by new-session, the server only now read the user's
+		// config, whose status lines the guess missed: the window takes
+		// the right size, and goes back to following its clients.
+		if _, err = t.run("resize-window", "-t", windowID, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(max(rows-actual, 1))); err == nil {
+			_, err = t.run("set-option", "-w", "-u", "-t", windowID, "window-size")
+		}
+		if err != nil {
+			return "", "", "", "", err
+		}
+	}
 	if scripted {
 		_, err = t.run(append([]string{"respawn-pane", "-k", "-t", paneID, "-c", formatArgument(pane.Dir())},
 			shellCommand(pane, defaultCommand)...)...)
@@ -831,31 +844,33 @@ func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (ses
 	return session, windowID, paneID, defaultCommand, err
 }
 
-// windowSize is the size a new session's window has once attached: the
-// client's, inside tmux, else the terminal's, less the status lines. A
-// grid's columns or rows in cells are sized for it: were the window to
-// change size on attaching, tmux would share the difference out over the
-// panes, those in cells too.
-func (t Tmux) windowSize() (cols, rows int, ok bool) {
+// terminalSize is the size of the terminal a new session is attached
+// in: the client's, inside tmux, else the terminal's. Its window is that
+// less the status lines, so that it keeps its size once attached: were it
+// to change, tmux would share the difference out over the panes, a
+// grid's columns or rows in cells too.
+func (t Tmux) terminalSize() (cols, rows int, ok bool) {
 	if t.opts.Inside {
 		out, err := t.run("display-message", "-p", "#{client_width} #{client_height}")
 		if _, scanErr := fmt.Sscan(out, &cols, &rows); err == nil && scanErr == nil && cols > 0 && rows > 0 {
-			ok = true
+			return cols, rows, true
 		}
 	}
-	if !ok && t.opts.Size != nil {
-		cols, rows, ok = t.opts.Size()
+	if t.opts.Size != nil {
+		return t.opts.Size()
 	}
-	if !ok {
-		return 0, 0, false
-	}
-	return cols, max(rows-t.statusLines(), 1), true
+	return 0, 0, false
 }
 
-// statusLines is how many lines tmux's status takes: its global status
-// option, read from a running server, else tmux's default of one line.
-func (t Tmux) statusLines() int {
-	out, err := t.run("show-options", "-gv", "status")
+// statusLines is how many lines tmux's status takes in session, or
+// globally for none: read from a running server, else tmux's default of
+// one line.
+func (t Tmux) statusLines(session string) int {
+	args := []string{"show-options", "-gv", "status"}
+	if session != "" {
+		args = []string{"display-message", "-p", "-t", session, "#{status}"}
+	}
+	out, err := t.run(args...)
 	switch {
 	case err != nil:
 		return 1

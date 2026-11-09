@@ -23,7 +23,8 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
 | workspace | The filesystem projects live in: their directories, and the programs on PATH | | `Workspace` |
 | window, pane | tmux windows and panes, panes laid out by splits or a grid | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
-| grid | A window's panes placed by naming them in rows and columns, sized as shares of the window or in cells. A window has splits or a grid, never both | `grid:` (`areas:`, `columns:`, `rows:`) | `Grid`, `Track`, `NewGridWindow` |
+| grid | A window's panes placed by naming them in rows and columns, sized as shares of the window or in terminal cells; not to be confused with the slots of its areas, which hold names. A window has splits or a grid, never both | `grid:` (`areas:`, `columns:`, `rows:`) | `Grid`, `Track`, `NewGridWindow`, `WindowPlan.SizedTo`, `Window.LaidOutBy`, `Grid.WithAreas`, `Window.Listing` |
+| layout | Whether a window's panes are placed by splits or by a grid. The config form turns a grid into the splits it makes, never back | `layout` row (grid, splits) in the config form | `Window.InSplits`, `fieldLayout` in `tea_config_form.go` |
 | layout cell | How tmux tiles a window: a pane, or cells side by side or stacked. Capture reads one and a grid is cut into one; both become splits | | `LayoutCell`, `CarvedPane` |
 | pane name | A pane's name, shown in its top border | `name:` (pane) | `PaneName`, the `@label` pane option |
 | dir | A window's or pane's directory, relative to the root; a pane's replaces its window's, `.` going back to the root | `dir:` | `PaneDir`, `Window.In`, `Pane.In` |
