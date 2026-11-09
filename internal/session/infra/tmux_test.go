@@ -1197,16 +1197,19 @@ func TestTmuxIdle(t *testing.T) {
 			{"name": "shell"},
 			{"name": "server", "command": "sleep 300", "split": {"direction": "right"}}
 		]},
-		{"name": "jobs", "panes": [{"command": "true"}]}
+		{"name": "jobs", "panes": [{"command": "true"}]},
+		{"name": "replaced", "panes": [{"command": "exec sleep 300"}]}
 	]}`, root))
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	project := plan.Name()
 	api, jobs := plan.Windows()[0], plan.Windows()[1]
+	want := map[domain.WindowName][]int{api.Name(): {0}, jobs.Name(): {0}}
 
-	t.Run("finds the panes whose shell idles, not one running a command", func(t *testing.T) {
-		want := map[domain.WindowName][]int{api.Name(): {0}, jobs.Name(): {0}}
+	// idleAs waits until Idle finds want, and fails with what it found.
+	idleAs := func(t *testing.T, want map[domain.WindowName][]int) {
+		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
 		for {
 			got, err := server.tmux().Idle(project, plan.Windows())
@@ -1221,6 +1224,22 @@ func TestTmuxIdle(t *testing.T) {
 			}
 			time.Sleep(50 * time.Millisecond)
 		}
+	}
+
+	t.Run("finds the panes whose shell idles, not one running a command or replaced by one", func(t *testing.T) {
+		idleAs(t, want)
+	})
+
+	t.Run("looks only in the first window tagged with a window's name", func(t *testing.T) {
+		later := server.query(t, "new-window", "-d", "-t", "=idle:", "-P", "-F", "#{window_id}")
+		server.query(t, "set-option", "-w", "-t", later, "@weaver_window", "api")
+		server.query(t, "set-option", "-p", "-t", later, "@label", "server")
+		idleAs(t, want)
+	})
+
+	t.Run("finds no pane of a window the session lacks", func(t *testing.T) {
+		server.query(t, "kill-window", "-t", "=idle:jobs")
+		idleAs(t, map[domain.WindowName][]int{api.Name(): {0}})
 	})
 
 	t.Run("finds no pane the session lacks idle", func(t *testing.T) {

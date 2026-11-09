@@ -89,16 +89,17 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 // found, wrapping ErrMissingProgram, or a command run that leaves a quote
 // open, wrapping ErrUnclosedQuote; and in any pane, a task whose program
 // can't be found or that leaves a quote open; each once, however many
-// panes it concerns. In an owned session, each pane whose command exited,
-// wrapping ErrCommandExited, is warned about too. Opening a project that
-// isn't running creates every pane, an owned session the missing windows'
-// panes, and a session weaver didn't start none.
+// panes it concerns. Opening a project that isn't running creates every
+// pane, an owned session the missing windows' panes, and a session weaver
+// didn't start none. Last, in an owned session, each pane whose command
+// exited, wrapping ErrCommandExited.
 func (o ProjectOverview) Warnings() []Warning {
 	return slices.Clone(o.warnings)
 }
 
 // Warning is something opening a project would likely fail on, or a
-// pane's command that exited, and the panes it concerns. Its message names the first of them.
+// pane's command that exited, and the panes it concerns. Its message
+// names the first of them.
 type Warning struct {
 	err   error
 	panes []paneAt

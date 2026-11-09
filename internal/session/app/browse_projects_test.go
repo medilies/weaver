@@ -589,6 +589,38 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("doesn't warn about idle panes starting a plain shell, offering tasks or not", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		right, err := domain.NewSplit(0, domain.Right, domain.DefaultSize())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		build, err := domain.NewTask("build", command(t, "hugo build"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		window, err := domain.NewWindow(windowName(t, "blog"),
+			domain.NewPane().Named(paneName(t, "shell")),
+			domain.NewPane().Named(paneName(t, "tasks")).Offering(build).Splitting(right))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, err := project(t, "blog").WithWindows(window)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.configs.projects["blog"] = blog
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0, 1}}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if overview, _ := s.browser.last().overview("blog"); len(overview.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", overview.Warnings())
+		}
+	})
+
 	t.Run("doesn't warn about an idle pane in a session weaver didn't start", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["blog"] = serving(t, "", "hugo server")

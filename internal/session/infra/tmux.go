@@ -7,6 +7,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -489,13 +490,15 @@ func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index
 	}
 	pane, ok := pick(panes, window, index)
 	if !ok {
-		return "", "", fmt.Errorf("%w: no pane labelled %q in its window", domain.ErrPaneNotRunning, window.Panes()[index].Name())
+		return "", "", fmt.Errorf("%w: no pane labelled %q in its window", domain.ErrPaneNotRunning, labelOf(window, index))
 	}
 	return pane.id, pane.pid, nil
 }
 
 // Idle implements domain.SessionInspector. Every pane is checked with one
-// ps.
+// ps: its shell idles when its terminal's foreground process group is its
+// own, and it is still the shell, not a command it was replaced with by
+// exec.
 func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map[domain.WindowName][]int, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
@@ -517,14 +520,19 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 	if len(found) == 0 {
 		return idle, nil
 	}
-	// The shell idles when its terminal's foreground process group is its own.
-	out, err := exec.Command("ps", "-o", "pid=,tpgid=", "-p", strings.Join(slices.Collect(maps.Keys(found)), ",")).Output()
+	shells, err := t.shellNames(project)
+	if err != nil {
+		return nil, err
+	}
+	// One -o per column: POSIX ps takes all after "=" as the header.
+	out, err := exec.Command("ps", "-o", "pid=", "-o", "tpgid=", "-o", "comm=",
+		"-p", strings.Join(slices.Collect(maps.Keys(found)), ",")).Output()
 	if err != nil && len(out) == 0 {
 		return idle, nil // ps fails when every process is gone
 	}
 	for line := range strings.Lines(string(out)) {
 		fields := strings.Fields(line)
-		if len(fields) != 2 || fields[0] != fields[1] {
+		if len(fields) < 3 || fields[0] != fields[1] || !shells[programName(strings.Join(fields[2:], " "))] {
 			continue
 		}
 		if pane, ok := found[fields[0]]; ok {
@@ -535,6 +543,29 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 		slices.Sort(idle[window])
 	}
 	return idle, nil
+}
+
+// shellNames are the names of the programs the panes of the project's
+// session end their startup with: its default-shell, and the program of
+// its default-command when set.
+func (t Tmux) shellNames(project domain.ProjectName) (map[string]bool, error) {
+	names := map[string]bool{}
+	for _, option := range []string{"default-shell", "default-command"} {
+		value, err := t.option("="+project.String(), option)
+		if err != nil {
+			return nil, err
+		}
+		if fields := strings.Fields(value); len(fields) > 0 {
+			names[programName(fields[0])] = true
+		}
+	}
+	return names, nil
+}
+
+// programName is a program's name without its directory, or the "-" a
+// login shell's name starts with, as ps may print it.
+func programName(program string) string {
+	return filepath.Base(strings.TrimPrefix(program, "-"))
 }
 
 // listedPane is a pane of a running session: its ID, its number in the
@@ -587,15 +618,21 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 	return windows, nil
 }
 
+// labelOf is the label the pane at index of window has in a running
+// session: its name, or none for a window's only pane.
+func labelOf(window domain.WindowPlan, index int) string {
+	if len(window.Panes()) == 1 {
+		return ""
+	}
+	return window.Panes()[index].Name().String()
+}
+
 // pick is the pane at index of window among panes, its window's in a
 // running session: the one labelled with its name or, for a window's only
 // pane, the first unlabelled one created, which panes split off it by
 // hand leave in place.
 func pick(panes []listedPane, window domain.WindowPlan, index int) (listedPane, bool) {
-	name := window.Panes()[index].Name().String()
-	if len(window.Panes()) == 1 {
-		name = ""
-	}
+	name := labelOf(window, index)
 	var picked listedPane
 	found := false
 	for _, pane := range panes {
