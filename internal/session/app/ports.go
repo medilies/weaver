@@ -25,10 +25,10 @@ type ProjectDraft struct {
 	Env       domain.Env
 	Before    []domain.Command
 	Clearing  domain.Clearing
-	Setup     []domain.Command // kept as they are: the form doesn't change them
-	Teardown  []domain.Command // kept as they are: the form doesn't change them
-	Windows   []domain.Window  // a running session's, to start from; none to start blank
-	Config    []byte           // the config as stored, which saving replaces; none when freezing
+	Setup     []domain.Command
+	Teardown  []domain.Command
+	Windows   []domain.Window // a running session's, to start from; none to start blank
+	Config    []byte          // the config as stored, which saving replaces; none when freezing
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.
@@ -41,6 +41,13 @@ type ProjectForm interface {
 type Confirmer interface {
 	// Confirm returns the answer, or ErrAborted.
 	Confirm(question string) (bool, error)
+}
+
+// Acknowledger tells the user something and waits until they have read
+// it.
+type Acknowledger interface {
+	// Acknowledge shows message and returns once the user is done with it.
+	Acknowledge(message string) error
 }
 
 // ConfigDocument is a project's config as the user writes it: the file it

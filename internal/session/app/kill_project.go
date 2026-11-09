@@ -14,6 +14,7 @@ type KillProject struct {
 	locator  domain.SessionLocator
 	projects domain.ProjectRegistry
 	commands domain.CommandRunner
+	reader   Acknowledger
 }
 
 // NewKillProject constructs the use case against its ports.
@@ -22,8 +23,9 @@ func NewKillProject(
 	locator domain.SessionLocator,
 	projects domain.ProjectRegistry,
 	commands domain.CommandRunner,
+	reader Acknowledger,
 ) KillProject {
-	return KillProject{sessions: sessions, locator: locator, projects: projects, commands: commands}
+	return KillProject{sessions: sessions, locator: locator, projects: projects, commands: commands, reader: reader}
 }
 
 // Handle kills the session of the project named rawName, weaver's or
@@ -69,11 +71,18 @@ func (uc KillProject) HandleCurrent() error {
 // kill kills the project's session, first running its teardown commands
 // when owned, since only a session weaver started had its setup commands
 // run. The session is killed even when the teardown fails, which is then
-// reported.
+// reported: first to the user, who reads it before the kill, when weaver
+// runs inside that session, since its pane goes with it.
 func (uc KillProject) kill(name domain.ProjectName, owned bool) error {
 	var teardown error
 	if owned {
 		teardown = uc.tearDown(name)
+	}
+	if teardown != nil && uc.inside(name) {
+		message := fmt.Sprintf("%v\n\n%s's session will be killed anyway, with this pane.", teardown, name)
+		if err := uc.reader.Acknowledge(message); err != nil {
+			return errors.Join(err, teardown)
+		}
 	}
 	if err := uc.sessions.Kill(name); err != nil {
 		return errors.Join(err, teardown)
@@ -82,6 +91,12 @@ func (uc KillProject) kill(name domain.ProjectName, owned bool) error {
 		return fmt.Errorf("%w; %s's session was killed anyway", teardown, name)
 	}
 	return nil
+}
+
+// inside reports whether weaver runs in the project's session.
+func (uc KillProject) inside(name domain.ProjectName) bool {
+	current, err := uc.locator.Current()
+	return err == nil && current == name.String()
 }
 
 // tearDown runs the project's teardown commands in its root, in order,

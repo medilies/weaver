@@ -38,12 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 6. A failed teardown seen from inside the session (XS)
-
-**When**: `weave kill` run in a pane of the session it kills hides a
-failing teardown command, since the pane goes with the session. weave
-would print the error and wait for Enter before the kill.
-
 ### 7. Rerun (S)
 
 **When**: a crashed dev server is restarted by hand often enough that

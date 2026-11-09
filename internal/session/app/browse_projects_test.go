@@ -134,7 +134,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		app.NewOpenProject(s.configs, server, s.workspace, &fakeCommands{}),
 		app.NewFreezeProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form, confirm),
 		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
-		app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}),
+		app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}),
 		app.NewRunTask(s.configs, &fakeTasks{fakeSessions: s.sessions}, confirm),
 	).Handle("/srv/new")
 }
@@ -716,7 +716,7 @@ func TestBrowseProjects(t *testing.T) {
 		err := app.NewBrowseProjects(
 			s.browser, answer(true), s.configs, s.documents, s.workspace, server,
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
-			app.NewKillProject(unkillableSessions{err: errors.New("tmux kill-session: lost server")}, capturedSessions{}, s.configs, &fakeCommands{}), app.RunTask{},
+			app.NewKillProject(unkillableSessions{err: errors.New("tmux kill-session: lost server")}, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}), app.RunTask{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -733,7 +733,7 @@ func TestBrowseProjects(t *testing.T) {
 		err := app.NewBrowseProjects(
 			s.browser, confirm, s.configs, s.documents, s.workspace, unfindableSessions{errors.New("tmux: not found")},
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
-			app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}), app.RunTask{},
+			app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}), app.RunTask{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

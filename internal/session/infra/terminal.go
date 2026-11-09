@@ -1,6 +1,10 @@
 package infra
 
 import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 
 	"golang.org/x/term"
@@ -22,4 +26,29 @@ func TerminalSize() (cols, rows int, ok bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// LineAcknowledger is app.Acknowledger in a plain terminal: it prints a
+// message and waits for Enter.
+type LineAcknowledger struct {
+	in  io.Reader
+	out io.Writer
+}
+
+// NewLineAcknowledger reads Enter from in and prints to out.
+func NewLineAcknowledger(in io.Reader, out io.Writer) LineAcknowledger {
+	return LineAcknowledger{in: in, out: out}
+}
+
+// Acknowledge implements app.Acknowledger. Without a line to read, as
+// when in is closed, it returns at once.
+func (a LineAcknowledger) Acknowledge(message string) error {
+	if _, err := fmt.Fprintf(a.out, "%s\n\nPress Enter to go on. ", message); err != nil {
+		return err
+	}
+	_, err := bufio.NewReader(a.in).ReadString('\n')
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
 }
