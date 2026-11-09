@@ -29,7 +29,7 @@ func (HuhConfirmer) Confirm(question string) (bool, error) {
 	keys := huh.NewDefaultKeyMap()
 	keys.Confirm.Reject = key.NewBinding(key.WithKeys("n", "N", "esc"), key.WithHelp("n", "No"))
 	form := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&yes))).
-		WithKeyMap(keys)
+		WithKeyMap(keys).WithTheme(huh.ThemeFunc(dialogTheme))
 	form.SubmitCmd, form.CancelCmd = tea.Quit, tea.Interrupt
 	help := form.Help().ShortHelpView(form.KeyBinds())
 	width := max(lipgloss.Width(question)+confirmFrameWidth, lipgloss.Width(help))
@@ -38,6 +38,19 @@ func (HuhConfirmer) Confirm(question string) (bool, error) {
 		return false, app.ErrAborted
 	}
 	return yes, err
+}
+
+// dialogTheme is huh's base theme in weaver's styles: a bold question,
+// the chosen answer a cyan block, as a list's selected item, and the keys
+// faint.
+func dialogTheme(isDark bool) *huh.Styles {
+	t := huh.ThemeBase(isDark)
+	t.Focused.Title = titleStyle
+	t.Focused.FocusedButton = t.Focused.FocusedButton.
+		Foreground(selectedStyle.GetForeground()).Background(selectedStyle.GetBackground())
+	t.Focused.BlurredButton = t.Focused.BlurredButton.UnsetForeground().UnsetBackground()
+	t.Help.ShortKey, t.Help.ShortDesc, t.Help.ShortSeparator = keysStyle, keysStyle, keysStyle
+	return t
 }
 
 const confirmFrameWidth = 2 // the field's left border and padding
