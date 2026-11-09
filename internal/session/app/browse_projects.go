@@ -91,8 +91,8 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 // can't be found or that leaves a quote open; each once, however many
 // panes it concerns. Opening a project that isn't running creates every
 // pane, an owned session the missing windows' panes, and a session weaver
-// didn't start none. Last, in an owned session, each pane whose command
-// exited, wrapping ErrCommandExited.
+// didn't start none. Last come the panes, in an owned session, whose
+// command exited, each wrapping ErrCommandExited.
 func (o ProjectOverview) Warnings() []Warning {
 	return slices.Clone(o.warnings)
 }

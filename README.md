@@ -52,9 +52,10 @@ unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it, aliases and shell functions showing as not found,
 or a command run, `before` ones included, that leaves a quote open, so
 the shell would wait for the rest of it instead of running it); in a
-session weaver started, each pane whose `command` exited, its shell back
-at its prompt: it crashed, was interrupted (Ctrl-C warns too) or
-finished, or, for a moment, the shell is still starting; and
+session weaver started, each pane whose `command` isn't running, its
+shell back at its prompt: it crashed, was interrupted (Ctrl-C warns too)
+or finished, or the pane is still starting, its `before` commands
+included; and
 the `before` commands and variables every pane starts with. Below it,
 the window list names the project's windows, ○ marking those enter restores, and the
 selected window is drawn as it opens: each pane a box in its

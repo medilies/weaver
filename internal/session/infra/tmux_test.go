@@ -1204,15 +1204,17 @@ func TestTmuxIdle(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	project := plan.Name()
-	api, jobs := plan.Windows()[0], plan.Windows()[1]
+	api, jobs, replaced := plan.Windows()[0], plan.Windows()[1], plan.Windows()[2]
+	windows := []domain.WindowPlan{api, jobs}
 	want := map[domain.WindowName][]int{api.Name(): {0}, jobs.Name(): {0}}
 
-	// idleAs waits until Idle finds want, and fails with what it found.
-	idleAs := func(t *testing.T, want map[domain.WindowName][]int) {
+	// idleAs waits until Idle finds want among windows, and fails with what
+	// it found.
+	idleAs := func(t *testing.T, windows []domain.WindowPlan, want map[domain.WindowName][]int) {
 		t.Helper()
 		deadline := time.Now().Add(5 * time.Second)
 		for {
-			got, err := server.tmux().Idle(project, plan.Windows())
+			got, err := server.tmux().Idle(project, windows)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1226,20 +1228,24 @@ func TestTmuxIdle(t *testing.T) {
 		}
 	}
 
-	t.Run("finds the panes whose shell idles, not one running a command or replaced by one", func(t *testing.T) {
-		idleAs(t, want)
+	t.Run("finds the panes whose shell idles, not one running a command", func(t *testing.T) {
+		idleAs(t, windows, want)
+	})
+
+	t.Run("finds no pane idle whose shell a command replaced with exec", func(t *testing.T) {
+		idleAs(t, []domain.WindowPlan{replaced}, map[domain.WindowName][]int{})
 	})
 
 	t.Run("looks only in the first window tagged with a window's name", func(t *testing.T) {
 		later := server.query(t, "new-window", "-d", "-t", "=idle:", "-P", "-F", "#{window_id}")
 		server.query(t, "set-option", "-w", "-t", later, "@weaver_window", "api")
 		server.query(t, "set-option", "-p", "-t", later, "@label", "server")
-		idleAs(t, want)
+		idleAs(t, windows, want)
 	})
 
 	t.Run("finds no pane of a window the session lacks", func(t *testing.T) {
 		server.query(t, "kill-window", "-t", "=idle:jobs")
-		idleAs(t, map[domain.WindowName][]int{api.Name(): {0}})
+		idleAs(t, windows, map[domain.WindowName][]int{api.Name(): {0}})
 	})
 
 	t.Run("finds no pane the session lacks idle", func(t *testing.T) {

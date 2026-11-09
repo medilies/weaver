@@ -60,7 +60,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | filter | Text narrowing the browser's list to the projects whose names contain it, ignoring case | `/` in the browser | `filter` in `tea_browser.go` |
 | notice | The browser's status line: what the last action did, or why it failed | browser | the `notice` passed to `ProjectBrowser.Browse` |
 | warning | Something opening would likely fail on, or an exited command, in the panes it concerns | browser summary and drawing | `Warning`, `ProjectOverview.Warnings()` |
-| exited command | A pane's command, in an owned session, whose shell is back at its prompt: it crashed, was interrupted or finished, or the shell is still starting. A hint, not an error. Never a prefill, a plain shell or a task | browser summary and drawing | `ErrCommandExited` |
+| exited command | A pane's command, in an owned session, whose shell is back at its prompt: it crashed, was interrupted or finished, or the pane is still starting. A hint, not an error. Never a prefill, a plain shell or a task | browser summary and drawing | `ErrCommandExited` |
 | program | The program a command starts, `npm` in `NODE_ENV=dev npm run dev`, checked to warn when missing | browser summary | `Command.Program`, `ErrMissingProgram` |
 
 ## Environment

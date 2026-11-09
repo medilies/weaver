@@ -489,6 +489,9 @@ func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index
 		return "", "", fmt.Errorf("%w: its window is closed, open the project to restore it", domain.ErrPaneNotRunning)
 	}
 	pane, ok := pick(panes, window, index)
+	if !ok && len(window.Panes()) == 1 {
+		return "", "", fmt.Errorf("%w: no unlabelled pane in its window", domain.ErrPaneNotRunning)
+	}
 	if !ok {
 		return "", "", fmt.Errorf("%w: no pane labelled %q in its window", domain.ErrPaneNotRunning, labelOf(window, index))
 	}
@@ -547,19 +550,44 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 
 // shellNames are the names of the programs the panes of the project's
 // session end their startup with: its default-shell, and the program of
-// its default-command when set.
+// its default-command when set, past an exec and variable assignments.
+// Linux's ps cuts a name at 15 characters, so a longer one never matches:
+// its panes are never found idle.
 func (t Tmux) shellNames(project domain.ProjectName) (map[string]bool, error) {
 	names := map[string]bool{}
 	for _, option := range []string{"default-shell", "default-command"} {
 		value, err := t.option("="+project.String(), option)
+		if absent(err) {
+			return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+		}
 		if err != nil {
 			return nil, err
 		}
-		if fields := strings.Fields(value); len(fields) > 0 {
-			names[programName(fields[0])] = true
+		for _, word := range strings.Fields(value) {
+			if word == "exec" || assigns(word) {
+				continue
+			}
+			names[programName(word)] = true
+			break
 		}
 	}
 	return names, nil
+}
+
+// assigns reports whether word is a shell variable assignment, NAME=value.
+func assigns(word string) bool {
+	name, _, ok := strings.Cut(word, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i, c := range name {
+		letter := c == '_' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
+		digit := i > 0 && '0' <= c && c <= '9'
+		if !letter && !digit {
+			return false
+		}
+	}
+	return true
 }
 
 // programName is a program's name without its directory, or the "-" a
