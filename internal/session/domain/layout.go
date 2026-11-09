@@ -347,6 +347,7 @@ type Pane struct {
 	before  []Command
 	note    []string
 	env     Env
+	clears  Clearing
 }
 
 // NewPane is an unnamed shell in its window's directory.
@@ -410,7 +411,15 @@ func (p Pane) RunningFirst(cmds ...Command) Pane {
 	return p
 }
 
-// WithNote prints lines in the pane before its shell starts.
+// WithClearing sets whether the pane's before commands are hidden once
+// they ran, over its window's and its project's.
+func (p Pane) WithClearing(c Clearing) Pane {
+	p.clears = c
+	return p
+}
+
+// WithNote prints lines in the pane before its shell starts, or after its
+// before commands when it clears them.
 func (p Pane) WithNote(lines ...string) Pane {
 	p.note = slices.Clone(lines)
 	return p
@@ -446,6 +455,12 @@ func (p Pane) Before() []Command {
 	return slices.Clone(p.before)
 }
 
+// Clearing is whether the pane's own setting hides its before commands
+// once they ran, without its window's and its project's.
+func (p Pane) Clearing() Clearing {
+	return p.clears
+}
+
 // Note is the lines printed before the pane's shell starts.
 func (p Pane) Note() []string {
 	return slices.Clone(p.note)
@@ -464,6 +479,7 @@ type Window struct {
 	dir     PaneDir
 	panes   []Pane
 	before  []Command
+	clears  Clearing
 	grid    Grid
 	gridded bool
 }
@@ -566,6 +582,13 @@ func (w Window) RunningFirst(cmds ...Command) Window {
 	return w
 }
 
+// WithClearing sets whether its panes' before commands are hidden once
+// they ran, over its project's and under a pane's own.
+func (w Window) WithClearing(c Clearing) Window {
+	w.clears = c
+	return w
+}
+
 // Named renames the window. Window names are unique within a project,
 // which the project checks.
 func (w Window) Named(name WindowName) Window {
@@ -611,6 +634,12 @@ func (w Window) Grid() (Grid, bool) {
 // Before is the window's own commands run first in each of its panes.
 func (w Window) Before() []Command {
 	return slices.Clone(w.before)
+}
+
+// Clearing is the window's own setting of whether its panes' before
+// commands are hidden once they ran.
+func (w Window) Clearing() Clearing {
+	return w.clears
 }
 
 // Rebased is the window with its and its panes' directories moved from

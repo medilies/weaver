@@ -35,6 +35,7 @@ type projectFile struct {
 	Root    string            `yaml:"root"`
 	Env     map[string]string `yaml:"env,omitempty"`
 	Before  []string          `yaml:"before,omitempty"`
+	Clear   *bool             `yaml:"clear,omitempty"`
 	Windows []windowFile      `yaml:"windows,omitempty"`
 }
 
@@ -42,6 +43,7 @@ type windowFile struct {
 	Name   string     `yaml:"name"`
 	Dir    string     `yaml:"dir,omitempty"`
 	Before []string   `yaml:"before,omitempty"`
+	Clear  *bool      `yaml:"clear,omitempty"`
 	Grid   *gridFile  `yaml:"grid,omitempty"`
 	Panes  []paneFile `yaml:"panes,omitempty"`
 }
@@ -73,6 +75,7 @@ type paneFile struct {
 	Dir     string            `yaml:"dir,omitempty"`
 	Split   *splitFile        `yaml:"split,omitempty"`
 	Before  []string          `yaml:"before,omitempty"`
+	Clear   *bool             `yaml:"clear,omitempty"`
 	Command string            `yaml:"command,omitempty"`
 	Prefill string            `yaml:"prefill,omitempty"`
 	Note    []string          `yaml:"note,omitempty"`
@@ -202,7 +205,28 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 	return domain.NewProject(name, root).
 		WithEnv(env).
 		RunningFirst(before...).
+		WithClearing(toClearing(f.Clear)).
 		WithWindows(windows...)
+}
+
+// toClearing reads a clear setting: unset when it isn't written.
+func toClearing(clear *bool) domain.Clearing {
+	switch {
+	case clear == nil:
+		return domain.ClearingUnset
+	case *clear:
+		return domain.ClearingOn
+	}
+	return domain.ClearingOff
+}
+
+// clearOf is how a clear setting is written: left out when unset.
+func clearOf(c domain.Clearing) *bool {
+	if !c.IsSet() {
+		return nil
+	}
+	on := c == domain.ClearingOn
+	return &on
 }
 
 func toCommands(lines []string) ([]domain.Command, error) {
@@ -251,7 +275,7 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	} else if window, err = domain.NewWindow(name, panes...); err != nil {
 		return domain.Window{}, err
 	}
-	return window.In(dir).RunningFirst(before...), nil
+	return window.In(dir).RunningFirst(before...).WithClearing(toClearing(w.Clear)), nil
 }
 
 // toDir reads a window or pane dir, "~" expanded.
@@ -333,7 +357,7 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 	if err != nil {
 		return domain.Pane{}, fmt.Errorf("before: %w", err)
 	}
-	pane = pane.RunningFirst(before...)
+	pane = pane.RunningFirst(before...).WithClearing(toClearing(p.Clear))
 
 	if pane, err = p.withStartup(pane); err != nil {
 		return domain.Pane{}, err
@@ -434,6 +458,7 @@ func encodeProject(project domain.Project) ([]byte, error) {
 		Root:   contractHome(root.String()),
 		Env:    envMap(project.Env()),
 		Before: lines(project.Before()),
+		Clear:  clearOf(project.Clearing()),
 	}
 	if !onlyDefaultWindow(project) {
 		for _, window := range project.Windows() {
@@ -455,7 +480,12 @@ func encodeProject(project domain.Project) ([]byte, error) {
 }
 
 func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
-	file := windowFile{Name: window.Name().String(), Dir: dirOf(root, window.Dir()), Before: lines(window.Before())}
+	file := windowFile{
+		Name:   window.Name().String(),
+		Dir:    dirOf(root, window.Dir()),
+		Before: lines(window.Before()),
+		Clear:  clearOf(window.Clearing()),
+	}
 	panes := window.Panes()
 	grid, gridded := window.Grid()
 	if gridded {
@@ -505,6 +535,7 @@ func paneFileOf(root domain.ProjectRoot, window domain.Window, index int) paneFi
 		Name:   pane.Name().String(),
 		Dir:    paneDirOf(root, window, pane),
 		Before: lines(pane.Before()),
+		Clear:  clearOf(pane.Clearing()),
 		Note:   pane.Note(),
 		Env:    envMap(pane.Env()),
 	}
@@ -563,7 +594,7 @@ func isPlain(root domain.ProjectRoot, window domain.Window, pane domain.Pane) bo
 	_, splits := pane.Split()
 	_, types := pane.Startup().Command()
 	return pane.Name().IsZero() && paneDirOf(root, window, pane) == "" && !splits && !types &&
-		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Before()) == 0
+		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Before()) == 0 && !pane.Clearing().IsSet()
 }
 
 // onlyDefaultWindow reports whether the project's windows are what it
@@ -575,7 +606,7 @@ func onlyDefaultWindow(project domain.Project) bool {
 		return false
 	}
 	window := windows[0]
-	if window.Name().String() != project.Name().String() || len(window.Before()) > 0 ||
+	if window.Name().String() != project.Name().String() || len(window.Before()) > 0 || window.Clearing().IsSet() ||
 		project.Root().Resolve(window.Dir()) != project.Root().String() {
 		return false
 	}

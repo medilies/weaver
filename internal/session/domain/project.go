@@ -125,6 +125,7 @@ type Project struct {
 	root    ProjectRoot
 	env     Env
 	before  []Command
+	clears  Clearing
 	windows []Window
 	// defaulted is true until the project is given windows: it opens the
 	// window named after it.
@@ -187,6 +188,13 @@ func (p Project) RunningFirst(cmds ...Command) Project {
 	return p
 }
 
+// WithClearing sets whether every pane's before commands are hidden once
+// they ran, unless its window or itself sets it.
+func (p Project) WithClearing(c Clearing) Project {
+	p.clears = c
+	return p
+}
+
 func defaultWindow(name ProjectName) Window {
 	return Window{name: WindowName(name), panes: []Pane{NewPane()}}
 }
@@ -207,6 +215,12 @@ func (p Project) Env() Env {
 // Before is the commands run first in every pane.
 func (p Project) Before() []Command {
 	return slices.Clone(p.before)
+}
+
+// Clearing is the project's setting of whether its panes' before
+// commands are hidden once they ran.
+func (p Project) Clearing() Clearing {
+	return p.clears
 }
 
 // Windows are the windows the project's session opens, in order.

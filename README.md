@@ -62,7 +62,7 @@ program isn't found. In a small terminal the panes are listed instead.
 The selected pane is cyan, its name in brackets. Below the drawing, the
 pane list names the window's panes, the selected one in a cyan block, and
 below it are the selected pane's directory, its `before` commands in the order they
-run, and its variables, each with the level it comes from (the project,
+run, whether they are cleared, and its variables, each with the level it comes from (the project,
 the window or the pane) and what it is over when it replaces the
 window's `dir` or a project variable.
 
@@ -93,7 +93,7 @@ typed there, and stays when editing. The selected window's panes are
 drawn as they open, the selected pane in cyan, heavy when the cursor is
 on the drawing; below them are the pane list, then the selected pane's
 card, starting with where the pane is placed. Click a window in the
-window list or a pane in the pane list to select it, or a `starts` option
+window list or a pane in the pane list to select it, or a `starts` or `clear` option
 to pick it; the selected ones are cyan blocks. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists. A
 pane lists the project's and its window's before commands and the
@@ -105,7 +105,7 @@ keeps its panes' names and places.
 | --- | --- |
 | ↑ ↓ or k j | select a field |
 | enter | type into it, or pick the next choice; on the window list or the pane list, type the window's or pane's name; on `+ add` or `+ window`, add one |
-| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty |
+| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty; on `clear`, whether the `before` commands are cleared, or as the level above says |
 | o | add an item to the list selected, split the pane selected right, or add a window |
 | d | remove the item selected at once; on the pane list or a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
 | J K | move the item or window selected down or up |
@@ -133,7 +133,8 @@ running, weaver first:
    none;
 2. builds the session, sized like your terminal so percentage splits
    come out right, labels its panes in their top border, and types each
-   pane's `before` commands, then its command, into its shell.
+   pane's `before` commands, then `clear` and its note when it clears
+   them, then its command, into its shell.
 
 weaver doesn't know git and clones nothing: clone what a project needs
 yourself before opening it.
@@ -240,18 +241,21 @@ windows:
 | `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. The home directory itself is `"~"`, in quotes: YAML reads a bare `~` as null. |
 | `env` | Variables for every pane. Values are literal. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
+| `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, a space first so shells ignoring such lines keep it out of their history, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
+| `windows[].clear` | Whether the window's panes clear their `before` commands, over the project's `clear`. |
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see below. |
 | `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
 | `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
+| `clear` (pane) | Whether the pane clears its `before` commands, over its window's and project's `clear`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
-| `note` | Lines printed before the shell starts. |
+| `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. |
 | `env` (pane) | Overrides the project's, per variable. |
 
 A `grid` lays a window's panes out by naming them in rows and columns,

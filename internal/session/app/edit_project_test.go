@@ -92,7 +92,7 @@ func TestEditProject(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).RunningFirst(nvm)}}
+		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).RunningFirst(nvm).WithClearing(domain.ClearingOn)}}
 		form := &fakeForm{project: moved}
 		documents := storedDocuments{"shop": "root: /srv/shop"}
 		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
@@ -100,7 +100,7 @@ func TestEditProject(t *testing.T) {
 		}
 		draft := form.draft
 		if draft.Name != "shop" || draft.Root != "/srv/shop" || len(draft.Windows) != 2 ||
-			len(draft.Before) != 1 || len(draft.Env.Vars()) != 1 {
+			len(draft.Before) != 1 || len(draft.Env.Vars()) != 1 || draft.Clearing != domain.ClearingOn {
 			t.Fatalf("got draft %+v, want shop's project", draft)
 		}
 	})

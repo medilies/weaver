@@ -447,7 +447,8 @@ func (t Tmux) newWindow(target []string, window domain.WindowPlan, defaultComman
 
 // fill tags the window as the project's, splits its first pane into the
 // others, labels them in their borders, then types their commands: those
-// to run first, then the startup one.
+// to run first, clear and the note when the pane clears, then the startup
+// one.
 func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defaultCommand string) error {
 	if _, err := t.run("set-option", "-w", "-t", windowID, "@weaver_window", argument(window.Name().String())); err != nil {
 		return err
@@ -477,12 +478,17 @@ func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defau
 	}
 	for i, pane := range panes {
 		for _, cmd := range pane.Before() {
-			if err := t.typeCommand(ids[i], cmd, true); err != nil {
+			if err := t.typeCommand(ids[i], cmd.String(), true); err != nil {
+				return err
+			}
+		}
+		if pane.Clears() {
+			if err := t.typeCommand(ids[i], clearLine(pane), true); err != nil {
 				return err
 			}
 		}
 		if cmd, ok := pane.Startup().Command(); ok {
-			if err := t.typeCommand(ids[i], cmd, pane.Startup().Submits()); err != nil {
+			if err := t.typeCommand(ids[i], cmd.String(), pane.Startup().Submits()); err != nil {
 				return err
 			}
 		}
@@ -508,8 +514,8 @@ func (t Tmux) label(windowID string, ids []string, panes []domain.PanePlan) erro
 // typeCommand types cmd at the pane's prompt, as if the user did, and
 // presses Enter when submit: it stays in the shell history, to run again
 // after Ctrl-C.
-func (t Tmux) typeCommand(paneID string, cmd domain.Command, submit bool) error {
-	if _, err := t.run("send-keys", "-t", paneID, "-l", "--", argument(cmd.String())); err != nil {
+func (t Tmux) typeCommand(paneID, cmd string, submit bool) error {
+	if _, err := t.run("send-keys", "-t", paneID, "-l", "--", argument(cmd)); err != nil {
 		return err
 	}
 	if !submit {

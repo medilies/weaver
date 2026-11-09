@@ -258,6 +258,30 @@ func TestTmuxStart(t *testing.T) {
 	})
 }
 
+func TestTmuxStartClearing(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "cleared", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
+		{"name": "w", "panes": [
+			{"before": ["echo hidden-$((1+1))"], "note": ["kept note"], "command": "echo shown-$((2+2))"}
+		]}
+	]}`, t.TempDir()))
+
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	server.waitFor(t, "=cleared:w", "shown-4")
+
+	t.Run("hides the before commands once they ran", func(t *testing.T) {
+		if shown := server.query(t, "capture-pane", "-p", "-t", "=cleared:w"); strings.Contains(shown, "hidden") {
+			t.Fatalf("the before command still shows:\n%s", shown)
+		}
+	})
+
+	t.Run("prints the note after clearing", func(t *testing.T) {
+		server.waitFor(t, "=cleared:w", "kept note")
+	})
+}
+
 func TestTmuxStartEndsAPaneScriptWithTheDefaultCommand(t *testing.T) {
 	server := newTmuxServer(t)
 	// In the config, read by the server Start starts: there is none before.

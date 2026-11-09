@@ -22,7 +22,8 @@ const minLevelValueWidth = 12
 
 // levels is what the pane at index pane of project's window at index
 // window gets, one line each, cut to width: its dir, under its name, its
-// before commands in the order they run, then its env, each with the
+// before commands in the order they run, whether they are cleared once
+// they ran when a level sets it, then its env, each with the
 // level it comes from, and what it is over when it replaces a higher
 // level's.
 func levels(project domain.Project, window, pane, width int) []string {
@@ -40,6 +41,11 @@ func levels(project domain.Project, window, pane, width int) []string {
 			line.label = "before"
 		}
 		lines = append(lines, line)
+	}
+	if len(before) > 0 {
+		if line, ok := clearingLine(project, w, p); ok {
+			lines = append(lines, line)
+		}
 	}
 	paneVars := map[string]bool{}
 	for _, v := range p.Env().Vars() {
@@ -72,6 +78,37 @@ func higherBefore(project domain.Project, window domain.Window) []levelLine {
 		lines = append(lines, levelLine{value: cmd.String(), level: "window " + window.Name().String()})
 	}
 	return lines
+}
+
+// clearingLine is whether a pane p of window w clears its before
+// commands, with the level setting it and what it is over, unless no
+// level sets it.
+func clearingLine(project domain.Project, w domain.Window, p domain.Pane) (levelLine, bool) {
+	var set []levelLine
+	for _, l := range []struct {
+		clearing domain.Clearing
+		level    string
+	}{{p.Clearing(), "pane"}, {w.Clearing(), "window " + w.Name().String()}, {project.Clearing(), "project"}} {
+		if l.clearing.IsSet() {
+			set = append(set, levelLine{label: "clear", value: clearingText(l.clearing), level: l.level})
+		}
+	}
+	if len(set) == 0 {
+		return levelLine{}, false
+	}
+	line := set[0]
+	if len(set) > 1 {
+		line.level += ", over " + set[1].level + "'s " + set[1].value
+	}
+	return line, true
+}
+
+// clearingText is a set clearing as shown: yes or no.
+func clearingText(c domain.Clearing) string {
+	if c == domain.ClearingOn {
+		return "yes"
+	}
+	return "no"
 }
 
 // overProject is what a pane's variable named name is over: the

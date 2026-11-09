@@ -52,7 +52,7 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 		return domain.Project{}, err
 	}
 	project, err := domain.NewProject(name, root).WithEnv(draft.Env).RunningFirst(draft.Before...).
-		WithWindows(draft.Windows...)
+		WithClearing(draft.Clearing).WithWindows(draft.Windows...)
 	if err != nil {
 		return domain.Project{}, err
 	}
@@ -97,6 +97,7 @@ const (
 	fieldProjectEnv // a variable the project sets, shown in a pane, which enter sets for the pane
 	fieldNote
 	fieldStarts
+	fieldClear
 	fieldCommand
 	fieldWindowList // the window list, the window being the one selected
 	fieldPaneList   // the pane list, the pane being the one selected
@@ -562,8 +563,61 @@ func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 		return m, nil
 	case fieldStarts:
 		return m.started(by)
+	case fieldClear:
+		count := len(clearOptions(m.focus))
+		next := ((clearIndex(m.clearingAt(m.focus))+by)%count + count) % count
+		return m.changedTo(m.cleared(m.focus, clearings[next])), nil
 	}
 	return m, nil
+}
+
+// clearings are the settings a clear row goes through, in the order of
+// its options.
+var clearings = []domain.Clearing{domain.ClearingUnset, domain.ClearingOn, domain.ClearingOff}
+
+// clearOptions are the options of the clear row at: the project's no or
+// yes, or leaving it to the level above, yes or no for a window or a
+// pane.
+func clearOptions(at spot) []string {
+	switch {
+	case at.window < 0:
+		return []string{"no", "yes"}
+	case at.pane < 0:
+		return []string{"project's", "yes", "no"}
+	}
+	return []string{"window's", "yes", "no"}
+}
+
+// clearIndex is the index in clearings, and in its row's options, of c.
+func clearIndex(c domain.Clearing) int {
+	return slices.Index(clearings, c)
+}
+
+// clearingAt is the clearing the project, window or pane of at's row
+// sets, the project's off shown as its no, unset.
+func (m configForm) clearingAt(at spot) domain.Clearing {
+	c := m.project.Clearing()
+	if window, ok := m.windowAt(at.window); ok && at.pane < 0 {
+		c = window.Clearing()
+	} else if _, pane, ok := m.paneAt(at); ok {
+		c = pane.Clearing()
+	}
+	if at.window < 0 && c == domain.ClearingOff {
+		return domain.ClearingUnset
+	}
+	return c
+}
+
+// cleared is the project with the project, window or pane of at's row
+// setting c.
+func (m configForm) cleared(at spot, c domain.Clearing) (domain.Project, error) {
+	switch {
+	case at.window < 0:
+		return m.project.WithClearing(c), nil
+	case at.pane < 0:
+		return m.windowChanged(at, func(w domain.Window) (domain.Window, error) { return w.WithClearing(c), nil })
+	}
+	return m.paneChanged(at, func(p domain.Pane) (domain.Pane, error) { return p.WithClearing(c), nil })
 }
 
 // pressedOnDrawing is m after key, pressed on the drawing, with tmux's
@@ -753,7 +807,7 @@ func (m configForm) startsClicked(at spot, option int) (configForm, tea.Cmd) {
 func (m configForm) entered() (configForm, tea.Cmd) {
 	at := m.focus
 	switch at.field {
-	case fieldStarts:
+	case fieldStarts, fieldClear:
 		return m.stepped(1)
 	case fieldWindowList:
 		at.field = fieldName
@@ -1364,6 +1418,9 @@ func (m configForm) clicked(x, y int) (configForm, tea.Cmd) {
 		switch at.field {
 		case fieldStarts:
 			return m.startsClicked(at, spot.item)
+		case fieldClear:
+			m.focus = at
+			return m.changedTo(m.cleared(at, clearings[spot.item])), nil
 		case fieldWindowList:
 			at.window = spot.item
 		default:
@@ -1390,6 +1447,7 @@ func (m configForm) projectCard() section {
 	}
 	m.put(&s, "root", contractHome(p.Root().String()), m.mark(p.Root().String()), spot{window: -1, pane: -1, field: fieldRoot})
 	m.list(&s, "before", lines(p.Before()), spot{window: -1, pane: -1, field: fieldBefore})
+	m.putClear(&s, spot{window: -1, pane: -1, field: fieldClear})
 	label := "env"
 	vars := p.Env().Vars()
 	for k, v := range vars {
@@ -1423,6 +1481,7 @@ func (m configForm) windowsCard(width int) section {
 	m.put(&s, "name", window.Name().String(), "", at(fieldName))
 	m.put(&s, "dir", shownDir(root, window.Dir()), m.mark(root.Resolve(window.Dir())), at(fieldDir))
 	m.list(&s, "before", lines(window.Before()), at(fieldBefore))
+	m.putClear(&s, at(fieldClear))
 	grid, gridded := window.Grid()
 	if gridded {
 		rows := make([]string, 0, len(grid.Areas()))
@@ -1573,6 +1632,7 @@ func (m configForm) paneCard(index, j int) section {
 		label = ""
 	}
 	m.list(&s, label, lines(pane.Before()), at(fieldBefore))
+	m.putClear(&s, at(fieldClear))
 
 	label = "env"
 	vars := pane.Env().Vars()
@@ -1616,6 +1676,11 @@ func shownDir(root domain.ProjectRoot, dir domain.PaneDir) string {
 		return written
 	}
 	return "root"
+}
+
+// putClear adds the clear row at, for the project, a window or a pane.
+func (m configForm) putClear(s *section, at spot) {
+	m.putChoices(s, "clear", clearOptions(at), clearIndex(m.clearingAt(at)), at)
 }
 
 // putChoices adds a row labelled label showing options side by side,

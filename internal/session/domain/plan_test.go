@@ -185,3 +185,38 @@ func commands(cmds []domain.Command) []string {
 	}
 	return out
 }
+
+func TestPanePlanClears(t *testing.T) {
+	nvm := command(t, "nvm use 20")
+	clears := func(t *testing.T, project domain.Clearing, win domain.Clearing, pane domain.Pane) bool {
+		t.Helper()
+		p, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
+			WithClearing(project).
+			WithWindows(window(t, "shop", pane).WithClearing(win))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return p.Plan().Windows()[0].Panes()[0].Clears()
+	}
+	withBefore := domain.NewPane().RunningFirst(nvm)
+
+	for _, tc := range []struct {
+		name         string
+		project, win domain.Clearing
+		pane         domain.Pane
+		want         bool
+	}{
+		{"not when no level sets it", domain.ClearingUnset, domain.ClearingUnset, withBefore, false},
+		{"when the project sets it on", domain.ClearingOn, domain.ClearingUnset, withBefore, true},
+		{"not when the window sets it off over the project", domain.ClearingOn, domain.ClearingOff, withBefore, false},
+		{"when the pane sets it on over the window", domain.ClearingUnset, domain.ClearingOff, withBefore.WithClearing(domain.ClearingOn), true},
+		{"not when the pane sets it off", domain.ClearingOn, domain.ClearingOn, withBefore.WithClearing(domain.ClearingOff), false},
+		{"not without before commands to hide", domain.ClearingOn, domain.ClearingUnset, domain.NewPane(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := clears(t, tc.project, tc.win, tc.pane); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

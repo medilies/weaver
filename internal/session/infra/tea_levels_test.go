@@ -184,4 +184,21 @@ windows:
 			t.Fatalf("got %q, want it within 40 cells and ending with its level", got)
 		}
 	})
+
+	t.Run("shows a pane's clearing with the level setting it, over a higher one", func(t *testing.T) {
+		project := shop(t, "clear: true\nwindows:\n  - name: main\n    panes:\n      - before: [nvm use 20]\n        clear: false\n")
+		got := levelRows(project, 0, 0)
+		if want := []string{"clear", "no", "pane, over project's yes"}; !slices.Equal(got[len(got)-1], want) {
+			t.Fatalf("got %q, want the last row %q", got, want)
+		}
+	})
+
+	t.Run("shows no clearing for a pane without before commands", func(t *testing.T) {
+		got := levelRows(shop(t, "clear: true\nwindows:\n  - name: main\n"), 0, 0)
+		for _, row := range got {
+			if row[0] == "clear" {
+				t.Fatalf("got %q, want no clear row", got)
+			}
+		}
+	})
 }

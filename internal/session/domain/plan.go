@@ -45,6 +45,7 @@ type PanePlan struct {
 	env     []EnvVar
 	note    []string
 	before  []Command
+	clears  bool
 	startup Startup
 }
 
@@ -67,7 +68,8 @@ func (p PanePlan) Env() []EnvVar {
 	return slices.Clone(p.env)
 }
 
-// Note is the lines printed before the pane's shell starts.
+// Note is the lines printed before the pane's shell starts, or after its
+// before commands when it clears them.
 func (p PanePlan) Note() []string {
 	return slices.Clone(p.note)
 }
@@ -76,6 +78,13 @@ func (p PanePlan) Note() []string {
 // project's, then the window's, then the pane's own.
 func (p PanePlan) Before() []Command {
 	return slices.Clone(p.before)
+}
+
+// Clears tells whether clear is typed after the pane's before commands,
+// then its note printed: when the lowest level setting it sets it on,
+// and there are before commands to hide.
+func (p PanePlan) Clears() bool {
+	return p.clears
 }
 
 func (p PanePlan) Startup() Startup {
@@ -100,6 +109,7 @@ func (p Project) planWindow(window Window) WindowPlan {
 }
 
 func (p Project) planPane(window Window, pane Pane) PanePlan {
+	before := slices.Concat(p.before, window.before, pane.before)
 	return PanePlan{
 		name:    pane.name,
 		dir:     p.root.Resolve(window.dirOf(pane)),
@@ -107,7 +117,8 @@ func (p Project) planPane(window Window, pane Pane) PanePlan {
 		splits:  pane.splits,
 		env:     p.env.Overlay(pane.env).Vars(),
 		note:    slices.Clone(pane.note),
-		before:  slices.Concat(p.before, window.before, pane.before),
+		before:  before,
+		clears:  len(before) > 0 && pane.clears.Over(window.clears.Over(p.clears)) == ClearingOn,
 		startup: pane.startup,
 	}
 }

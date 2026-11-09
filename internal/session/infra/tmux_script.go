@@ -11,7 +11,8 @@ import (
 const shellLine = `exec "${SHELL:-/bin/sh}" `
 
 // shellCommand is what a pane starts with when a plain shell isn't
-// enough: a short script exporting env vars and printing the note, which
+// enough: a short script exporting env vars and printing the note, unless
+// the pane clears, which prints it after its before commands; it
 // then replaces itself with what tmux would have started: defaultCommand,
 // tmux's default-command, run by the user's shell as tmux runs it, else
 // the user's login shell. Passed as separate arguments, tmux runs it
@@ -22,12 +23,8 @@ func shellCommand(pane domain.PanePlan, defaultCommand string) []string {
 	for _, v := range pane.Env() {
 		lines = append(lines, "export "+v.Name()+"="+shellQuote(v.Value()))
 	}
-	if note := pane.Note(); len(note) > 0 {
-		quoted := make([]string, len(note))
-		for i, line := range note {
-			quoted[i] = shellQuote(line)
-		}
-		lines = append(lines, `printf '%s\n' `+strings.Join(quoted, " "))
+	if note := pane.Note(); len(note) > 0 && !pane.Clears() {
+		lines = append(lines, printed(note))
 	}
 	if len(lines) == 0 {
 		return nil
@@ -39,6 +36,26 @@ func shellCommand(pane domain.PanePlan, defaultCommand string) []string {
 		lines = append(lines, shellLine+"-c "+shellQuote(defaultCommand))
 	}
 	return []string{"--", "/bin/sh", "-c", strings.Join(lines, "\n")}
+}
+
+// clearLine is what a pane that clears types after its before commands:
+// clear, then its note printed. A space first leaves it out of the
+// history of shells told to ignore such lines.
+func clearLine(pane domain.PanePlan) string {
+	line := " clear"
+	if note := pane.Note(); len(note) > 0 {
+		line += "; " + printed(note)
+	}
+	return line
+}
+
+// printed is a command printing lines, one per line.
+func printed(lines []string) string {
+	quoted := make([]string, len(lines))
+	for i, line := range lines {
+		quoted[i] = shellQuote(line)
+	}
+	return `printf '%s\n' ` + strings.Join(quoted, " ")
 }
 
 // wrapped reports whether args, a pane's start command, are a startup

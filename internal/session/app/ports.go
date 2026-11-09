@@ -23,6 +23,7 @@ type ProjectDraft struct {
 	Root      string
 	Env       domain.Env
 	Before    []domain.Command
+	Clearing  domain.Clearing
 	Windows   []domain.Window // a running session's, to start from; none to start blank
 	Config    []byte          // the config as stored, which saving replaces; none when freezing
 }

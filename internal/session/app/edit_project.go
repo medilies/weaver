@@ -69,6 +69,7 @@ func (uc EditProject) Handle(rawName string) error {
 		Root:      project.Root().String(),
 		Env:       project.Env(),
 		Before:    project.Before(),
+		Clearing:  project.Clearing(),
 		Windows:   project.Windows(),
 		Config:    stored.Content,
 	})
