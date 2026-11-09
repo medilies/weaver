@@ -123,15 +123,8 @@ func openSetUpShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspac
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	var setup []domain.Command
-	for _, raw := range []string{"docker compose up -d", "php artisan migrate"} {
-		cmd, err := domain.NewCommand(raw)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		setup = append(setup, cmd)
-	}
-	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).SettingUp(setup...)}}
+	setup := shop(t).WithEnv(env).SettingUp(command(t, "docker compose up -d"), command(t, "php artisan migrate"))
+	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": setup}}
 	return app.NewOpenProject(configs, sessions, workspace, commands).Handle("shop")
 }
 
@@ -268,6 +261,25 @@ func TestOpenProject(t *testing.T) {
 		err := openSetUpShop(t, &fakeSessions{}, workspace, commands)
 		if !errors.Is(err, app.ErrMissingDirectory) || len(commands.ran) != 2 {
 			t.Fatalf("got %v with %q run, want both run before the missing directory", err, commands.commandsRun())
+		}
+	})
+
+	t.Run("says the setup commands ran when opening fails after them", func(t *testing.T) {
+		workspace := everything()
+		delete(workspace.dirs, "/srv/shop/logs")
+		err := openSetUpShop(t, &fakeSessions{}, workspace, &fakeCommands{})
+		if err == nil || !strings.Contains(err.Error(), "the setup commands already ran") {
+			t.Fatalf("got %v, want it to say the setup commands already ran", err)
+		}
+	})
+
+	t.Run("runs no setup command in a missing root", func(t *testing.T) {
+		workspace := everything()
+		delete(workspace.dirs, "/srv/shop")
+		commands := &fakeCommands{}
+		err := openSetUpShop(t, &fakeSessions{}, workspace, commands)
+		if !errors.Is(err, app.ErrMissingDirectory) || len(commands.ran) != 0 {
+			t.Fatalf("got %v with %q run, want the missing root and nothing run", err, commands.commandsRun())
 		}
 	})
 

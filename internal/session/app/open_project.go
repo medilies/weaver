@@ -147,20 +147,38 @@ func (uc OpenProject) open(project domain.Project) error {
 	return uc.sessions.Attach(project.Name())
 }
 
-// start runs the setup commands, then checks pane directories exist,
-// which a setup command may create, before building the session. A
-// failing setup command stops it, with no session built.
+// start runs the setup commands in the root, which must exist, then
+// checks pane directories exist, which a setup command may create, before
+// building the session. A failing setup command stops it, with no session
+// built. What setup commands did is left for the user to undo when a
+// later step fails: with no session, there is nothing to kill, so no
+// teardown.
 func (uc OpenProject) start(project domain.Project) error {
-	for _, cmd := range project.Setup() {
+	setup := project.Setup()
+	if len(setup) > 0 {
+		root := project.Root().String()
+		exists, err := uc.workspace.Exists(root)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return fmt.Errorf("root: %w: %s (create it, or change it with weave edit %s)", ErrMissingDirectory, root, project.Name())
+		}
+	}
+	for _, cmd := range setup {
 		if err := uc.commands.Run(cmd, project.Root().String(), project.Env()); err != nil {
 			return fmt.Errorf("setup: %s: %w; %s's session wasn't started", cmd, err, project.Name())
 		}
 	}
 	plan := project.Plan()
-	if err := uc.checkDirs(project.Name(), plan); err != nil {
-		return err
+	err := uc.checkDirs(project.Name(), plan)
+	if err == nil {
+		err = uc.sessions.Start(plan)
 	}
-	return uc.sessions.Start(plan)
+	if err != nil && len(setup) > 0 {
+		return fmt.Errorf("%w; the setup commands already ran, and no teardown will: undo them yourself if needed", err)
+	}
+	return err
 }
 
 // restore re-creates the project windows missing from a session weaver
