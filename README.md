@@ -59,8 +59,9 @@ as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
 neither (`$ █`). A pane with a warning has ⚠ in its top border, and
 the border is red when its directory is missing, yellow when its
 program isn't found. In a small terminal the panes are listed instead.
-The selected pane is cyan, its name in brackets, and below the drawing are
-the directory it starts in, its `before` commands in the order they
+The selected pane is cyan, its name in brackets. Below the drawing, the
+pane list names the window's panes, the selected one in a cyan block, and
+below it are the selected pane's directory, its `before` commands in the order they
 run, and its variables, each with the level it comes from (the project,
 the window or the pane) and what it is over when it replaces the
 window's `dir` or a project variable.
@@ -70,7 +71,7 @@ window's `dir` or a project variable.
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
 | tab or shift+tab | select the next or previous pane of the selected window |
-| click | select the project clicked in the list, or the window clicked in the window list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
+| click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
@@ -92,7 +93,8 @@ typed there, and stays when editing. The selected window's panes are
 drawn as they open, the selected pane in cyan, heavy when the cursor is
 on the drawing; below them are the pane list, then the selected pane's
 card, starting with where the pane is placed. Click a window in the
-window list or a pane in the pane list to select it. Each field is
+window list or a pane in the pane list to select it, or a `starts` option
+to pick it; the selected ones are cyan blocks. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists. A
 pane lists the project's and its window's before commands and the
 project's variables dimmed, with the level they come from; enter on such
@@ -103,7 +105,7 @@ keeps its panes' names and places.
 | --- | --- |
 | ↑ ↓ or k j | select a field |
 | enter | type into it, or pick the next choice; on the window list or the pane list, type the window's or pane's name; on `+ add` or `+ window`, add one |
-| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it |
+| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty |
 | o | add an item to the list selected, split the pane selected right, or add a window |
 | d | remove the item selected at once; on the pane list or a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
 | J K | move the item or window selected down or up |

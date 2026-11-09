@@ -206,11 +206,11 @@ func (m configForm) update(msg tea.Msg) (configForm, tea.Cmd) {
 		}
 		return m, nil
 	case tea.MouseClickMsg:
-		// A click picks a window or a pane: not while typing, asked or
-		// shown the diff, which the keyboard answers.
+		// A click picks a window, a pane or how a pane starts: not while
+		// typing, asked or shown the diff, which the keyboard answers.
 		if msg.Button == tea.MouseLeft && m.reviewing == nil && m.asking == nil && !m.editing {
 			m.problem = ""
-			return m.clicked(msg.X, msg.Y), nil
+			return m.clicked(msg.X, msg.Y)
 		}
 		return m, nil
 	case tea.KeyPressMsg:
@@ -266,6 +266,10 @@ func (m configForm) typed(msg tea.KeyPressMsg) (configForm, tea.Cmd) {
 		return m.leave()
 	case "up", "down", "tab", "shift+tab":
 		return m, nil
+	case "left", "right":
+		if m.edit.at.field == fieldCommand && m.edit.input.Value() == "" {
+			return m.startTyped(msg.String() == "right"), nil
+		}
 	}
 	var cmd tea.Cmd
 	m.edit.input, cmd = m.edit.input.Update(msg)
@@ -707,6 +711,42 @@ func (m configForm) started(by int) (configForm, tea.Cmd) {
 	})), nil
 }
 
+// startTyped is m after ← or → (forward) while the command typed is
+// empty: it is run or prefilled, going on through startModes, and shell
+// keeps the pane without one.
+func (m configForm) startTyped(forward bool) configForm {
+	by := -1
+	if forward {
+		by = 1
+	}
+	next := (m.typedMode() + by + len(startModes)) % len(startModes)
+	if next == 0 {
+		return m.kept()
+	}
+	m.edit.run = next == 1
+	return m
+}
+
+// typedMode is the index in startModes of how the pane whose command is
+// typed starts.
+func (m configForm) typedMode() int {
+	if m.edit.run {
+		return 1
+	}
+	return 2
+}
+
+// startsClicked is m after a click on option of how the pane at starts.
+func (m configForm) startsClicked(at spot, option int) (configForm, tea.Cmd) {
+	m.focus = at
+	if _, pane, ok := m.paneAt(at); ok {
+		if by := option - startMode(pane); by != 0 {
+			return m.started(by)
+		}
+	}
+	return m, nil
+}
+
 // entered is m after enter on a row: a choice goes to its next option,
 // the window list types the window's name, or a new one's on
 // "+ window", the pane list the pane's, and other rows are typed into.
@@ -1116,7 +1156,7 @@ type section struct {
 }
 
 // hit is a row's line a click acts on: the spots of the items on it,
-// each picking its window or pane at the row.
+// each picking its window or pane at the row, or how its pane starts.
 type hit struct {
 	line  int
 	at    spot
@@ -1289,7 +1329,7 @@ func (m configForm) layout() section {
 	picked := shown.selection()
 	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
 	focused := m.focus == listAt
-	line, spots := formWindowList(shown.project.Windows(), picked.window, focused, width-gutterWidth)
+	line, spots := formWindowList(shown.project.Windows(), picked.window, width-gutterWidth)
 	page.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	page.boxed("windows", shown.windowsCard(width-4), width, m.focus.window >= 0)
 	return page
@@ -1305,11 +1345,12 @@ func gutter(focused bool) string {
 
 // clicked is m after a click at (x, y) on a window in the window list
 // or a pane in the pane list, the cursor going there as the arrows take
-// it; elsewhere, m as it was.
-func (m configForm) clicked(x, y int) configForm {
+// it, or on how a pane starts, as if picked with ←/→; elsewhere, m as it
+// was.
+func (m configForm) clicked(x, y int) (configForm, tea.Cmd) {
 	line := m.top + y - 1 // below the trail
 	if y < 1 || y > m.bodyHeight() {
-		return m
+		return m, nil
 	}
 	for _, h := range m.layout().hits {
 		if h.line != line {
@@ -1317,18 +1358,21 @@ func (m configForm) clicked(x, y int) configForm {
 		}
 		spot, ok := hotspotAt(h.spots, x)
 		if !ok {
-			return m
+			return m, nil
 		}
 		at := h.at
-		if at.field == fieldWindowList {
+		switch at.field {
+		case fieldStarts:
+			return m.startsClicked(at, spot.item)
+		case fieldWindowList:
 			at.window = spot.item
-		} else {
+		default:
 			at.pane = spot.item
 		}
 		m.focus = at
-		return m.settled(1)
+		return m.settled(1), nil
 	}
-	return m
+	return m, nil
 }
 
 // projectCard is the project's name, root, before commands and env.
@@ -1408,7 +1452,7 @@ func (m configForm) windowsCard(width int) section {
 	s.block(drawn, drawingAt, focused)
 	listAt := spot{window: picked.window, pane: picked.pane, field: fieldPaneList}
 	focused = m.focus == listAt
-	line, spots := formPaneList(window, picked.pane, focused, width-gutterWidth)
+	line, spots := paneList(window, picked.pane, width-gutterWidth)
 	s.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	s.text("")
 	pane := window.Panes()[picked.pane]
@@ -1419,10 +1463,10 @@ func (m configForm) windowsCard(width int) section {
 }
 
 // formWindowList is the windows' names, then "+ window" adding one, the
-// selected one highlighted as the cursor when focused, else in bold,
-// with the cells each covers, to click it. When they don't fit in width,
-// the first ones make way for the selected one.
-func formWindowList(windows []domain.Window, selected int, focused bool, width int) (string, []hotspot) {
+// selected one in a cyan block, with the cells each covers, to click it.
+// When they don't fit in width, the first ones make way for the selected
+// one.
+func formWindowList(windows []domain.Window, selected int, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(windows)+1)
 	for _, window := range windows {
 		labels = append(labels, " "+window.Name().String()+" ")
@@ -1430,10 +1474,8 @@ func formWindowList(windows []domain.Window, selected int, focused bool, width i
 	labels = append(labels, " + window ")
 	for i, label := range labels {
 		switch {
-		case i == selected && focused:
-			labels[i] = cursorStyle.Render(label)
 		case i == selected:
-			labels[i] = titleStyle.Render("[" + label[1:len(label)-1] + "]")
+			labels[i] = selectedStyle.Render(label)
 		case i == len(windows):
 			labels[i] = keysStyle.Render(label)
 		}
@@ -1441,23 +1483,20 @@ func formWindowList(windows []domain.Window, selected int, focused bool, width i
 	return listed(labels, selected, width)
 }
 
-// formPaneList is the names of window's panes, or their numbers for
-// those without, the selected one in cyan, highlighted as the cursor
-// when focused, with the cells each covers, to click it. When they don't
-// fit in width, the first ones make way for the selected one.
-func formPaneList(window domain.Window, selected int, focused bool, width int) (string, []hotspot) {
+// paneList is the names of window's panes, or their numbers for
+// those without, the selected one in a cyan block, with the cells each
+// covers, to click it. When they don't fit in width, the first ones make
+// way for the selected one.
+func paneList(window domain.Window, selected int, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(window.Panes()))
 	for i, pane := range window.Panes() {
 		name := pane.Name().String()
 		if name == "" {
 			name = strconv.Itoa(i + 1)
 		}
-		switch {
-		case i == selected && focused:
-			labels = append(labels, pickedStyle.Reverse(true).Render(" "+name+" "))
-		case i == selected:
-			labels = append(labels, pickedStyle.Render("["+name+"]"))
-		default:
+		if i == selected {
+			labels = append(labels, selectedStyle.Render(" "+name+" "))
+		} else {
 			labels = append(labels, " "+name+" ")
 		}
 	}
@@ -1519,7 +1558,11 @@ func (m configForm) paneCard(index, j int) section {
 		}
 	}
 	m.put(&s, "dir", value, m.mark(root.Resolve(dir)), at(fieldDir))
-	m.put(&s, "starts", choices(startModes, startMode(pane)), "", at(fieldStarts))
+	mode := startMode(pane)
+	if m.editing && m.edit.at == at(fieldCommand) {
+		mode = m.typedMode()
+	}
+	m.putChoices(&s, "starts", startModes, mode, at(fieldStarts))
 	if cmd, ok := pane.Startup().Command(); ok || (m.editing && m.edit.at == at(fieldCommand)) {
 		m.put(&s, "command", cmd.String(), "", at(fieldCommand))
 	}
@@ -1575,17 +1618,24 @@ func shownDir(root domain.ProjectRoot, dir domain.PaneDir) string {
 	return "root"
 }
 
-// choices are options side by side, the selected one highlighted.
-func choices(options []string, selected int) string {
-	shown := make([]string, len(options))
+// putChoices adds a row labelled label showing options side by side,
+// the selected one highlighted, each clicked to pick it.
+func (m configForm) putChoices(s *section, label string, options []string, selected int, at spot) {
+	focused := m.focus == at
+	shown := padded(label, labelWidth)
+	if focused {
+		shown = cursorStyle.Render(label) + strings.Repeat(" ", max(labelWidth-ansi.StringWidth(label), 0))
+	}
+	labels := make([]string, len(options))
 	for i, option := range options {
 		if i == selected {
-			shown[i] = cursorStyle.Render(" " + option + " ")
+			labels[i] = selectedStyle.Render(" " + option + " ")
 		} else {
-			shown[i] = keysStyle.Render(" " + option + " ")
+			labels[i] = keysStyle.Render(" " + option + " ")
 		}
 	}
-	return strings.Join(shown, " ")
+	line, spots := listed(labels, selected, max(m.width-4*2-gutterWidth-labelWidth, 1))
+	s.listRow(gutter(focused)+shown+line, at, focused, gutterWidth+labelWidth, spots)
 }
 
 // scrolled is the first line shown, keeping the row the cursor is on and
@@ -1698,6 +1748,9 @@ func (m configForm) keys() string {
 		told = "↑↓ scroll · y save · n back to the form"
 	case m.editing:
 		told = "enter keep · esc cancel · ctrl+s save"
+		if m.edit.at.field == fieldCommand && m.edit.input.Value() == "" {
+			told = "←→ starts · " + told
+		}
 	}
 	return ansi.Truncate(keysStyle.Render(" "+told), m.width, "…")
 }

@@ -59,6 +59,8 @@ var (
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	pickedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
+	// selectedStyle is the selected item of a list or choice: a cyan block.
+	selectedStyle = lipgloss.NewStyle().Background(lipgloss.Color("6")).Foreground(lipgloss.Color("0"))
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
@@ -295,9 +297,9 @@ func (m browser) View() tea.View {
 	return view
 }
 
-// clicked is m after a click at (x, y): on a project or a window in the window list,
-// selecting it as the arrow keys do, or on a key told, doing what the
-// key does.
+// clicked is m after a click at (x, y): on a project, a window in the
+// window list or a pane in the pane list, selecting it as the arrow keys
+// and tab do, or on a key told, doing what the key does.
 func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	shown := m.shown()
 	notice, list, height, width := m.frame()
@@ -320,11 +322,25 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	}
 	project := shown[m.cursor]
 	windows := project.Project().Plan().Windows()
-	if len(windows) == 0 || y != windowListRow(detailsTop(project, width)) {
+	if len(windows) == 0 {
 		return m, nil
 	}
-	_, spots := windowList(project, windows, m.drawn(windows), width)
-	if spot, ok := hotspotAt(spots, x-listWidth-detailsPadding); ok {
+	laid := m.laidOut(project, windows, width, height)
+	x -= listWidth + detailsPadding
+	var spots []hotspot
+	switch y {
+	case windowListRow(laid.top):
+		_, spots = windowList(project, windows, laid.index, width)
+	case windowListRow(laid.top) + 1 + len(laid.panes):
+		if laid.paneList == "" {
+			return m, nil
+		}
+		if spot, ok := hotspotAt(laid.paneSpots, x); ok {
+			m.pane = spot.item
+		}
+		return m, nil
+	}
+	if spot, ok := hotspotAt(spots, x); ok {
 		return m.act(spot)
 	}
 	return m, nil
@@ -482,7 +498,8 @@ const minDrawingWidth, minDrawingHeight = 24, 6
 
 // details are the selected project's summary, or why its config can't
 // be read, then its window list, the selected one drawn in what is left
-// of width×height, and the levels of its selected pane below.
+// of width×height above its pane list, and the levels of its selected
+// pane below.
 func (m browser) details(width, height int) string {
 	shown := m.shown()
 	switch {
@@ -492,28 +509,65 @@ func (m browser) details(width, height int) string {
 		return fmt.Sprintf("No project's name contains %q.", m.filter)
 	}
 	project := shown[m.cursor]
-	top := detailsTop(project, width)
 	windows := project.Project().Plan().Windows()
 	if len(windows) == 0 {
-		return top
+		return detailsTop(project, width)
 	}
+	laid := m.laidOut(project, windows, width, height)
+	panes := laid.panes
+	if laid.paneList != "" {
+		panes = append(panes, laid.paneList)
+	}
+	listLine, _ := windowList(project, windows, laid.index, width)
+	return laid.top + "\n\n" + listLine + "\n" + strings.Join(append(panes, laid.levels...), "\n")
+}
+
+// detailsLayout is the parts of the details below the window list.
+type detailsLayout struct {
+	top       string // the config file and the summary
+	index     int    // the drawn window's
+	panes     []string
+	paneList  string // under a drawing, empty when the panes are listed
+	paneSpots []hotspot
+	levels    []string
+}
+
+// laidOut is how the details of project, whose windows are windows, fit
+// in width×height: its top, then below the window list, the drawn
+// window's panes drawn or listed, its pane list and the levels of the
+// selected pane in what is left.
+func (m browser) laidOut(project app.ProjectOverview, windows []domain.WindowPlan, width, height int) detailsLayout {
+	top := detailsTop(project, width)
 	index := m.drawn(windows)
-	window, root := windows[index], project.Project().Root().String()
-	pane := m.selectedPane(len(window.Panes()))
+	pane := m.selectedPane(len(windows[index].Panes()))
 	below := height - windowListRow(top) - 1 // the window list
 	levelLines := levels(project.Project(), index, pane, width)
-	var panes []string
-	if width < minDrawingWidth || below < minDrawingHeight {
-		panes = undrawnPanes(window, root, alerts(project, window), pane, width, below)
-	} else {
-		// A session opens at the browser's size, less tmux's status line.
-		// The levels leave the drawing its least height.
-		panes = drawing(window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
-			width, max(below-len(levelLines), minDrawingHeight))
+	panes, paneList, spots := m.panesShown(project, index, width, below, len(levelLines))
+	shown := len(panes)
+	if paneList != "" {
+		shown++
 	}
-	levelLines = fitted(levelLines, below-len(panes))
-	listLine, _ := windowList(project, windows, index, width)
-	return top + "\n\n" + listLine + "\n" + strings.Join(append(panes, levelLines...), "\n")
+	return detailsLayout{top: top, index: index, panes: panes, paneList: paneList, paneSpots: spots,
+		levels: fitted(levelLines, below-shown)}
+}
+
+// panesShown are the panes of the window at index of project's, drawn
+// in width×below less the levels' height, the drawing keeping its least
+// height, then the pane list under the drawing, with the cells each pane
+// covers, to click it; with no room to draw them, they are listed and
+// there is no pane list.
+func (m browser) panesShown(project app.ProjectOverview, index, width, below, levelHeight int) ([]string, string, []hotspot) {
+	window := project.Project().Plan().Windows()[index]
+	root := project.Project().Root().String()
+	pane := m.selectedPane(len(window.Panes()))
+	if width < minDrawingWidth || below-1 < minDrawingHeight {
+		return undrawnPanes(window, root, alerts(project, window), pane, width, below), "", nil
+	}
+	// A session opens at the browser's size, less tmux's status line.
+	drawn := drawing(window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
+		width, max(below-1-levelHeight, minDrawingHeight))
+	line, spots := paneList(project.Project().Windows()[index], pane, width)
+	return drawn, line, spots
 }
 
 // windowListRow is the details' line the window list is on, below top and a blank
@@ -554,7 +608,7 @@ func detailsTop(project app.ProjectOverview, width int) string {
 	return lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
 }
 
-// windowList is the names of windows, the selected one highlighted, ○ marking
+// windowList is the names of windows, the selected one in a cyan block, ○ marking
 // those the project's owned session lacks, and which one of how many is
 // drawn, after ←→ when there are several to switch between; with the
 // cells each window's name and each arrow covers, to click them. When they
@@ -571,7 +625,7 @@ func windowList(project app.ProjectOverview, windows []domain.WindowPlan, select
 			label = " ○" + label
 		}
 		if i == selected {
-			label = cursorStyle.Render(label)
+			label = selectedStyle.Render(label)
 		}
 		labels[i] = label
 	}

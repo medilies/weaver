@@ -8,7 +8,8 @@ import (
 
 // hotspot is the cells of a line a click acts on: a key told, doing
 // what the key does, or, without a key, the item of a list it selects,
-// a window in the window list or a pane in the pane list.
+// a window in the window list, a pane in the pane list or how a pane
+// starts.
 type hotspot struct {
 	from, to int
 	key      string
