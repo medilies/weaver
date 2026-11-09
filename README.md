@@ -59,7 +59,7 @@ as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
 neither (`$ █`). A pane with a warning has ⚠ in its top border, and
 the border is red when its directory is missing, yellow when its
 program isn't found. In a small terminal the panes are listed instead.
-The selected pane has its name in brackets, and below the drawing are
+The selected pane is cyan, its name in brackets, and below the drawing are
 the directory it starts in, its `before` commands in the order they
 run, and its variables, each with the level it comes from (the project,
 the window or the pane) and what it is over when it replaces the
@@ -88,7 +88,7 @@ The config form shows a project as cards: the project's, then its
 windows', starting with the window list. Freezing starts it on a name, the root, and the
 session's windows if you named one; the name is typed there, and stays
 when editing. The selected window's panes are drawn as they
-open, and the selected pane's card is below the drawing. Each field is
+open, the selected pane in cyan, heavy when the cursor is on the drawing, and its card is below it. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists. A
 pane lists the project's and its window's before commands and the
 project's variables dimmed, with the level they come from; enter on such

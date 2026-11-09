@@ -113,15 +113,19 @@ func borderRune(joins, heavy int) string {
 }
 
 // alert is the worst warning about a pane, which colours its box.
+// selectedPane is no warning, but colours the selected pane's box the
+// same way, any warning winning over it.
 type alert int
 
 const (
 	noAlert alert = iota
+	selectedPane
 	programAlert
 	dirAlert
 )
 
 var alertStyles = map[alert]lipgloss.Style{
+	selectedPane: pickedStyle,
 	programAlert: warningStyle,
 	dirAlert:     problemStyle,
 }
@@ -130,10 +134,10 @@ var alertStyles = map[alert]lipgloss.Style{
 // proportions they take in a window of cols×rows. Each box shows what
 // its pane looks like the moment it opens: its name in the top border,
 // its dir when it isn't root, its note, then its prompt. The selected
-// pane, by its index, has a heavy border when heavy is set, else its
-// name in brackets. A pane with an alert,
-// from alerts by its index, gets ⚠ in its top border and a border in the
-// alert's colour, the worst winning on a border boxes share.
+// pane, by its index, has a cyan border and title, heavy when heavy is
+// set, else with its name in brackets. A pane with an alert, from alerts
+// by its index, gets ⚠ in its top border and a border in the alert's
+// colour, the worst winning on a border boxes share, and over cyan.
 func drawing(window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
@@ -179,9 +183,13 @@ func drawing(window domain.WindowPlan, root string, alerts []alert, selected int
 		}
 	}
 	for i, f := range frames {
+		a := alertOf(alerts, i)
+		if i == selected {
+			a = max(a, selectedPane)
+		}
 		// A box scaled too small to show is left alone: colouring it would
 		// colour the boxes it collapsed into.
-		if a := alertOf(alerts, i); a != noAlert && f.right-f.left >= 2 && f.bottom-f.top >= 2 {
+		if a != noAlert && f.right-f.left >= 2 && f.bottom-f.top >= 2 {
 			grid.alert(f.left, f.top, f.right, f.bottom, a)
 			grid.alertCell(f.left+2, f.top, a) // the title, if written
 		}
