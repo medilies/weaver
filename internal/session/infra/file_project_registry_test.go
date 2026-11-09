@@ -249,6 +249,19 @@ func TestFileProjectRegistryReadsEnvironments(t *testing.T) {
 		}
 	})
 
+	t.Run("reads the setup commands in order", func(t *testing.T) {
+		got := lines(shop.Setup())
+		if want := []string{"docker compose up -d --wait", "php artisan migrate"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("reads the teardown commands", func(t *testing.T) {
+		if got := lines(shop.Teardown()); !slices.Equal(got, []string{"docker compose down"}) {
+			t.Fatalf("got %q, want docker compose down", got)
+		}
+	})
+
 	t.Run("reads the commands to run first in a window's panes", func(t *testing.T) {
 		if got := shop.Windows()[0].Before(); len(got) != 1 || got[0].String() != "git fetch --quiet" {
 			t.Fatalf("got %v, want git fetch --quiet", got)
@@ -302,6 +315,20 @@ func TestFileProjectRegistryLaysOutGrids(t *testing.T) {
 }
 
 func TestFileProjectRegistryRejectsInvalidConfigs(t *testing.T) {
+	t.Run("names an empty setup command", func(t *testing.T) {
+		_, err := load(t, "empty", "root: /srv/empty\nsetup: [\"  \"]\n")
+		if !errors.Is(err, domain.ErrEmptyCommand) || !strings.Contains(err.Error(), "invalid config: setup: ") {
+			t.Fatalf("got %v, want an empty command error under setup", err)
+		}
+	})
+
+	t.Run("names an empty teardown command", func(t *testing.T) {
+		_, err := load(t, "empty", "root: /srv/empty\nteardown: [\"\"]\n")
+		if !errors.Is(err, domain.ErrEmptyCommand) || !strings.Contains(err.Error(), "invalid config: teardown: ") {
+			t.Fatalf("got %v, want an empty command error under teardown", err)
+		}
+	})
+
 	t.Run("rejects a window laid out by both a grid and splits", func(t *testing.T) {
 		_, err := load(t, "mixed", `root: /srv/mixed
 windows:
@@ -591,4 +618,13 @@ func TestFileProjectRegistryDelete(t *testing.T) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
+}
+
+// lines is the commands' text, in order.
+func lines(cmds []domain.Command) []string {
+	out := make([]string, 0, len(cmds))
+	for _, cmd := range cmds {
+		out = append(out, cmd.String())
+	}
+	return out
 }

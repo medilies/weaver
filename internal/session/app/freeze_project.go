@@ -85,6 +85,8 @@ func (uc FreezeProject) Handle(request FreezeRequest) (domain.Project, error) {
 			Env:      project.Env(),
 			Before:   project.Before(),
 			Clearing: project.Clearing(),
+			Setup:    project.Setup(),
+			Teardown: project.Teardown(),
 			Windows:  project.Windows(),
 		}
 	}

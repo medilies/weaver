@@ -119,14 +119,17 @@ func (r ProjectRoot) Resolve(dir PaneDir) string {
 }
 
 // Project is a registered dev project: a name, the directory its session
-// is rooted at, and the windows its session opens.
+// is rooted at, the commands run in it before its session starts and
+// before it is killed, and the windows its session opens.
 type Project struct {
-	name    ProjectName
-	root    ProjectRoot
-	env     Env
-	before  []Command
-	clears  Clearing
-	windows []Window
+	name     ProjectName
+	root     ProjectRoot
+	env      Env
+	before   []Command
+	clears   Clearing
+	setup    []Command
+	teardown []Command
+	windows  []Window
 	// defaulted is true until the project is given windows: it opens the
 	// window named after it.
 	defaulted bool
@@ -195,6 +198,20 @@ func (p Project) WithClearing(c Clearing) Project {
 	return p
 }
 
+// SettingUp runs cmds once in the root, in order, before opening starts
+// the project's session; a failing one stops the open.
+func (p Project) SettingUp(cmds ...Command) Project {
+	p.setup = slices.Clone(cmds)
+	return p
+}
+
+// TearingDown runs cmds in the root, in order, before a kill ends the
+// project's session; the session is killed even when one fails.
+func (p Project) TearingDown(cmds ...Command) Project {
+	p.teardown = slices.Clone(cmds)
+	return p
+}
+
 func defaultWindow(name ProjectName) Window {
 	return Window{name: WindowName(name), panes: []Pane{NewPane()}}
 }
@@ -221,6 +238,18 @@ func (p Project) Before() []Command {
 // commands are hidden once they ran.
 func (p Project) Clearing() Clearing {
 	return p.clears
+}
+
+// Setup is the setup commands, run in the root before the project's
+// session starts.
+func (p Project) Setup() []Command {
+	return slices.Clone(p.setup)
+}
+
+// Teardown is the teardown commands, run in the root before the
+// project's session is killed.
+func (p Project) Teardown() []Command {
+	return slices.Clone(p.teardown)
 }
 
 // Windows are the windows the project's session opens, in order.

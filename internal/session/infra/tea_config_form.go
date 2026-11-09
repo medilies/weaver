@@ -57,7 +57,8 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 		return domain.Project{}, err
 	}
 	project, err := domain.NewProject(name, root).WithEnv(draft.Env).RunningFirst(draft.Before...).
-		WithClearing(draft.Clearing).WithWindows(draft.Windows...)
+		WithClearing(draft.Clearing).SettingUp(draft.Setup...).TearingDown(draft.Teardown...).
+		WithWindows(draft.Windows...)
 	if err != nil {
 		return domain.Project{}, err
 	}

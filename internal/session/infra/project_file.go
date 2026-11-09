@@ -32,11 +32,13 @@ var (
 // projectFile is the on-disk shape of a project config, e.g.
 // ~/.config/weaver/projects/<name>.yml; the README documents it.
 type projectFile struct {
-	Root    string            `yaml:"root"`
-	Env     map[string]string `yaml:"env,omitempty"`
-	Before  []string          `yaml:"before,omitempty"`
-	Clear   *bool             `yaml:"clear,omitempty"`
-	Windows []windowFile      `yaml:"windows,omitempty"`
+	Root     string            `yaml:"root"`
+	Env      map[string]string `yaml:"env,omitempty"`
+	Setup    []string          `yaml:"setup,omitempty"`
+	Teardown []string          `yaml:"teardown,omitempty"`
+	Before   []string          `yaml:"before,omitempty"`
+	Clear    *bool             `yaml:"clear,omitempty"`
+	Windows  []windowFile      `yaml:"windows,omitempty"`
 }
 
 type windowFile struct {
@@ -212,6 +214,14 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 	if err != nil {
 		return domain.Project{}, fmt.Errorf("before: %w", err)
 	}
+	setup, err := toCommands(f.Setup)
+	if err != nil {
+		return domain.Project{}, fmt.Errorf("setup: %w", err)
+	}
+	teardown, err := toCommands(f.Teardown)
+	if err != nil {
+		return domain.Project{}, fmt.Errorf("teardown: %w", err)
+	}
 	windows := make([]domain.Window, 0, len(f.Windows))
 	for _, w := range f.Windows {
 		window, err := w.toWindow()
@@ -224,6 +234,8 @@ func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) 
 		WithEnv(env).
 		RunningFirst(before...).
 		WithClearing(toClearing(f.Clear)).
+		SettingUp(setup...).
+		TearingDown(teardown...).
 		WithWindows(windows...)
 }
 
@@ -490,10 +502,12 @@ func commented(node *yaml.Node) bool {
 func encodeProject(project domain.Project) ([]byte, error) {
 	root := project.Root()
 	file := projectFile{
-		Root:   contractHome(root.String()),
-		Env:    envMap(project.Env()),
-		Before: lines(project.Before()),
-		Clear:  clearOf(project.Clearing()),
+		Root:     contractHome(root.String()),
+		Env:      envMap(project.Env()),
+		Setup:    lines(project.Setup()),
+		Teardown: lines(project.Teardown()),
+		Before:   lines(project.Before()),
+		Clear:    clearOf(project.Clearing()),
 	}
 	if !onlyDefaultWindow(project) {
 		for _, window := range project.Windows() {

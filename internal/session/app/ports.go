@@ -25,8 +25,10 @@ type ProjectDraft struct {
 	Env       domain.Env
 	Before    []domain.Command
 	Clearing  domain.Clearing
-	Windows   []domain.Window // a running session's, to start from; none to start blank
-	Config    []byte          // the config as stored, which saving replaces; none when freezing
+	Setup     []domain.Command // kept as they are: the form doesn't change them
+	Teardown  []domain.Command // kept as they are: the form doesn't change them
+	Windows   []domain.Window  // a running session's, to start from; none to start blank
+	Config    []byte           // the config as stored, which saving replaces; none when freezing
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.

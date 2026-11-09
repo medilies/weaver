@@ -14,6 +14,22 @@
     "env": {
       "$ref": "#/definitions/env"
     },
+    "setup": {
+      "description": "Commands run once in root, in order, before weave <project> starts the session, e.g. docker compose up -d --wait. Each runs in its own sh -c with the project's env, not its before commands; a failing one stops the open, and no session is started. Opening a running session doesn't run them.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "teardown": {
+      "description": "Commands run in root, in order, before weave kill ends a session weaver started, e.g. docker compose down. Each runs in its own sh -c with the project's env, not its before commands; the session is killed even when one fails.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "before": {
       "$ref": "#/definitions/before"
     },

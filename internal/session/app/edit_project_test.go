@@ -105,6 +105,26 @@ func TestEditProject(t *testing.T) {
 		}
 	})
 
+	t.Run("gives the form the setup and teardown commands to keep", func(t *testing.T) {
+		up, err := domain.NewCommand("docker compose up -d")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		down, err := domain.NewCommand("docker compose down")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).SettingUp(up).TearingDown(down)}}
+		form := &fakeForm{project: moved}
+		documents := storedDocuments{"shop": "root: /srv/shop"}
+		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := form.draft; len(got.Setup) != 1 || got.Setup[0] != up || len(got.Teardown) != 1 || got.Teardown[0] != down {
+			t.Fatalf("got setup %v, teardown %v; want shop's", got.Setup, got.Teardown)
+		}
+	})
+
 	t.Run("keeps the project's name in the form", func(t *testing.T) {
 		form := &fakeForm{project: moved}
 		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, form, answer(true)); err != nil {
