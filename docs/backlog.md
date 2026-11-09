@@ -3,8 +3,8 @@
 Everything left to do or decide, in the order to do it: the browser
 ideas, the config ideas and what is left of the quality report (review
 of 2026-11-06, revised 2026-11-07), merged on 2026-11-08, then the
-first brief and its later notes, sorted on 2026-11-09, and the first
-use of tasks, scheduled on 2026-11-09. Their history is
+first brief and its later notes, sorted on 2026-11-09, the first use
+of tasks, and v0.5.0, both scheduled on 2026-11-09. Their history is
 in `git log -- docs/ideas.md docs/config-ideas.md
 docs/quality-report.md specs.md`.
 
@@ -33,14 +33,129 @@ layers), XL (mostly open questions).
 
 ## Order
 
-Nothing scheduled. The exited-command warning is done (v0.4.0); what comes next
-is picked from [By need](#by-need) when its trigger fires.
+v0.5.0, scheduled on 2026-11-09: what makes opening and the browser
+better, with no new command. Breaking changes are allowed, but none is
+planned. Config and domain first, then the config form, then the
+browser, whose last two items share the idle check.
+
+### 1. Housekeeping (XS)
+
+- GoReleaser stamps `{{.Tag}}`, so `weave --version` reports `v0.5.0`
+  as `go install …@v0.5.0` does; `TestReleaseBuildsReportTheStampedVersion`
+  expects it (`fix(release):`).
+- `requireTool` moves out of `local_workspace_test.go` to a test file
+  the tmux tests share.
+
+### 2. Window `env` (S)
+
+**When**: a config sets the same variable in every pane of a window.
+
+```yaml
+windows:
+  - name: api
+    env: { APP_ENV: local }
+```
+
+`before` already applies at three levels; `env` skips the window. Each
+variable is set by the project, then the window, then the pane, the last
+one winning.
+
+- `domain`: `Window` gets an `env` and a `WithEnv`. `planPane`
+  (`domain/plan.go`) becomes
+  `p.env.Overlay(window.env).Overlay(pane.env)`.
+- `infra`: `windowFile.Env`, `windowFileOf`, and
+  `$ref: "#/definitions/env"` in the window's schema.
+- Test: a window's variable overrides the project's, and a pane's
+  overrides the window's.
+- The browser's levels and the config form show the extra level once
+  it exists.
+
+### 3. Focus (S)
+
+**When**: the pane you work in isn't the first one created, such as a
+wide editor split off a narrow log pane.
+
+```yaml
+windows:
+  - name: shell
+  - name: editor
+    focus: true
+    panes:
+      - name: logs
+      - name: nvim
+        split: { direction: right, size: 70% }
+        focus: true
+```
+
+Windows and splits are created with `-d` (`Tmux.newWindow`, `Tmux.fill`),
+so you always land in the first window's first pane. That stays the
+default. tmuxinator has it as `startup_window` and `startup_pane`, tmuxp
+as `focus: true`.
+
+- `domain`: at most one focused window per project and one focused pane
+  per window, checked in `WithWindows` and `NewWindow` (two new errors).
+  The plans carry the choice.
+- `infra`: `Tmux.Start` ends with a `select-pane` per window and one
+  `select-window`. `Tmux.Restore` selects the focused pane in the
+  windows it adds, without switching away from the window you're in;
+  only a new session lands you on the focused window.
+- The domain moves focus: `Project.Focusing(window)` and
+  `Window.Focusing(pane)` drop the previous one, so the config form only
+  passes the choice on; the two errors catch a hand-written config.
+- Freeze reads `#{window_active}` and `#{pane_active}` in `Capture`, so
+  a captured session keeps where you were. `focus` is written only off
+  the default (not on the first window or pane), by freeze and the
+  config form alike.
+- Schema: `focus` boolean on windows and panes.
+- Test (tmux): after `Start`, the focused window and pane are active.
+
+### 4. Setup and teardown in the config form (S)
+
+**When**: someone wants to change setup or teardown commands without
+`weave edit --raw`. The config form keeps them as they are; the project
+card would list them like `before`, added, edited, removed and
+reordered the same way.
+
+### 5. The config in the browser (XS)
+
+**When**: someone misses the config's YAML in the details pane, which
+the drawing replaced. `E` opens the file, and a config that can't be
+read shows why. Bring it back behind a key (`y`):
+`ProjectOverview.Config()` still carries it. `y` toggles the details
+pane between the drawing and the YAML, staying on while you move
+between projects; `y` or `esc` turns it off.
+
+### 6. A failed teardown seen from inside the session (XS)
+
+**When**: `weave kill` run in a pane of the session it kills hides a
+failing teardown command, since the pane goes with the session. weave
+would print the error and wait for Enter before the kill.
+
+### 7. Rerun (S)
+
+**When**: a crashed dev server is restarted by hand often enough that
+reaching its pane is the slow part. `r` in the browser, on a pane with the
+exited-command warning, types its command into it again, as a task is
+typed: through `TaskRunner.Type`, after `Busy` says the shell is idle.
+You are then put in that pane, as with a task. On any other pane, a
+notice says why not: its command is running, or it has none.
+`ActionRerun`.
+
+### 8. A mark on a running task (S)
+
+**When**: someone loses track of which tasks still run. The task list
+marks a task whose pane is busy, from the same idle check
+(`SessionInspector.Idle`). A task run apart in a throwaway window isn't
+its pane's, so it needs the window's own pane checked: `RunApart` tags
+the window with the task (a `@weaver_task` window option). The mark is
+●, before the task's name, as for a running project.
 
 ## By need
 
 ### Settings (by item)
 
-**When**: one of these bothers you enough to want it changed. Each is a
+**When**: one of these bothers you enough to want it changed. Delayed
+on 2026-11-09 for v0.5.0's more essential items. Each is a
 weaver-wide setting, not a project's config, so the first one brings a
 settings file, which needs a glossary entry first.
 
@@ -51,20 +166,6 @@ settings file, which needs a glossary entry first.
 Each waits for a config or a user that needs it; the trigger says what
 that looks like. They are listed from the smallest.
 
-### Typing an exited command again (S)
-
-**When**: a crashed dev server is restarted by hand often enough that
-reaching its pane is the slow part. A browser key on a pane with the
-exited-command warning types its command into it again, as a task is
-typed: through `TaskRunner.Type`, after `Busy` says the shell is idle.
-
-### A mark on a running task (S)
-
-**When**: someone loses track of which tasks still run. The task list
-marks a task whose pane is busy, from the same idle check
-(`SessionInspector.Idle`). A task run apart in a throwaway window isn't
-its pane's, so it needs the window's own pane checked.
-
 ### A clean shutdown when killing (M)
 
 **When**: a dev server leaves state behind (a lock file, a stale PID,
@@ -72,26 +173,6 @@ an unflushed log) when its session is killed. After the teardown
 commands, the kill sends Ctrl-C to every pane and waits, with a
 timeout, until each shell is idle, then kills the session. It relies on
 the idle check meaning "the shell is idle", as `Idle` and `Busy` do.
-
-### A failed teardown seen from inside the session (XS)
-
-**When**: `weave kill` run in a pane of the session it kills hides a
-failing teardown command, since the pane goes with the session. weave
-would print the error and wait for Enter before the kill.
-
-### The config in the browser (XS)
-
-**When**: someone misses the config's YAML in the details pane, which
-the drawing replaced. `E` opens the file, and a config that can't be
-read shows why. Bring it back behind a key (`y`):
-`ProjectOverview.Config()` still carries it.
-
-### Setup and teardown in the config form (S)
-
-**When**: someone wants to change setup or teardown commands without
-`weave edit --raw`. The config form keeps them as they are; the project
-card would list them like `before`, added, edited, removed and
-reordered the same way.
 
 ### Grid sizes in cells (S)
 
@@ -143,63 +224,6 @@ selected one highlighted:
 ```
 
 `drawing` already draws at any size; this is `windowList` calling it small.
-
-### Window `env` (S)
-
-**When**: a config sets the same variable in every pane of a window.
-
-```yaml
-windows:
-  - name: api
-    env: { APP_ENV: local }
-```
-
-`before` already applies at three levels; `env` skips the window. Each
-variable is set by the project, then the window, then the pane, the last
-one winning.
-
-- `domain`: `Window` gets an `env` and a `WithEnv`. `planPane`
-  (`domain/plan.go`) becomes
-  `p.env.Overlay(window.env).Overlay(pane.env)`.
-- `infra`: `windowFile.Env`, `windowFileOf`, and
-  `$ref: "#/definitions/env"` in the window's schema.
-- Test: a window's variable overrides the project's, and a pane's
-  overrides the window's.
-- The browser's levels and the config form show the extra level once
-  it exists.
-
-### Focus (S)
-
-**When**: the pane you work in isn't the first one created, such as a
-wide editor split off a narrow log pane.
-
-```yaml
-windows:
-  - name: shell
-  - name: editor
-    focus: true
-    panes:
-      - name: logs
-      - name: nvim
-        split: { direction: right, size: 70% }
-        focus: true
-```
-
-Windows and splits are created with `-d` (`Tmux.newWindow`, `Tmux.fill`),
-so you always land in the first window's first pane. That stays the
-default. tmuxinator has it as `startup_window` and `startup_pane`, tmuxp
-as `focus: true`.
-
-- `domain`: at most one focused window per project and one focused pane
-  per window, checked in `WithWindows` and `NewWindow` (two new errors).
-  The plans carry the choice.
-- `infra`: `Tmux.Start` ends with a `select-pane` per window and one
-  `select-window`. `Tmux.Restore` selects the focused pane in the
-  windows it adds, without switching away from the window you're in.
-- Freeze reads `#{window_active}` and `#{pane_active}` in `Capture`, so
-  a captured session keeps where you were.
-- Schema: `focus` boolean on windows and panes.
-- Test (tmux): after `Start`, the focused window and pane are active.
 
 ### Grid windows in the config form (M)
 
@@ -303,15 +327,15 @@ open; `wait` orders the panes among themselves.
   comments.
 - A new subcommand reserves its name (`reservedNames` in
   `domain/project.go`), which breaks a registered project already named
-  `wait`. Released configs may be, so decide how: a migration message,
-  or no new subcommand.
+  `wait`: see the reserved-name rule in
+  [Shared groundwork](#shared-groundwork). Deferred on 2026-11-09: its
+  need isn't clear yet.
 
 ### Lazy windows (L)
 
 **When**: a project has heavy windows you don't always want (an
 emulator, a log tail). It wants a second argument to `weave`, which
-takes at most one today (`cmd/weave/root.go`); design it with
-`weave run` below if both come.
+takes at most one today (`cmd/weave/root.go`). Deferred on 2026-11-09.
 
 ```yaml
 windows:
@@ -340,13 +364,6 @@ browser, does.
 - Freeze from a session where the window isn't open drops it from the
   config it writes: warn, or carry lazy windows over from the existing
   config.
-
-### `weave run` (S)
-
-**When**: running a task from the command line, without the browser,
-comes up. `weave run <project> <task>`, both completed. It reserves
-`run` as a project name, as `wait` would, and shares its second-argument
-syntax with lazy windows.
 
 ## Parked
 
@@ -447,16 +464,6 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 - **A symlink in a root that leads out of it.** `/srv/shop/api` to
   `/data/api` is frozen as the absolute `/data/api`: tmux and `/proc`
   report directories resolved. Editing the config keeps the link.
-- **GoReleaser's version format.** It stamps `{{.Version}}` (`0.2.0`),
-  while `go install …@v0.2.0` reports `v0.2.0`. Stamping `{{.Tag}}`
-  gives one form, and `TestReleaseBuildsReportTheStampedVersion` would
-  expect `v0.2.0`.
-- **The changelog filters.** `^docs:`, `^test:` and `^chore:` miss
-  scoped and other types, so `build(deps): …`, `ci: …` and merge commits
-  reach the release notes. If they should go:
-  `^(docs|test|chore|ci|build)(\(.+\))?!?:` plus `^Merge`.
-- **Where `requireTool` lives**: in `local_workspace_test.go`, though
-  the tmux tests use it too.
 
 **Left out** of the config, as other session managers have them:
 
@@ -478,6 +485,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   and only pays off when a team shares it.
 - Saving pane contents to bring back after a reboot (tmux-resurrect):
   weaver rebuilds from the config, which is the better source of truth.
+- `weave run <project> <task>`: running a task without the browser. No
+  new commands (2026-11-09); the browser runs tasks.
 - Opening some windows from the command line (smug's `proj:win1,win2`):
   restoring brings back closed windows, and lazy windows put the choice
   in the config.
@@ -495,7 +504,10 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   or five times per pane: not worth changing while freeze is
   interactive, since splitting free-text paths and labels out of one
   line adds parsing risk.
-- A second CLI argument serves lazy windows and `weave run`: design both
-  together.
+- A second CLI argument serves lazy windows.
+- The reserved-name rule, decided on 2026-11-09 for the first new
+  subcommand: when a registered project's name clashes with it, weave
+  refuses with an error naming the config file to rename, and only when
+  such a config exists. It becomes an ADR when that subcommand ships.
 - The `sh` startup script (`shellCommand`) carries secrets, and maybe
   `wait`.
