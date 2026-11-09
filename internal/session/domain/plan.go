@@ -3,9 +3,9 @@ package domain
 import "slices"
 
 // SessionPlan is a project resolved for tmux: every directory absolute,
-// every pane's environment merged over its window's and project's, and its commands to
-// run first after its project's and window's. Starting a session follows
-// it without decisions.
+// every pane's environment merged over its window's and project's, and
+// its commands to run first after its project's and window's. Starting a
+// session follows it without decisions.
 type SessionPlan struct {
 	name    ProjectName
 	windows []WindowPlan

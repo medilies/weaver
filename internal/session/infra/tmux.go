@@ -610,7 +610,7 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 	}
 	type typed struct {
 		at      at
-		command string
+		command domain.Command
 	}
 	running := map[string]typed{} // by process
 	for line := range strings.Lines(out) {
@@ -623,7 +623,7 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 			source = fields[2]
 		}
 		pane, ok := panes[source]
-		if command := verbatim(fields[3]); ok && command != "" {
+		if command, err := domain.NewCommand(verbatim(fields[3])); ok && err == nil {
 			running[fields[1]] = typed{at: pane, command: command}
 		}
 	}

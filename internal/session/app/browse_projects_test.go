@@ -436,8 +436,8 @@ func TestBrowseProjects(t *testing.T) {
 		s.configs.projects["shop"] = tasked(t)
 		s.sessions.running["shop"] = owned(t, "shop", "logs")
 		s.sessions.commands = map[string][]domain.RunningCommand{"shop": {
-			domain.NewRunningCommand(windowName(t, "shop"), 1, "npm run build"),
-			domain.NewRunningCommand(windowName(t, "logs"), 0, "vim app.log"),
+			domain.NewRunningCommand(windowName(t, "shop"), 1, command(t, "npm run build")),
+			domain.NewRunningCommand(windowName(t, "logs"), 0, command(t, "vim app.log")),
 		}}
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)

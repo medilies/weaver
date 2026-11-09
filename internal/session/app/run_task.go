@@ -54,22 +54,6 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt) error {
 	return nil
 }
 
-// requireOwned returns an error wrapping ErrSessionNotRunning unless the
-// project's session runs, and ErrSessionNotOwned unless weaver started
-// it, as only then can its panes be told apart.
-func requireOwned(sessions domain.SessionFinder, name domain.ProjectName) error {
-	session, running, err := sessions.Find(name)
-	switch {
-	case err != nil:
-		return err
-	case !running:
-		return fmt.Errorf("%s: %w: open it first", name, domain.ErrSessionNotRunning)
-	case !session.Owned():
-		return fmt.Errorf("%s: %w: its panes can't be told apart", name, domain.ErrSessionNotOwned)
-	}
-	return nil
-}
-
 // run types task into pane, at index of window, when its shell is idle,
 // or else, if the user agrees, runs it in a throwaway window.
 func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task) error {

@@ -267,10 +267,13 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 // owned session. Like the session, they only add to the browser: if tmux
 // can't tell, there are none.
 func (uc BrowseProjects) runningTasks(overview ProjectOverview) []TaskAt {
-	if !overview.found || !overview.session.Owned() {
+	windows := overview.project.Plan().Windows()
+	tasked := slices.ContainsFunc(windows, func(w domain.WindowPlan) bool {
+		return slices.ContainsFunc(w.Panes(), func(p domain.PanePlan) bool { return len(p.Tasks()) > 0 })
+	})
+	if !tasked || !overview.found || !overview.session.Owned() {
 		return nil
 	}
-	windows := overview.project.Plan().Windows()
 	commands, err := uc.sessions.RunningCommands(overview.project.Name(), windows)
 	if err != nil {
 		return nil

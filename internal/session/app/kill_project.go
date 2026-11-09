@@ -10,11 +10,11 @@ import (
 // KillProject kills a project's tmux session and everything running in
 // it, after its teardown commands when weaver started it.
 type KillProject struct {
-	sessions domain.SessionKiller
-	locator  domain.SessionLocator
-	projects domain.ProjectRegistry
-	commands domain.CommandRunner
-	reader   Acknowledger
+	sessions     domain.SessionKiller
+	locator      domain.SessionLocator
+	projects     domain.ProjectRegistry
+	commands     domain.CommandRunner
+	acknowledger Acknowledger
 }
 
 // NewKillProject constructs the use case against its ports.
@@ -23,9 +23,9 @@ func NewKillProject(
 	locator domain.SessionLocator,
 	projects domain.ProjectRegistry,
 	commands domain.CommandRunner,
-	reader Acknowledger,
+	acknowledger Acknowledger,
 ) KillProject {
-	return KillProject{sessions: sessions, locator: locator, projects: projects, commands: commands, reader: reader}
+	return KillProject{sessions: sessions, locator: locator, projects: projects, commands: commands, acknowledger: acknowledger}
 }
 
 // Handle kills the session of the project named rawName, weaver's or
@@ -80,7 +80,7 @@ func (uc KillProject) kill(name domain.ProjectName, owned bool) error {
 	}
 	if teardown != nil && uc.inside(name) {
 		message := fmt.Sprintf("%v\n\n%s's session will be killed anyway, with this pane.", teardown, name)
-		if err := uc.reader.Acknowledge(message); err != nil {
+		if err := uc.acknowledger.Acknowledge(message); err != nil {
 			return errors.Join(err, teardown)
 		}
 	}

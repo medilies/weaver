@@ -331,7 +331,8 @@ func (m configForm) settledOn(at spot) configForm {
 }
 
 // typedVar is the row of the variable just typed, in the list it is now
-// in: a project's variable set for a pane, or one renamed, moves.
+// in: a higher level's variable set for a window or a pane, or one
+// renamed, moves.
 func (m configForm) typedVar() (spot, bool) {
 	at := m.edit.at
 	if at.field != fieldEnv && at.field != fieldHigherEnv {

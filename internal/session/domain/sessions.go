@@ -54,12 +54,12 @@ type SessionInspector interface {
 type RunningCommand struct {
 	window  WindowName
 	pane    int
-	command string
+	command Command
 }
 
 // NewRunningCommand is command, typed for the pane at index pane of the
 // window named window, running.
-func NewRunningCommand(window WindowName, pane int, command string) RunningCommand {
+func NewRunningCommand(window WindowName, pane int, command Command) RunningCommand {
 	return RunningCommand{window: window, pane: pane, command: command}
 }
 
@@ -75,7 +75,7 @@ func (r RunningCommand) Pane() int {
 
 // Runs reports whether it is cmd that runs.
 func (r RunningCommand) Runs(cmd Command) bool {
-	return r.command == cmd.String()
+	return r.command.String() == cmd.String()
 }
 
 // SessionAttacher puts the user in projects' running tmux sessions.
