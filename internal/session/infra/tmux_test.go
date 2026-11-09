@@ -1151,7 +1151,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("types a task into the pane labelled with its name", func(t *testing.T) {
-		if err := server.tmux().Type(project, api, 1, greet); err != nil {
+		if err := server.tmux().Type(project, api, 1, greet.Command()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		server.waitFor(t, back, "hi-before task-42")
@@ -1165,7 +1165,7 @@ func TestTmuxTasks(t *testing.T) {
 
 	t.Run("cuts what is at the prompt before typing a task", func(t *testing.T) {
 		server.query(t, "send-keys", "-t", back, "-l", "echo prefilled")
-		if err := server.tmux().Type(project, api, 1, greet); err != nil {
+		if err := server.tmux().Type(project, api, 1, greet.Command()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shown := server.waitFor(t, back, "$ echo \"$GREETING-$B\" task-$((40+2))\nhi-before task-42")
@@ -1192,7 +1192,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("types a task into a window's only pane", func(t *testing.T) {
-		if err := server.tmux().Type(project, logs, 0, logs.Panes()[0].Tasks()[0]); err != nil {
+		if err := server.tmux().Type(project, logs, 0, logs.Panes()[0].Tasks()[0].Command()); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		server.waitFor(t, "=tasks:logs", "logs-42")

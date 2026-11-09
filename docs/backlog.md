@@ -38,16 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 7. Rerun (S)
-
-**When**: a crashed dev server is restarted by hand often enough that
-reaching its pane is the slow part. `r` in the browser, on a pane with the
-exited-command warning, types its command into it again, as a task is
-typed: through `TaskRunner.Type`, after `Busy` says the shell is idle.
-You are then put in that pane, as with a task. On any other pane, a
-notice says why not: its command is running, or it has none.
-`ActionRerun`.
-
 ### 8. A mark on a running task (S)
 
 **When**: someone loses track of which tasks still run. The task list

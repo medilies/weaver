@@ -157,6 +157,7 @@ type BrowseProjects struct {
 	edit      EditProject
 	kill      KillProject
 	run       RunTask
+	rerun     RerunCommand
 }
 
 // NewBrowseProjects constructs the use case against its ports and the use
@@ -174,15 +175,16 @@ func NewBrowseProjects(
 	edit EditProject,
 	kill KillProject,
 	run RunTask,
+	rerun RerunCommand,
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
-		sessions: sessions, list: list, open: open, freeze: freeze, edit: edit, kill: kill, run: run,
+		sessions: sessions, list: list, open: open, freeze: freeze, edit: edit, kill: kill, run: run, rerun: rerun,
 	}
 }
 
 // Handle shows the browser until the user opens a project, runs a task,
-// or quits; a project frozen from it is rooted at workingDir.
+// reruns a command, or quits; a project frozen from it is rooted at workingDir.
 func (uc BrowseProjects) Handle(workingDir string) error {
 	var selected domain.ProjectName
 	notice := ""
@@ -200,7 +202,7 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 		}
 		selected, notice, err = uc.act(choice, workingDir, overviews)
 		switch {
-		case err == nil && (choice.Action == ActionOpen || choice.Action == ActionRunTask):
+		case err == nil && (choice.Action == ActionOpen || choice.Action == ActionRunTask || choice.Action == ActionRerun):
 			return nil // the user is in the session
 		case errors.Is(err, ErrAborted):
 			notice = "Nothing done."
@@ -484,6 +486,8 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
 	case ActionRunTask:
 		return name, "", uc.run.Handle(name, choice.Task)
+	case ActionRerun:
+		return name, "", uc.rerun.Handle(name, choice.Pane)
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)
 }

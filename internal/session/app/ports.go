@@ -96,16 +96,21 @@ const (
 	// ActionRunTask runs the chosen task of the chosen project, then puts
 	// the user where it runs.
 	ActionRunTask
+	// ActionRerun types the chosen pane's exited command into it again,
+	// then puts the user in that pane.
+	ActionRerun
 )
 
 // Choice is what the user picked in the project browser: an action, and
 // the project highlighted then, which the action applies to (freezing a
-// project applies to none, but the browser comes back to it), and the
-// task picked when running one.
+// project applies to none, but the browser comes back to it), the task
+// picked when running one, and the pane picked when rerunning its
+// command.
 type Choice struct {
 	Action  Action
 	Project domain.ProjectName
 	Task    TaskAt
+	Pane    PaneAt
 }
 
 // ProjectBrowser shows the registered projects and lets the user pick

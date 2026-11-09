@@ -42,7 +42,23 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt) error {
 	if err != nil {
 		return err
 	}
-	session, running, err := uc.tasks.Find(name)
+	if err := requireOwned(uc.tasks, name); err != nil {
+		return err
+	}
+	if err := uc.run(name, window, at.Pane, pane, task); err != nil {
+		return err
+	}
+	if err := uc.tasks.Attach(name); err != nil {
+		return fmt.Errorf("%s running, but: %w", task.Label(), err)
+	}
+	return nil
+}
+
+// requireOwned returns an error wrapping ErrSessionNotRunning unless the
+// project's session runs, and ErrSessionNotOwned unless weaver started
+// it, as only then can its panes be told apart.
+func requireOwned(sessions domain.SessionFinder, name domain.ProjectName) error {
+	session, running, err := sessions.Find(name)
 	switch {
 	case err != nil:
 		return err
@@ -50,12 +66,6 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt) error {
 		return fmt.Errorf("%s: %w: open it first", name, domain.ErrSessionNotRunning)
 	case !session.Owned():
 		return fmt.Errorf("%s: %w: its panes can't be told apart", name, domain.ErrSessionNotOwned)
-	}
-	if err := uc.run(name, window, at.Pane, pane, task); err != nil {
-		return err
-	}
-	if err := uc.tasks.Attach(name); err != nil {
-		return fmt.Errorf("%s running, but: %w", task.Label(), err)
 	}
 	return nil
 }
@@ -68,7 +78,7 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 		return fmt.Errorf("%s: %w", where(window, pane), err)
 	}
 	if !busy {
-		return uc.tasks.Type(name, window, index, task)
+		return uc.tasks.Type(name, window, index, task.Command())
 	}
 	shown := pane.Name().String()
 	if pane.Name().IsZero() {

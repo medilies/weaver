@@ -450,7 +450,7 @@ func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index i
 // prefill not run yet, is cut first, with C-e C-u, which shells keep to
 // paste back with C-y, so the task's command isn't added to it. The pane
 // and its window are selected first, so a failure types nothing.
-func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
+func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command) error {
 	id, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
@@ -464,7 +464,7 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 	if _, err := t.run("send-keys", "-t", id, "C-e", "C-u"); err != nil {
 		return err
 	}
-	return t.typeCommand(id, task.Command().String(), true)
+	return t.typeCommand(id, cmd.String(), true)
 }
 
 // RunApart implements domain.TaskRunner. The window goes after the

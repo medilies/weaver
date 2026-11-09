@@ -25,8 +25,8 @@ func (f *fakeTasks) Busy(_ domain.ProjectName, window domain.WindowPlan, index i
 	return f.busy[paneKey(window, index)], nil
 }
 
-func (f *fakeTasks) Type(_ domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
-	f.typed = append(f.typed, paneKey(window, index)+": "+task.Command().String())
+func (f *fakeTasks) Type(_ domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command) error {
+	f.typed = append(f.typed, paneKey(window, index)+": "+cmd.String())
 	return nil
 }
 

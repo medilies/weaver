@@ -255,6 +255,15 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m.filtering = true
 	case "y":
 		m.config = !m.config
+	case "r":
+		windows := m.windowsShown()
+		if len(windows) == 0 {
+			break
+		}
+		window := windows[m.drawn(windows)]
+		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Name(),
+			Pane: app.PaneAt{Window: window.Name(), Pane: m.selectedPane(len(window.Panes()))}}
+		return m, tea.Quit
 	case "t":
 		if len(m.tasksShown()) > 0 {
 			m.tasking = true
@@ -478,11 +487,13 @@ var (
 )
 
 // paneKey is tab told, before the last two keys, when the drawn window
-// has panes to switch between, taskKey t, when the selected project
-// has tasks, and configKey y, or drawingKey while the config is shown,
-// when there is a project.
+// has panes to switch between, rerunKey r when the selected pane's
+// command exited, taskKey t, when the selected project has tasks, and
+// configKey y, or drawingKey while the config is shown, when there is a
+// project.
 var (
 	paneKey    = keyTold{"tab", "pane"}
+	rerunKey   = keyTold{"r", "rerun"}
 	taskKey    = keyTold{"t", "tasks"}
 	configKey  = keyTold{"y", "config"}
 	drawingKey = keyTold{"y", "drawing"}
@@ -508,6 +519,9 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if windows := m.windowsShown(); !m.filtering && len(windows) > 0 && len(windows[m.drawn(windows)].Panes()) > 1 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, paneKey)
+	}
+	if !m.filtering && m.selectedExited() {
+		told = slices.Insert(slices.Clone(told), len(told)-2, rerunKey)
 	}
 	if !m.filtering && len(m.tasksShown()) > 0 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, taskKey)
@@ -692,6 +706,23 @@ func (m browser) panesShown(project app.ProjectOverview, index, width, below, le
 // line.
 func windowListRow(top string) int {
 	return lipgloss.Height(top) + 1
+}
+
+// selectedExited reports whether the selected pane's command exited, so
+// that r can rerun it.
+func (m browser) selectedExited() bool {
+	windows := m.windowsShown()
+	if len(windows) == 0 {
+		return false
+	}
+	window := windows[m.drawn(windows)]
+	pane := m.selectedPane(len(window.Panes()))
+	for _, warning := range m.shown()[m.cursor].Warnings() {
+		if errors.Is(warning, app.ErrCommandExited) && warning.Concerns(window.Name(), pane) {
+			return true
+		}
+	}
+	return false
 }
 
 // alerts are, by pane, the worst of project's warnings about window's

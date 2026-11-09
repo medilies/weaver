@@ -104,6 +104,7 @@ or that leaves a quote open, marks its pane.
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
 | tab or shift+tab | select the next or previous pane of the selected window, in the pane list's order |
+| r | rerun the selected pane's command once it exited: typed into the pane again, as a task is, then you are put in that pane. Only in a session weaver started, on a pane run with `command`, not `prefill` |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it, esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |

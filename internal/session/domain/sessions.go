@@ -110,9 +110,9 @@ type TaskRunner interface {
 	// its prompt; an error wrapping ErrPaneNotRunning when the session
 	// lacks the pane.
 	Busy(project ProjectName, window WindowPlan, index int) (bool, error)
-	// Type types task's command into that pane and runs it, the pane
-	// becoming its session's current one.
-	Type(project ProjectName, window WindowPlan, index int, task Task) error
+	// Type types cmd into that pane and runs it, the pane becoming its
+	// session's current one: a task's command, or the pane's own run again.
+	Type(project ProjectName, window WindowPlan, index int, cmd Command) error
 	// RunApart runs task in a throwaway window of the project's running
 	// session, named after it, starting in pane's dir with its env and
 	// before commands, and kept open once the task ends, the window
