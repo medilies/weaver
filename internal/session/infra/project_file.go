@@ -30,7 +30,7 @@ var (
 )
 
 // projectFile is the on-disk shape of a project config, e.g.
-// ~/.config/weaver/projects/<name>.yml; the README documents it.
+// ~/.config/weaver/projects/<name>.yml; docs/config.md documents it.
 type projectFile struct {
 	Root     string            `yaml:"root"`
 	Env      map[string]string `yaml:"env,omitempty"`
