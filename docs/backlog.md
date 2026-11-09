@@ -38,14 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 1. Housekeeping (XS)
-
-- GoReleaser stamps `{{.Tag}}`, so `weave --version` reports `v0.5.0`
-  as `go install …@v0.5.0` does; `TestReleaseBuildsReportTheStampedVersion`
-  expects it (`fix(release):`).
-- `requireTool` moves out of `local_workspace_test.go` to a test file
-  the tmux tests share.
-
 ### 2. Window `env` (S)
 
 **When**: a config sets the same variable in every pane of a window.
