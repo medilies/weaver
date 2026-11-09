@@ -266,6 +266,19 @@ change to bring it back.
   plugin and worktree variants below wait on it. Deferred on 2026-11-09:
   tasks come first. *plugin*, *hook* and *variable* need glossary
   entries before any design.
+- **A Silksong plugin.** Added on 2026-11-09. weaver is named after the
+  Weavers of Hollow Knight: Silksong; this plugin would swap the words
+  weaver shows (browser, config form, CLI messages) for weaving and
+  silk words, for those who want the theme. The core keeps the plain
+  words of the glossary. Candidates: *mend* for restoration, *woven*
+  for an owned session, *snapped thread* for an exited command, *fray*
+  for a warning, *loom* for the browser, *spool* for the task list,
+  *threading* for setup commands, *unravel* for teardown, *cut* for
+  kill, *pattern* for a project, *warp* and *weft* for a grid's
+  columns and rows. Generic words only, never the game's proper names
+  (Hornet, Pharloom, Needolin). Waits on the plugin system above, and
+  on the shown words being gathered in one place a plugin can replace;
+  today they are spread over `infra/tea_*.go` and `cmd/weave`.
 
 - **Most recently opened first, in the list.** weaver would keep a
   record of when each project was opened, besides the configs. Back if
