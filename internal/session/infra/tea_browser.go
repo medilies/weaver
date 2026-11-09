@@ -16,28 +16,51 @@ import (
 
 // TeaBrowser shows the registered projects full screen: their names and
 // roots on the left, narrowed by a filter, the selected one's summary and
-// a drawing of its windows on the right, and what the last action did
-// below. It only shows and picks: the use case acts.
-type TeaBrowser struct{}
+// a drawing of its windows in the middle, its tasks on the right, and
+// what the last action did below. It only shows and picks: the use case
+// acts. Shown again on the same project, it keeps the window, pane and
+// task selected, and the cursor in the task list.
+type TeaBrowser struct {
+	kept *browserPlace
+}
+
+// browserPlace is what the browser had selected when it last ended.
+type browserPlace struct {
+	project            domain.ProjectName
+	window, pane, task int
+	tasking            bool
+}
 
 // NewTeaBrowser constructs a TeaBrowser.
 func NewTeaBrowser() TeaBrowser {
-	return TeaBrowser{}
+	return TeaBrowser{kept: &browserPlace{}}
 }
 
 // Browse implements app.ProjectBrowser.
-func (TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string) (app.Choice, error) {
+func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string) (app.Choice, error) {
 	model := browser{projects: projects, notice: notice}
 	for i, project := range projects {
 		if project.Name() == selected {
 			model.cursor = i
 		}
 	}
+	if kept := *b.kept; kept.project == selected {
+		model.window, model.pane, model.task = kept.window, kept.pane, kept.task
+		if kept.tasking && len(model.tasksShown()) > 0 {
+			// The config may have changed: the task decides what is drawn.
+			model.tasking, model = true, model.taskSelected(kept.task)
+		}
+	}
 	final, err := tea.NewProgram(model).Run()
 	if err != nil {
 		return app.Choice{}, err
 	}
-	choice := final.(browser).choice
+	last := final.(browser)
+	if shown := last.shown(); len(shown) > 0 {
+		*b.kept = browserPlace{project: shown[last.cursor].Name(), window: last.window, pane: last.pane,
+			task: last.task, tasking: last.tasking}
+	}
+	choice := last.choice
 	if choice.Action == 0 {
 		return app.Choice{}, app.ErrAborted
 	}
@@ -64,14 +87,18 @@ var (
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
-// projects the filter shows, top is the first the list shows, the window
-// is the selected project's one drawn, and the pane is its selected one.
+// projects the filter shows, or in the task list when tasking, top is the
+// first project the list shows, the window is the selected project's one
+// drawn, the pane is its selected one, and the task the selected one in
+// the task list.
 type browser struct {
 	projects      []app.ProjectOverview
 	cursor        int
 	top           int
 	window        int
 	pane          int
+	task          int
+	tasking       bool
 	filter        string
 	filtering     bool // typing the filter
 	notice        string
@@ -111,11 +138,12 @@ func (m browser) filtered(filter string) browser {
 	return m.reselected(selected)
 }
 
-// reselected is m drawing the first window again, its first pane
-// selected, unless the project selected before is still.
+// reselected is m drawing the first window again, its first pane and
+// first task selected and the cursor out of the task list, unless the
+// project selected before is still.
 func (m browser) reselected(before domain.ProjectName) browser {
 	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Name() != before {
-		m.window, m.pane = 0, 0
+		m.window, m.pane, m.task, m.tasking = 0, 0, 0, false
 	}
 	return m
 }
@@ -175,7 +203,7 @@ func (m browser) Init() tea.Cmd {
 func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
 	next := model.(browser)
-	_, _, height, _ := next.frame()
+	_, _, _, height, _ := next.frame()
 	next.top = next.firstShown(height)
 	return next, cmd
 }
@@ -200,6 +228,13 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // press moves the cursor, starts the filter or clears it, or ends with
 // the choice the key makes.
 func (m browser) press(key string) (tea.Model, tea.Cmd) {
+	if m.tasking && key != "q" && key != "ctrl+c" {
+		next, chosen := m.pressInTasks(key)
+		if chosen {
+			return next, tea.Quit
+		}
+		return next, nil
+	}
 	switch key {
 	case "up", "k":
 		m = m.moved(-1)
@@ -215,6 +250,11 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m = m.paneMoved(-1)
 	case "/":
 		m.filtering = true
+	case "t":
+		if len(m.tasksShown()) > 0 {
+			m.tasking = true
+			m = m.taskSelected(m.task)
+		}
 	case "esc":
 		if m.filter == "" {
 			return m, tea.Quit
@@ -299,10 +339,11 @@ func (m browser) View() tea.View {
 
 // clicked is m after a click at (x, y): on a project, a window in the
 // window list or a pane in the pane list, selecting it as the arrow keys
-// and tab do, or on a key told, doing what the key does.
+// and tab do, on a task, running it, or on a key told, doing what the key
+// does.
 func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	shown := m.shown()
-	notice, list, height, width := m.frame()
+	notice, list, _, height, width := m.frame()
 	listWidth := lipgloss.Width(list)
 	if y == height+lipgloss.Height(notice) {
 		_, spots := m.keys()
@@ -312,6 +353,15 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if len(shown) == 0 || y >= height {
+		return m, nil
+	}
+	if x >= listWidth+detailsPadding+width { // in the task list's column
+		_, tasks := m.taskList(taskListWidth(m.projects, m.width), height)
+		if y < len(tasks) && tasks[y] >= 0 {
+			if next, chosen := m.runningTask(tasks[y]); chosen {
+				return next, tea.Quit
+			}
+		}
 		return m, nil
 	}
 	if x < listWidth-1 { // left of the list's border
@@ -325,6 +375,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	if len(windows) == 0 {
 		return m, nil
 	}
+	m.tasking = false // a window or pane clicked is no longer the task's
 	laid := m.laidOut(project, windows, width, height)
 	x -= listWidth + detailsPadding
 	var spots []hotspot
@@ -366,22 +417,24 @@ func (m browser) render() string {
 	if m.width == 0 {
 		return "" // until the terminal's size is known
 	}
-	notice, list, height, width := m.frame()
+	notice, list, tasks, height, width := m.frame()
 	keysLine, _ := m.keys()
 	details := lipgloss.NewStyle().PaddingLeft(detailsPadding).Width(width + detailsPadding).
 		Height(height).MaxHeight(height).Render(m.details(width, height))
-	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details), notice, keysLine)
+	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details, tasks), notice, keysLine)
 }
 
-// frame is the notice and the list with its border, as render lays them
-// out, the height they leave the list and the details above the notice
-// and the keys, and the width the details' content has beside the list.
-func (m browser) frame() (notice, list string, height, width int) {
+// frame is the notice, the list with its border and the task list's
+// column, as render lays them out, the height they leave the list, the
+// details and the task list above the notice and the keys, and the width
+// the details' content has between the list and the task list.
+func (m browser) frame() (notice, list, tasks string, height, width int) {
 	notice = lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
 	height = max(m.height-lipgloss.Height(notice)-1, 1)
 	list = lipgloss.NewStyle().Height(height).MaxHeight(height).
 		Border(lipgloss.NormalBorder(), false, true, false, false).Render(m.list(height))
-	return notice, list, height, max(m.width-lipgloss.Width(list)-detailsPadding, 1)
+	tasks, _ = m.taskColumn(taskListWidth(m.projects, m.width), height)
+	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-detailsPadding-lipgloss.Width(tasks), 1)
 }
 
 // detailsPadding is the cells between the list's border and the details.
@@ -399,8 +452,15 @@ var (
 )
 
 // paneKey is tab told, before the last two keys, when the drawn window
-// has panes to switch between.
-var paneKey = keyTold{"tab", "pane"}
+// has panes to switch between, and taskKey t, when the selected project
+// has tasks.
+var (
+	paneKey = keyTold{"tab", "pane"}
+	taskKey = keyTold{"t", "tasks"}
+)
+
+// taskingKeys are told while the cursor is in the task list.
+var taskingKeys = []keyTold{{"enter", "run"}, {"esc", "back"}, {"q", "quit"}}
 
 // keys are the filter being typed and what its keys do, or the filter
 // kept and the keys acting on what it shows, cut to the width; with the
@@ -419,6 +479,12 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if windows := m.windowsShown(); !m.filtering && len(windows) > 0 && len(windows[m.drawn(windows)].Panes()) > 1 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, paneKey)
+	}
+	if !m.filtering && len(m.tasksShown()) > 0 {
+		told = slices.Insert(slices.Clone(told), len(told)-2, taskKey)
+	}
+	if m.tasking {
+		line, spots, told = "", nil, taskingKeys
 	}
 	for i, k := range told {
 		if i > 0 {

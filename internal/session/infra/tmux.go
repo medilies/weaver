@@ -160,7 +160,8 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // directory, which the typed command will run from, rather than the
 // job's, when /proc tells them apart.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
-	out, err := t.run("list-windows", "-t", "="+session, "-F", "#{window_layout} "+sized("window_name"))
+	out, err := t.run("list-windows", "-t", "="+session, "-F",
+		"#{?"+throwawayTag+",1,0} #{window_layout} "+sized("window_name"))
 	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, session)
 	}
@@ -181,7 +182,11 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	taken := make(map[string]bool)
 	var windows []domain.Window
 	for line := range strings.Lines(out) {
-		layout, rawName, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		throwaway, rest, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if throwaway == "1" {
+			continue
+		}
+		layout, rawName, _ := strings.Cut(rest, " ")
 		rawName = verbatim(rawName)
 		cell, err := parseLayout(layout)
 		if err != nil {
@@ -387,6 +392,127 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 	}
 	argv := append([]string{"tmux"}, t.opts.Global...)
 	return syscall.Exec(path, append(argv, "attach-session", "-t", target), env)
+}
+
+// throwawayTag is the window option marking a throwaway window, which
+// Capture skips. Untagged as a project window, restoration ignores it.
+const throwawayTag = "@weaver_throwaway"
+
+// Busy implements domain.TaskRunner: a pane is busy when it is in a mode,
+// such as copy mode, which would take typed keys as its commands, or when
+// a job other than its shell is in its terminal's foreground, or that
+// can't be told.
+func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index int) (bool, error) {
+	id, pid, err := t.paneOf(project, window, index)
+	if err != nil {
+		return false, err
+	}
+	inMode, err := t.run("display-message", "-p", "-t", id, "#{pane_in_mode}")
+	if err != nil {
+		return false, err
+	}
+	if inMode != "0" {
+		return true, nil
+	}
+	group, err := exec.Command("ps", "-o", "tpgid=", "-p", pid).Output()
+	if err != nil {
+		return true, nil // the shell may be gone: ask rather than type
+	}
+	return strings.TrimSpace(string(group)) != pid, nil
+}
+
+// Type implements domain.TaskRunner. Whatever is at the prompt, as a
+// prefill not run yet, is cut first, with C-e C-u, which shells keep to
+// paste back with C-y, so the task's command isn't added to it.
+func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
+	id, _, err := t.paneOf(project, window, index)
+	if err != nil {
+		return err
+	}
+	if _, err := t.run("send-keys", "-t", id, "C-e", "C-u"); err != nil {
+		return err
+	}
+	return t.typeCommand(id, task.Command().String(), true)
+}
+
+// RunApart implements domain.TaskRunner. The window goes after the
+// session's last, and the user stays where they are.
+func (t Tmux) RunApart(project domain.ProjectName, pane domain.PanePlan, task domain.Task) error {
+	session := "=" + project.String()
+	defaultCommand, err := t.option(session, "default-command")
+	if absent(err) {
+		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	if err != nil {
+		return err
+	}
+	args := []string{
+		"new-window", "-d", "-t", session + ":",
+		"-n", formatArgument(task.ThrowawayWindow().String()),
+		"-c", formatArgument(pane.Dir()),
+		"-P", "-F", "#{window_id} #{pane_id}",
+	}
+	ids, err := t.runIDs(2, append(args, startScript(pane.Env(), nil, defaultCommand)...)...)
+	if err != nil {
+		return err
+	}
+	if _, err := t.run("set-option", "-w", "-t", ids[0], throwawayTag, "1"); err != nil {
+		_, _ = t.run("kill-window", "-t", ids[0]) // untagged, freeze would capture it
+		return err
+	}
+	for _, cmd := range append(pane.Before(), task.Command()) {
+		if err := t.typeCommand(ids[1], cmd.String(), true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// paneOf is the ID and process of the pane at index of window in the
+// project's running session: in the window tagged with its name, the one
+// labelled with its name or, for a window's only pane, the first unlabelled
+// one created, which panes split off it by hand leave in place.
+func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index int) (id, pid string, err error) {
+	out, err := t.run("list-windows", "-t", "="+project.String(), "-F", "#{window_id} "+sized("@weaver_window"))
+	if absent(err) {
+		return "", "", fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	if err != nil {
+		return "", "", err
+	}
+	windowID := ""
+	for line := range strings.Lines(out) {
+		id, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if verbatim(tag) == window.Name().String() {
+			windowID = id
+			break
+		}
+	}
+	if windowID == "" {
+		return "", "", fmt.Errorf("%w: its window is closed, open the project to restore it", domain.ErrPaneNotRunning)
+	}
+	out, err = t.run("list-panes", "-t", windowID, "-F", "#{pane_id} #{pane_pid} "+sized("@label"))
+	if err != nil {
+		return "", "", err
+	}
+	name := window.Panes()[index].Name().String()
+	if len(window.Panes()) == 1 {
+		name = ""
+	}
+	found := -1
+	for line := range strings.Lines(out) {
+		paneID, rest, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		panePID, label, _ := strings.Cut(rest, " ")
+		n, err := strconv.Atoi(strings.TrimPrefix(paneID, "%"))
+		if err != nil || verbatim(label) != name || found >= 0 && n >= found {
+			continue
+		}
+		found, id, pid = n, paneID, panePID
+	}
+	if found < 0 {
+		return "", "", fmt.Errorf("%w: no pane labelled %q in its window", domain.ErrPaneNotRunning, name)
+	}
+	return id, pid, nil
 }
 
 // newSession starts the session with window's first pane, and returns

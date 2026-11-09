@@ -69,6 +69,12 @@ var (
 	ErrLastPane = errors.New("a window keeps at least one pane")
 	// ErrLastWindow is returned when removing a project's only window.
 	ErrLastWindow = errors.New("a project keeps at least one window")
+	// ErrDuplicateTask is returned when two tasks of a pane share a name,
+	// or two unnamed ones a command, so they can't be told apart.
+	ErrDuplicateTask = errors.New("a pane's tasks must not share a name, nor unnamed ones a command")
+	// ErrTaskNotFound is returned when running a task a pane doesn't
+	// offer.
+	ErrTaskNotFound = errors.New("no such task in the pane")
 )
 
 var (
@@ -116,8 +122,12 @@ var (
 	// running.
 	ErrSessionNotRunning = errors.New("session not running")
 	// ErrSessionNotOwned is returned when killing the session weaver runs
-	// in while weaver didn't start it.
+	// in while weaver didn't start it, or running a task in a session
+	// weaver didn't start.
 	ErrSessionNotOwned = errors.New("weave didn't start this session")
+	// ErrPaneNotRunning is returned when running a task in a pane its
+	// project's running session lacks.
+	ErrPaneNotRunning = errors.New("the running session lacks this pane")
 	// ErrNotInsideTmux is returned when asking for the session weaver runs
 	// in while it runs outside tmux.
 	ErrNotInsideTmux = errors.New("not inside tmux")

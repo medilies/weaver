@@ -15,6 +15,9 @@ windows:
         before:
           - alias php=php8.4
         clear: false
+        tasks:
+          - {name: migrate, command: php artisan migrate}
+          - {command: 'php artisan db:seed'}
       - name: front
         dir: front
         split:

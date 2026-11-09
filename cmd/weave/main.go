@@ -58,7 +58,8 @@ func wire() (application, error) {
 		documents:     projects,
 	}
 	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), confirm, projects, projects, workspace, tmux,
-		weaver.listProjects, weaver.openProject, weaver.freezeProject, weaver.editProject, weaver.killProject)
+		weaver.listProjects, weaver.openProject, weaver.freezeProject, weaver.editProject, weaver.killProject,
+		app.NewRunTask(projects, tmux, confirm))
 	return weaver, nil
 }
 

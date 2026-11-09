@@ -141,6 +141,30 @@
         },
         "env": {
           "$ref": "#/definitions/env"
+        },
+        "tasks": {
+          "description": "Commands the pane offers to run on request from weave's browser, in a session weaver started: typed into the pane when its shell is idle, otherwise, if you agree, run in a throwaway window. No two share a name, nor two unnamed ones a command.",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/task"
+          }
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command"],
+      "properties": {
+        "name": {
+          "description": "Shown in weave's browser instead of the command.",
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "description": "Typed into the pane's shell and run.",
+          "type": "string",
+          "minLength": 1
         }
       }
     },

@@ -34,47 +34,7 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 13 | Tasks | config, browser | L | |
-| 14 | Tasks in the config form | form | M | 13 |
-
-## 13. Tasks
-
-Decided on 2026-11-09. A pane offers commands to run on request, its
-tasks (see the glossary):
-
-```yaml
-panes:
-  - name: api
-    dir: back
-    command: php artisan serve
-    tasks:
-      - { name: migrate, command: php artisan migrate }
-      - command: php artisan db:seed      # the name is optional
-```
-
-- Declared on a pane only, as an ordered list; no window or project
-  tasks, nothing inherited. A task needs a command; within a pane, no
-  two tasks share a name, nor two unnamed ones a command.
-- Only in a running session. Picking a task of a project that isn't
-  running is refused, with a notice to open it first.
-- When the pane's shell is idle (`foreground`, as freeze uses), the
-  command is typed into it and run, with the pane's dir, env and before
-  commands already in place.
-- When it is busy, the browser asks "api is busy: run migrate in a
-  throwaway window?". Yes creates a window named after the task, or its
-  command's program, in the pane's dir with its env, runs its before
-  commands then the task, and keeps it open once the task ends. It is
-  tagged so that `Capture` skips it; restoration already ignores windows
-  that aren't configured.
-- Browser: a third column, the task list, shows the selected project's
-  tasks grouped under `window › pane`, in config order, each by its name
-  or else its command. A click runs one; `t` moves the cursor into it,
-  ↑↓ and enter pick, esc goes back. Picking a task selects its window
-  and pane in the drawing. The browser stays open, with a notice such as
-  `migrate running in api`.
-- The warnings check each task's program is on `PATH`.
-- Saving through the config form keeps tasks, being part of the pane;
-  editing them there is #14. Until then, `E`.
+| 14 | Tasks in the config form | form | M | |
 
 ## 14. Tasks in the config form
 

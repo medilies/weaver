@@ -47,6 +47,7 @@ type PanePlan struct {
 	before  []Command
 	clears  bool
 	startup Startup
+	tasks   []Task
 }
 
 func (p PanePlan) Name() PaneName {
@@ -91,6 +92,11 @@ func (p PanePlan) Startup() Startup {
 	return p.startup
 }
 
+// Tasks are the commands the pane offers to run on request, in order.
+func (p PanePlan) Tasks() []Task {
+	return slices.Clone(p.tasks)
+}
+
 // Plan resolves the project for tmux.
 func (p Project) Plan() SessionPlan {
 	windows := make([]WindowPlan, 0, len(p.windows))
@@ -120,5 +126,6 @@ func (p Project) planPane(window Window, pane Pane) PanePlan {
 		before:  before,
 		clears:  len(before) > 0 && pane.clears.Over(window.clears.Over(p.clears)) == ClearingOn,
 		startup: pane.startup,
+		tasks:   slices.Clone(pane.tasks),
 	}
 }

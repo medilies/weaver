@@ -417,6 +417,34 @@ windows:
 		}
 	})
 
+	t.Run("rejects a task without a command, naming it", func(t *testing.T) {
+		_, err := load(t, "task", `root: /srv/task
+windows:
+  - name: main
+    panes:
+      - tasks:
+          - {command: make}
+          - {name: migrate}
+`)
+		if !errors.Is(err, domain.ErrEmptyCommand) || !strings.Contains(err.Error(), "tasks: #2") {
+			t.Fatalf("got %v, want ErrEmptyCommand for task #2", err)
+		}
+	})
+
+	t.Run("rejects two tasks of a pane with the same name", func(t *testing.T) {
+		_, err := load(t, "task", `root: /srv/task
+windows:
+  - name: main
+    panes:
+      - tasks:
+          - {name: seed, command: make seed}
+          - {name: seed, command: make reseed}
+`)
+		if !errors.Is(err, domain.ErrDuplicateTask) {
+			t.Fatalf("got %v, want ErrDuplicateTask", err)
+		}
+	})
+
 	t.Run("rejects a split of a pane the window doesn't have", func(t *testing.T) {
 		_, err := load(t, "ghost", `root: /srv/ghost
 windows:

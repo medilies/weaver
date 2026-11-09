@@ -76,8 +76,8 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 // Warnings are what would likely go wrong in the panes opening the
 // project creates: a directory missing, wrapping ErrMissingDirectory, or
 // a command whose program can't be found, wrapping ErrMissingProgram;
-// each once, however many panes it concerns.
-// Opening a project that isn't running
+// and in any pane, a task whose program can't be found; each once,
+// however many panes it concerns. Opening a project that isn't running
 // creates every pane, an owned session the missing windows' panes, and a
 // session weaver didn't start none.
 func (o ProjectOverview) Warnings() []Warning {
@@ -141,6 +141,7 @@ type BrowseProjects struct {
 	freeze    FreezeProject
 	edit      EditProject
 	kill      KillProject
+	run       RunTask
 }
 
 // NewBrowseProjects constructs the use case against its ports and the use
@@ -157,10 +158,11 @@ func NewBrowseProjects(
 	freeze FreezeProject,
 	edit EditProject,
 	kill KillProject,
+	run RunTask,
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
-		sessions: sessions, list: list, open: open, freeze: freeze, edit: edit, kill: kill,
+		sessions: sessions, list: list, open: open, freeze: freeze, edit: edit, kill: kill, run: run,
 	}
 }
 
@@ -231,7 +233,7 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	if status.Running() {
 		opening = uc.restoration(&overview)
 	}
-	overview.warnings, overview.problem = uc.warnings(overview, opening)
+	overview.warnings, overview.problem = uc.warnings(overview, opening, project.Plan().Windows())
 	return overview
 }
 
@@ -258,12 +260,14 @@ func (uc BrowseProjects) restoration(overview *ProjectOverview) []domain.WindowP
 	return opening
 }
 
-// warnings are what would likely go wrong in the panes of windows, each
-// warned once with every pane it concerns. Directories under a missing
-// root aren't checked: the summary already says the root is gone. Nor
-// are the programs of panes whose before commands or PATH may change
-// what runs, as a version manager does.
-func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.WindowPlan) ([]Warning, error) {
+// warnings are what would likely go wrong in the panes of opening, and
+// in the tasks of the panes of all, each warned once with every pane it
+// concerns. Directories under a missing root aren't checked: the summary
+// already says the root is gone. Nor are the programs of panes whose
+// before commands or PATH may change what runs, as a version manager
+// does, nor those of tasks in a missing directory, which opening warns
+// about.
+func (uc BrowseProjects) warnings(overview ProjectOverview, opening, all []domain.WindowPlan) ([]Warning, error) {
 	project := overview.project
 	// What is checked, a directory or a program, and the warning about it,
 	// or -1 when it is fine.
@@ -281,7 +285,22 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.Win
 			warnings[i].panes = append(warnings[i].panes, at)
 		}
 	}
-	for _, window := range windows {
+	program := func(at paneAt, pane domain.PanePlan, cmd domain.Command, whose string) {
+		program, ok := runs(pane, cmd)
+		if !ok {
+			return
+		}
+		key := "program\x00" + program
+		if strings.Contains(program, "/") {
+			key += "\x00" + pane.Dir()
+		}
+		warn(key, at, func() bool {
+			return !uc.workspace.Executable(program, pane.Dir())
+		}, func() error {
+			return fmt.Errorf("%s: %w: %s", whose, ErrMissingProgram, program)
+		})
+	}
+	for _, window := range opening {
 		for index, pane := range window.Panes() {
 			at := paneAt{window: window.Name(), pane: index}
 			exists, err := uc.workspace.Exists(pane.Dir())
@@ -296,29 +315,35 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, windows []domain.Win
 				})
 				continue
 			}
-			program, ok := runs(pane)
-			if !ok {
+			if cmd, ok := pane.Startup().Command(); ok {
+				program(at, pane, cmd, where(window, pane))
+			}
+		}
+	}
+	for _, window := range all {
+		for index, pane := range window.Panes() {
+			tasks := pane.Tasks()
+			if len(tasks) == 0 {
 				continue
 			}
-			key := "program\x00" + program
-			if strings.Contains(program, "/") {
-				key += "\x00" + pane.Dir()
+			if exists, err := uc.workspace.Exists(pane.Dir()); err != nil {
+				return nil, err
+			} else if !exists {
+				continue
 			}
-			warn(key, at, func() bool {
-				return !uc.workspace.Executable(program, pane.Dir())
-			}, func() error {
-				return fmt.Errorf("%s: %w: %s", where(window, pane), ErrMissingProgram, program)
-			})
+			for _, task := range tasks {
+				whose := fmt.Sprintf("%s, task %q", where(window, pane), task.Label())
+				program(paneAt{window: window.Name(), pane: index}, pane, task.Command(), whose)
+			}
 		}
 	}
 	return warnings, nil
 }
 
-// runs is the program pane's command starts, run or left at the prompt,
-// when weaver can tell what it is.
-func runs(pane domain.PanePlan) (string, bool) {
-	cmd, ok := pane.Startup().Command()
-	if !ok || len(pane.Before()) > 0 || slices.ContainsFunc(pane.Env(), func(v domain.EnvVar) bool {
+// runs is the program cmd starts in pane, when weaver can tell what it
+// is: not when the pane's before commands or PATH may change what runs.
+func runs(pane domain.PanePlan, cmd domain.Command) (string, bool) {
+	if len(pane.Before()) > 0 || slices.ContainsFunc(pane.Env(), func(v domain.EnvVar) bool {
 		return v.Name() == "PATH"
 	}) {
 		return "", false
@@ -368,6 +393,9 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 			return name, "", err
 		}
 		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
+	case ActionRunTask:
+		notice, err := uc.run.Handle(name, choice.Task)
+		return name, notice, err
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)
 }

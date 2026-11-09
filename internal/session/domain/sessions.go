@@ -64,9 +64,10 @@ type SessionLocator interface {
 // not. Infrastructure provides the implementation.
 type SessionCapturer interface {
 	SessionLocator
-	// Capture returns the session's windows in order, their panes in an
-	// order that recreates them, with absolute directories and the
-	// commands running in them typed at their prompts, not run.
+	// Capture returns the session's windows in order, but for its
+	// throwaway windows, their panes in an order that recreates them,
+	// with absolute directories and the commands running in them typed
+	// at their prompts, not run.
 	Capture(session string) ([]Window, error)
 }
 
@@ -77,4 +78,24 @@ type SessionKiller interface {
 	// Kill ends the project's session and everything running in it, or
 	// returns an error wrapping ErrSessionNotRunning.
 	Kill(name ProjectName) error
+}
+
+// TaskRunner runs panes' tasks in projects' running sessions. A pane is
+// found in the window of its project's session tagged with its window's
+// name: the window's only pane, or the one labelled with its name.
+// Infrastructure provides the implementation.
+type TaskRunner interface {
+	SessionFinder
+	// Busy reports whether something runs in the pane at index of window,
+	// in the project's running session, rather than its shell idling at
+	// its prompt; an error wrapping ErrPaneNotRunning when the session
+	// lacks the pane.
+	Busy(project ProjectName, window WindowPlan, index int) (bool, error)
+	// Type types task's command into that pane and runs it.
+	Type(project ProjectName, window WindowPlan, index int, task Task) error
+	// RunApart runs task in a throwaway window of the project's running
+	// session, named after it, starting in pane's dir with its env and
+	// before commands, and kept open once the task ends. Capture skips
+	// throwaway windows, and restoration ignores them.
+	RunApart(project ProjectName, pane PanePlan, task Task) error
 }

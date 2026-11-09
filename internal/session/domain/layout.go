@@ -348,6 +348,7 @@ type Pane struct {
 	note    []string
 	env     Env
 	clears  Clearing
+	tasks   []Task
 }
 
 // NewPane is an unnamed shell in its window's directory.
@@ -431,6 +432,13 @@ func (p Pane) WithEnv(env Env) Pane {
 	return p
 }
 
+// Offering gives the pane tasks to run on request, in order, in place of
+// those it had. Its window checks they can be told apart.
+func (p Pane) Offering(tasks ...Task) Pane {
+	p.tasks = slices.Clone(tasks)
+	return p
+}
+
 func (p Pane) Name() PaneName {
 	return p.name
 }
@@ -471,6 +479,11 @@ func (p Pane) Env() Env {
 	return p.env
 }
 
+// Tasks are the commands the pane offers to run on request, in order.
+func (p Pane) Tasks() []Task {
+	return slices.Clone(p.tasks)
+}
+
 // Window is a tmux window and its panes, in creation order: the first pane
 // fills the window and each later one splits an earlier one. Its panes
 // say how they split, or its grid places them.
@@ -486,7 +499,8 @@ type Window struct {
 
 // NewWindow validates and constructs a Window. With no panes, it holds one
 // shell in its directory. Panes must be named, uniquely, when there are
-// several: the names label their borders.
+// several: the names label their borders. Each pane's tasks must be told
+// apart: no two share a name, nor two unnamed ones a command.
 func NewWindow(name WindowName, panes ...Pane) (Window, error) {
 	if len(panes) == 0 {
 		panes = []Pane{NewPane()}
@@ -494,6 +508,9 @@ func NewWindow(name WindowName, panes ...Pane) (Window, error) {
 	named := make(map[string]bool, len(panes))
 	for i, pane := range panes {
 		if err := checkPlacement(i, pane); err != nil {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), err)
+		}
+		if err := checkTasks(pane.tasks); err != nil {
 			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), err)
 		}
 		if len(panes) == 1 {

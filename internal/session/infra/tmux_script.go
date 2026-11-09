@@ -19,11 +19,21 @@ const shellLine = `exec "${SHELL:-/bin/sh}" `
 // directly rather than through its default-shell, so the script is always
 // sh. It is nil for a plain shell.
 func shellCommand(pane domain.PanePlan, defaultCommand string) []string {
+	var note []string
+	if !pane.Clears() {
+		note = pane.Note()
+	}
+	return startScript(pane.Env(), note, defaultCommand)
+}
+
+// startScript is shellCommand's script exporting env and printing note,
+// or nil when there is neither.
+func startScript(env []domain.EnvVar, note []string, defaultCommand string) []string {
 	var lines []string
-	for _, v := range pane.Env() {
+	for _, v := range env {
 		lines = append(lines, "export "+v.Name()+"="+shellQuote(v.Value()))
 	}
-	if note := pane.Note(); len(note) > 0 && !pane.Clears() {
+	if len(note) > 0 {
 		lines = append(lines, printed(note))
 	}
 	if len(lines) == 0 {

@@ -80,6 +80,24 @@ type paneFile struct {
 	Prefill string            `yaml:"prefill,omitempty"`
 	Note    []string          `yaml:"note,omitempty"`
 	Env     map[string]string `yaml:"env,omitempty"`
+	Tasks   []taskFile        `yaml:"tasks,omitempty"`
+}
+
+// taskFile is one of a pane's tasks, written on one line:
+// { name: migrate, command: php artisan migrate }.
+type taskFile struct {
+	Name    string `yaml:"name,omitempty"`
+	Command string `yaml:"command"`
+}
+
+func (t taskFile) MarshalYAML() (any, error) {
+	type fields taskFile // without this method, so encoding doesn't recurse
+	var node yaml.Node
+	if err := node.Encode(fields(t)); err != nil {
+		return nil, err
+	}
+	node.Style = yaml.FlowStyle
+	return &node, nil
 }
 
 type splitFile struct {
@@ -96,7 +114,7 @@ const schemaHeader = "# yaml-language-server: $schema=./" + schemaFileName + "\n
 // e.g. "field comand not found in type pane".
 var fileTypes = strings.NewReplacer(
 	"infra.projectFile", "project", "infra.windowFile", "window",
-	"infra.paneFile", "pane", "infra.splitFile", "split", "infra.gridFile", "grid",
+	"infra.paneFile", "pane", "infra.splitFile", "split", "infra.gridFile", "grid", "infra.taskFile", "task",
 )
 
 // decodeProject strictly parses a config: unknown fields (usually typos)
@@ -371,7 +389,24 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 	if err != nil {
 		return domain.Pane{}, fmt.Errorf("env: %w", err)
 	}
-	return pane.WithEnv(env), nil
+
+	tasks := make([]domain.Task, 0, len(p.Tasks))
+	for i, t := range p.Tasks {
+		task, err := t.toTask()
+		if err != nil {
+			return domain.Pane{}, fmt.Errorf("tasks: #%d: %w", i+1, err)
+		}
+		tasks = append(tasks, task)
+	}
+	return pane.WithEnv(env).Offering(tasks...), nil
+}
+
+func (t taskFile) toTask() (domain.Task, error) {
+	cmd, err := domain.NewCommand(t.Command)
+	if err != nil {
+		return domain.Task{}, fmt.Errorf("command: %w", err)
+	}
+	return domain.NewTask(t.Name, cmd)
 }
 
 func (p paneFile) withStartup(pane domain.Pane) (domain.Pane, error) {
@@ -539,6 +574,9 @@ func paneFileOf(root domain.ProjectRoot, window domain.Window, index int) paneFi
 		Note:   pane.Note(),
 		Env:    envMap(pane.Env()),
 	}
+	for _, task := range pane.Tasks() {
+		file.Tasks = append(file.Tasks, taskFile{Name: task.Name(), Command: task.Command().String()})
+	}
 	if split, ok := pane.Split(); ok {
 		file.Split = &splitFile{Direction: split.Direction().String(), Size: split.Size().String()}
 		if split.Of() != index-1 {
@@ -594,7 +632,8 @@ func isPlain(root domain.ProjectRoot, window domain.Window, pane domain.Pane) bo
 	_, splits := pane.Split()
 	_, types := pane.Startup().Command()
 	return pane.Name().IsZero() && paneDirOf(root, window, pane) == "" && !splits && !types &&
-		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Before()) == 0 && !pane.Clearing().IsSet()
+		len(pane.Note()) == 0 && len(pane.Env().Vars()) == 0 && len(pane.Before()) == 0 && !pane.Clearing().IsSet() &&
+		len(pane.Tasks()) == 0
 }
 
 // onlyDefaultWindow reports whether the project's windows are what it

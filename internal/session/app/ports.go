@@ -84,14 +84,18 @@ const (
 	ActionKill
 	// ActionDelete unregisters the chosen project.
 	ActionDelete
+	// ActionRunTask runs the chosen task of the chosen project.
+	ActionRunTask
 )
 
 // Choice is what the user picked in the project browser: an action, and
 // the project highlighted then, which the action applies to (freezing a
-// project applies to none, but the browser comes back to it).
+// project applies to none, but the browser comes back to it), and the
+// task picked when running one.
 type Choice struct {
 	Action  Action
 	Project domain.ProjectName
+	Task    TaskAt
 }
 
 // ProjectBrowser shows the registered projects and lets the user pick

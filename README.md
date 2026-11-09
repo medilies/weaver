@@ -25,7 +25,7 @@ weave freeze scratch  # same, starting from the windows, panes and commands of t
 weave freeze .        # same, from the session you're in
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
-weave                 # browse the projects, to open, freeze, edit, kill or delete them
+weave                 # browse the projects, to open, freeze, edit, kill or delete them, or run their tasks
 weave edit nimbus     # change its config in the config form, each field checked as you type
 weave edit --raw nimbus  # edit it in $VISUAL or $EDITOR instead, keeping comments; only a valid config is saved
 weave kill nimbus     # kill the session and everything running in it
@@ -66,12 +66,39 @@ run, whether they are cleared, and its variables, each with the level it comes f
 the window or the pane) and what it is over when it replaces the
 window's `dir` or a project variable.
 
+On the right, the task list shows the selected project's tasks under
+`window › pane`, in the order its panes are created. Running one needs the project's
+session running, started by weaver: when the pane's shell is idle at its
+prompt, the task's command is typed into it and run, after cutting
+whatever is at the prompt, such as a `prefill` (C-y pastes it back);
+when something
+runs there, or the pane is in copy mode, weaver asks before running the task in a throwaway window
+instead, named after the task (or its command's program), starting in
+the pane's directory with its `env` and `before` commands, and kept open
+once the task ends until you close it. `weave freeze` leaves throwaway
+windows out, and opening the project doesn't restore them. Either way
+you stay in the browser, the task's pane selected, with what started
+where:
+
+```yaml
+      - name: api
+        dir: back
+        command: php artisan serve
+        tasks:
+          - {name: migrate, command: php artisan migrate}
+          - {command: 'php artisan db:seed'}
+```
+
+The warnings cover tasks too: a task whose program isn't on your `PATH`
+marks its pane.
+
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
 | tab or shift+tab | select the next or previous pane of the selected window |
-| click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
+| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it, esc goes back |
+| click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
@@ -81,8 +108,8 @@ window's `dir` or a project variable.
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc clears the filter first) |
 
-After freezing, editing, killing or deleting, the list comes back,
-unfiltered, with what happened. Since the browser and the config form take
+After freezing, editing, killing, deleting or running a task, the list
+comes back, unfiltered, with what happened. Since the browser and the config form take
 the mouse, most terminals select text with shift held, and the wheel
 doesn't scroll them.
 
@@ -257,6 +284,7 @@ windows:
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
 | `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. |
 | `env` (pane) | Overrides the project's, per variable. |
+| `tasks` | Commands the pane offers to run from the browser, in a session weaver started: each a `command` and, optionally, a `name` to show instead. No two share a name, nor two unnamed ones a command. See the browser, in Usage. |
 
 A `grid` lays a window's panes out by naming them in rows and columns,
 sized as shares of the window rather than of the pane being split. This
