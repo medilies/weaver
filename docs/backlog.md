@@ -33,70 +33,7 @@ layers), XL (mostly open questions).
 
 ## Order
 
-### 1. Setup and teardown commands (M)
-
-**Why now**: `bicyclette`'s `task dev` runs `docker compose up -d
---wait`, and its containers outlive `weave kill`: tmux's `kill-session`
-(`Tmux.Kill`) sends the shells SIGHUP, but anything that left the pane
-keeps running, so every kill leaks it.
-
-**Words**: *setup commands* and *teardown commands* (`setup:`,
-`teardown:`) are in the glossary. Not `start`, too close to a pane's
-`Startup`; not "stop", ruled out; not `before_kill`, which would clash
-with before commands.
-
-```yaml
-setup:
-  - docker compose up -d --wait
-teardown:
-  - docker compose down
-```
-
-Setup commands run in `root`, in order, once, when `weave <project>`
-creates the session. Teardown commands run in `root`, in order, before
-`weave kill` kills it. smug has `before_start` and `stop`, tmuxinator
-`on_project_first_start` and `on_project_stop`.
-
-A pane's `command` can do setup's job, but worse: it runs at the same
-time as the other panes, so they can't count on it; when it fails, the
-session still opens, half-working; it runs again each time restoring
-re-creates its window, and it takes up a pane. Setup runs before
-anything is built, like the directory checks, so a failure leaves no
-session behind.
-
-- `domain`: `Project.Setup()` and `Project.Teardown()`, lists of `Command`.
-  A new port runs a command in a directory with an env
-  (`CommandRunner`); `infra` implements it with `sh -c`, output to the
-  terminal. Both lists use it.
-- `before` commands don't apply to either list. They are typed into
-  interactive shells (`nvm use` is a shell function), while these run in
-  `sh`. The project's `env` does apply. Say so in the schema.
-- Setup, in `app`: `OpenProject` runs the commands before
-  `checkDirs`, so a setup command can create a pane's directory, and
-  before `sessions.Start`. A failing command stops the open, and nothing
-  is built. Restoring windows and attaching don't run setup.
-- Teardown, in `app`: `KillProject` holds a `SessionKiller` and a
-  `SessionLocator` today; it would also load the project from the
-  `ProjectRegistry`. When the config can't be read, kill anyway, as now:
-  you asked to kill it. When a teardown command fails, still kill the
-  session and report the failure.
-- Browser: `enter` and `x` run their use case after the Bubble Tea
-  program exits (`BrowseProjects.act`), so the output reaches the
-  terminal. A failure returns to the browser as its notice, and the
-  redraw hides the output: the error has to carry the command's last
-  lines of stderr itself.
-- The warnings check that setup and teardown programs are on `PATH`,
-  as they do for pane commands.
-- Freeze can't see either list: replacing a config drops them, as it
-  drops comments. Freeze goes through the config form, which could keep
-  them from the existing config.
-- `d` deletes the config but keeps the session running, so no teardown
-  there.
-- Second step, optional: send Ctrl-C to every pane and wait, with a
-  timeout, until its shell is idle (`foreground`), so dev servers shut
-  down cleanly before the kill.
-
-### 2. Exited-command warning (M)
+### 1. Exited-command warning (M)
 
 **Why now**: `bicyclette`'s `task dev` and `bicyclette app` run for
 hours and can crash unseen. The live preview, under [By need](#by-need),
@@ -135,6 +72,9 @@ server crashed or was interrupted.
 - Later: a browser key that types the pane's command again, and a
   mark in the task list on a task still running, from the same idle
   check.
+- Then, optional: a clean shutdown when killing, sending Ctrl-C to
+  every pane after the teardown commands and waiting, with a timeout,
+  until its shell is idle, so dev servers stop cleanly before the kill.
 
 ## By need
 
@@ -151,12 +91,25 @@ settings file, which needs a glossary entry first.
 Each waits for a config or a user that needs it; the trigger says what
 that looks like. They are listed from the smallest.
 
+### A failed teardown seen from inside the session (XS)
+
+**When**: `weave kill` run in a pane of the session it kills hides a
+failing teardown command, since the pane goes with the session. weave
+would print the error and wait for Enter before the kill.
+
 ### The config in the browser (XS)
 
 **When**: someone misses the config's YAML in the details pane, which
 the drawing replaced. `E` opens the file, and a config that can't be
 read shows why. Bring it back behind a key (`y`):
 `ProjectOverview.Config()` still carries it.
+
+### Setup and teardown in the config form (S)
+
+**When**: someone wants to change setup or teardown commands without
+`weave edit --raw`. The config form keeps them as they are; the project
+card would list them like `before`, added, edited, removed and
+reordered the same way.
 
 ### Grid sizes in cells (S)
 
@@ -551,8 +504,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 - The drawing's border drawing (`infra/tea_drawing.go`) serves the live
   preview.
-- `CommandRunner` serves setup and teardown commands, and any later
-  hook.
+- `CommandRunner` (`infra.ShellRunner`) serves setup and teardown
+  commands, and any later hook.
 - The idle-shell check (`foreground`) serves tasks, the exited-command warning
   and the clean shutdown after teardown.
 - One tmux pane listing serves the exited-command warning and

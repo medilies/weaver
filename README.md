@@ -161,10 +161,12 @@ selects its panes there: its grid places them.
 it switches to it, from a `display-popup` too). When the session isn't
 running, weaver first:
 
-1. checks every pane's directory exists, and stops if one is missing,
+1. runs the config's `setup` commands in the root, one after another,
+   and stops if one fails or you press Ctrl-C, starting no session;
+2. checks every pane's directory exists, and stops if one is missing,
    saying to create it or change it with `weave edit`: weaver creates
    none;
-2. builds the session, sized like your terminal so percentage splits
+3. builds the session, sized like your terminal so percentage splits
    come out right, labels its panes in their top border, and types each
    pane's `before` commands, then `clear` and its note when it clears
    them, then its command, into its shell.
@@ -179,7 +181,12 @@ closed some of its windows, `weave <project>` puts them back where the
 config lists them before attaching, once it has checked their panes'
 directories exist; a window that fails to build is removed again.
 Windows you opened yourself stay as they are, and a session weaver
-didn't start is only attached.
+didn't start is only attached. Neither runs the `setup` commands.
+
+`weave kill <project>` runs the config's `teardown` commands in the root
+before killing an owned session, and kills it even when one fails,
+reporting the failure. Anything a pane started that left it, such as
+containers, keeps running unless teardown stops it.
 
 `weave freeze <session>` starts the config form from the session as it runs:
 its windows and panes, laid out as they are, each in its directory,
@@ -272,7 +279,9 @@ windows:
 | Field | Meaning |
 | --- | --- |
 | `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. The home directory itself is `"~"`, in quotes: YAML reads a bare `~` as null. |
-| `env` | Variables for every pane. Values are literal. |
+| `env` | Variables for every pane, and for the `setup` and `teardown` commands. Values are literal. |
+| `setup` | Commands run once in `root`, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. The config form keeps `setup` and `teardown` as they are: change them with `weave edit --raw`. |
+| `teardown` | Commands run in `root`, in order, before `weave kill` ends a session weaver started, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, a space first so shells ignoring such lines keep it out of their history, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
