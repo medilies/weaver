@@ -58,6 +58,7 @@ var (
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+	pickedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the

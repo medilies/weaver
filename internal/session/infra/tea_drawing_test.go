@@ -106,7 +106,7 @@ func TestDrawing(t *testing.T) {
       - name: right
         split: { direction: right }
 `), "/srv/shop", nil, 1, false, 81, 20, 31, 4)[0]
-		if want := "┌─ left ───────┬─[ right ]────┐"; got != want {
+		if want := "┌─ left ───────┬─[ right ]────┐"; ansi.Strip(got) != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
@@ -116,7 +116,7 @@ func TestDrawing(t *testing.T) {
       - name: right
         split: { direction: right }
 `), "/srv/shop", nil, 1, false, 81, 20, 15, 4)[0]
-		if want := "┌─ l… ─┬─ r… ─┐"; got != want {
+		if want := "┌─ l… ─┬─ r… ─┐"; ansi.Strip(got) != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
@@ -128,6 +128,9 @@ func TestDrawing(t *testing.T) {
       - name: below
         split: { of: right, direction: below }
 `), "/srv/shop", nil, 2, true, 81, 20, 21, 9)
+		for i, line := range got {
+			got[i] = ansi.Strip(line)
+		}
 		want := []string{
 			"┌─ left ──┬─ right ─┐",
 			"│ $ █     │ $ █     │",
@@ -141,6 +144,26 @@ func TestDrawing(t *testing.T) {
 		}
 		if !slices.Equal(got, want) {
 			t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+		}
+	})
+
+	t.Run("colours the selected pane's border cyan", func(t *testing.T) {
+		row := drawing(firstWindow(t, `      - name: left
+      - name: right
+        split: { direction: right }
+`), "/srv/shop", nil, 1, false, 81, 20, 21, 4)[1]
+		if want := pickedStyle.Render("│"); !strings.HasSuffix(row, want) {
+			t.Fatalf("got %q, want it to end with %q", row, want)
+		}
+	})
+
+	t.Run("colours the selected pane's name cyan", func(t *testing.T) {
+		row := drawing(firstWindow(t, `      - name: left
+      - name: right
+        split: { direction: right }
+`), "/srv/shop", nil, 1, false, 81, 20, 31, 4)[0]
+		if want := pickedStyle.Render("[ right ]"); !strings.Contains(row, want) {
+			t.Fatalf("got %q, want it to contain %q", row, want)
 		}
 	})
 
@@ -219,6 +242,13 @@ func TestDrawingAlerts(t *testing.T) {
 		row := drawing(firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, -1, false, 81, 20, 21, 7)[3]
 		if want := problemStyle.Render("─") + " bottom "; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the border red and the name bottom plain: %q", row, want)
+		}
+	})
+
+	t.Run("colours a selected pane with an alert in the alert's colour", func(t *testing.T) {
+		row := drawing(firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 1, false, 81, 20, 21, 4)[1]
+		if want := problemStyle.Render("│"); !strings.HasSuffix(row, want) {
+			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
 
