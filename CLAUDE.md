@@ -40,6 +40,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | freeze | Register a project through the config form, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
 | draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project and its config when editing, whose name stays; a freeze's name is typed | | `ProjectDraft`, `NameStays` |
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
+| setup commands | Commands run once in the root, in order, before opening builds a project's session; a failing one stops the open. Not "start", which is too close to a pane's startup | `setup:` | |
 | edit | Change a config in the config form, or raw in the editor, keeping it only if valid | `weave edit`, key `e`; `weave edit --raw`, key `E` | `EditProject`, `ActionEdit`, `ActionEditRaw` |
 | config form | A full-screen form changing a project in place, a draft when freezing: a card for the project, then the window list and a card for the selected window, with its drawing, the pane list and the selected pane's card, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e`; `weave freeze`, key `f` | `TeaConfigForm`, `app.ProjectForm` |
 | undo, redo | Going back to the project as it was before the config form's last change, or forward again | keys `u`, `ctrl+r` in the config form | `undone`, `redone` in `tea_config_form.go` |
@@ -47,6 +48,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | card | The config form's box for the project, the windows or the selected pane: the one with the cursor, or with the cursor on its window list or pane list above it, has a heavy border, as does the selected pane in the drawing when the cursor is on it | config form | `card` in `tea_config_form.go` |
 | trail | The config form's top line: the project, window and pane the cursor is in, and ● unsaved when there are changes | config form | `trail` in `tea_config_form.go` |
 | kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
+| teardown commands | Commands run in the root, in order, before a kill ends a project's session; the session is killed even when one fails. Not "stop" | `teardown:` | |
 | delete | Remove a config; a running session keeps running | key `d` | `ProjectRegistry.Delete`, `ActionDelete` |
 | browser | The project list `weave` shows without arguments | `weave` | `BrowseProjects`, `ProjectBrowser`, `ProjectOverview` |
 | summary | Where the selected project stands, at the top of the browser's details | browser | `summary` in `tea_browser.go` |

@@ -3,7 +3,8 @@
 Everything left to do or decide, in the order to do it: the browser
 ideas, the config ideas and what is left of the quality report (review
 of 2026-11-06, revised 2026-11-07), merged on 2026-11-08, then the
-first brief and its later notes, sorted on 2026-11-09. Their history is
+first brief and its later notes, sorted on 2026-11-09, and the first
+use of tasks, scheduled on 2026-11-09. Their history is
 in `git log -- docs/ideas.md docs/config-ideas.md
 docs/quality-report.md specs.md`.
 
@@ -32,7 +33,135 @@ layers), XL (mostly open questions).
 
 ## Order
 
-Nothing is scheduled: what is left waits for a need, below.
+Finish tasks before adding: the first three come from using them.
+
+### 1. Clickable confirmation (S)
+
+The busy pane's "run in a throwaway window?" can't be clicked, unlike
+the browser and the config form. Replace the huh dialog
+(`infra/huh_confirm.go`, the `Confirmer`) with a small Bubble Tea one:
+Yes and No clickable through hotspots (`tea_hotspot.go`), keeping `y`,
+`n` and ←/→. Every confirmation gets it (freeze's replace, edit), and
+`huh` leaves `go.mod`. Showing the question inside the browser would
+mean reworking `BrowseProjects`, which runs `RunTask` after the browser
+exits: not needed.
+
+### 2. Task list between the projects and the details (XS)
+
+The task list moves from the third column to the second, keeping its
+width measured over every project (`taskListWidth`), so the layout
+stays still while moving through the list, and taking no room when no
+project has tasks. Update the clicks' columns (`clicked` in
+`tea_browser.go`) and the glossary's *task list* entry.
+
+### 3. Running a task switches to it (S)
+
+After a task starts, the browser exits and you land where it runs: its
+pane, selected in its window, or its throwaway window. Always, no
+setting. A mark in the browser for a running task waits for the
+exited-command warning's idle check, and a preview for the live
+preview.
+
+### 4. Setup and teardown commands (M)
+
+**Why now**: `bicyclette`'s `task dev` runs `docker compose up -d
+--wait`, and its containers outlive `weave kill`: tmux's `kill-session`
+(`Tmux.Kill`) sends the shells SIGHUP, but anything that left the pane
+keeps running, so every kill leaks it.
+
+**Words**: *setup commands* and *teardown commands* (`setup:`,
+`teardown:`) are in the glossary. Not `start`, too close to a pane's
+`Startup`; not "stop", ruled out; not `before_kill`, which would clash
+with before commands.
+
+```yaml
+setup:
+  - docker compose up -d --wait
+teardown:
+  - docker compose down
+```
+
+Setup commands run in `root`, in order, once, when `weave <project>`
+creates the session. Teardown commands run in `root`, in order, before
+`weave kill` kills it. smug has `before_start` and `stop`, tmuxinator
+`on_project_first_start` and `on_project_stop`.
+
+A pane's `command` can do setup's job, but worse: it runs at the same
+time as the other panes, so they can't count on it; when it fails, the
+session still opens, half-working; it runs again each time restoring
+re-creates its window, and it takes up a pane. Setup runs before
+anything is built, like the directory checks, so a failure leaves no
+session behind.
+
+- `domain`: `Project.Setup()` and `Project.Teardown()`, lists of `Command`.
+  A new port runs a command in a directory with an env
+  (`CommandRunner`); `infra` implements it with `sh -c`, output to the
+  terminal. Both lists use it.
+- `before` commands don't apply to either list. They are typed into
+  interactive shells (`nvm use` is a shell function), while these run in
+  `sh`. The project's `env` does apply. Say so in the schema.
+- Setup, in `app`: `OpenProject` runs the commands before
+  `checkDirs`, so a setup command can create a pane's directory, and
+  before `sessions.Start`. A failing command stops the open, and nothing
+  is built. Restoring windows and attaching don't run setup.
+- Teardown, in `app`: `KillProject` holds a `SessionKiller` and a
+  `SessionLocator` today; it would also load the project from the
+  `ProjectRegistry`. When the config can't be read, kill anyway, as now:
+  you asked to kill it. When a teardown command fails, still kill the
+  session and report the failure.
+- Browser: `enter` and `x` run their use case after the Bubble Tea
+  program exits (`BrowseProjects.act`), so the output reaches the
+  terminal. A failure returns to the browser as its notice, and the
+  redraw hides the output: the error has to carry the command's last
+  lines of stderr itself.
+- The warnings check that setup and teardown programs are on `PATH`,
+  as they do for pane commands.
+- Freeze can't see either list: replacing a config drops them, as it
+  drops comments. Freeze goes through the config form, which could keep
+  them from the existing config.
+- `d` deletes the config but keeps the session running, so no teardown
+  there.
+- Second step, optional: send Ctrl-C to every pane and wait, with a
+  timeout, until its shell is idle (`foreground`), so dev servers shut
+  down cleanly before the kill.
+
+### 5. Exited-command warning (M)
+
+**Why now**: `bicyclette`'s `task dev` and `bicyclette app` run for
+hours and can crash unseen. The live preview, under [By need](#by-need),
+is the second answer, if this one isn't enough.
+
+No config. In the browser summary, and on its pane, as a `Warning`
+concerning it:
+
+```text
+ ⚠ api › task dev: back at the prompt, its command exited
+```
+
+weaver knows which panes it typed a command into (`Startup.Submits()`).
+In an owned session, such a pane whose shell is idle again means the
+server crashed or was interrupted.
+
+- `infra`: `foreground(pid)` already tells whether a pane's shell is
+  idle; freeze uses it. A new tmux method lists a session's panes with
+  their window tag (`@weaver_window`), label (`@label`) and pid.
+- That listing also fixes `Capture`'s four or five `display-message`
+  calls per pane, where one `list-panes -F` would do. Not worth changing
+  on its own: freeze is interactive, and splitting free-text paths and
+  labels out of one line of output adds parsing risk. Keep `foreground`
+  meaning "the shell is idle": this and the clean shutdown above rely on
+  it.
+- `domain`: a method on a session port (`SessionFinder` or a new one)
+  returning, per window, the panes whose shell is idle.
+- `app`: `ProjectOverview` gets the panes whose command exited. Only
+  panes with a `command`, not `prefill` or a plain shell, and only in
+  owned sessions.
+- Don't compare the command line: `ps` loses quotes, pipes and
+  variables (see `Capture`). A shell idle when it should be running
+  something is enough.
+- Caveat: a command interrupted on purpose (Ctrl-C) warns too. It is a
+  hint, not an error.
+- Later: a browser key that types the pane's command again.
 
 ## By need
 
@@ -42,8 +171,6 @@ Nothing is scheduled: what is left waits for a need, below.
 weaver-wide setting, not a project's config, so the first one brings a
 settings file, which needs a glossary entry first.
 
-- After a task starts: switch to where it runs, or stay in the browser
-  (the default).
 - The config form's keys for splitting panes (tmux's `%` and `"` today),
   or reading them from the user's tmux bindings.
 - The selected colour (cyan), the config form's layout.
@@ -70,6 +197,26 @@ the window's width. Either size the split from the terminal's size
 or apply a `select-layout` string with tmux's checksum. Freeze would
 still write splits; writing a grid when a session fits a small one is
 its own decision.
+
+### The browser full screen inside tmux (S to M)
+
+**When**: running `weave` in a small pane keeps getting in the way.
+Inside tmux, `weave` runs in the pane it was typed in. Three ways, from
+the least code:
+
+- **A binding the user writes**, no code: `bind-key W display-popup -E
+  -w 100% -h 100% weave`. weave already works in a popup (no
+  `$TMUX_PANE`), switching sessions included. Could go in the README.
+- **weave re-running itself in a full-size popup** when inside tmux.
+  It acts on the user's behalf, so it is a weaver-wide setting, the
+  first (see [Settings](#settings-by-item)).
+- **The browser in its own tmux session**, weave switching to it and
+  back. Open questions: its name clashes with a project's session (a
+  project named `weaver` has the session `weaver`); it shows in tmux's
+  session list and among the sessions `weave freeze` offers to capture;
+  weaver would start a session that isn't a project's, so *owned
+  session* must leave it out; and whether it is killed or kept once a
+  project opens. Needs a glossary entry first.
 
 ### Window miniatures (S)
 
@@ -161,70 +308,6 @@ own, never a side effect of another key. Saving a grid window lists its
 panes in creation order, not as the config listed them; keep the
 config's order if the form makes that visible.
 
-### Start and teardown commands (M)
-
-**When**: a project starts something outside its panes: containers
-started with `-d`, daemons, ssh tunnels. `weave kill` runs tmux's
-`kill-session` (`Tmux.Kill`); the shells get SIGHUP, but anything that
-left the pane keeps running, so every kill leaks it. No config starts
-anything outside its panes yet, which is why this waits.
-
-**Words first**: the glossary rules out "stop", and these are commands
-run before a kill, a new concept rather than another word for kill.
-Name it (and its config key) and give it a glossary entry before any
-code. `start` is free.
-
-```yaml
-start:
-  - docker compose up -d
-<teardown key>:
-  - docker compose down
-```
-
-`start` commands run in `root`, in order, once, when `weave <project>`
-creates the session. Teardown commands run in `root`, in order, before
-`weave kill` kills it. smug has `before_start` and `stop`, tmuxinator
-`on_project_first_start` and `on_project_stop`.
-
-A pane's `command` can do `start`'s job, but worse: it runs at the same
-time as the other panes, so they can't count on it; when it fails, the
-session still opens, half-working; it runs again each time restoring
-re-creates its window, and it takes up a pane. `start` runs before
-anything is built, like the directory checks, so a failure leaves no
-session behind.
-
-- `domain`: `Project.Start()` and a teardown getter, lists of `Command`.
-  A new port runs a command in a directory with an env
-  (`CommandRunner`); `infra` implements it with `sh -c`, output to the
-  terminal. Both lists use it.
-- `before` commands don't apply to either list. They are typed into
-  interactive shells (`nvm use` is a shell function), while these run in
-  `sh`. The project's `env` does apply. Say so in the schema.
-- `start`, in `app`: `OpenProject.start` runs the commands before
-  `checkDirs`, so a `start` command can create a pane's directory, and
-  before `sessions.Start`. A failing command stops the open, and nothing
-  is built. Restoring windows and attaching don't run `start`.
-- Teardown, in `app`: `KillProject` holds a `SessionKiller` and a
-  `SessionLocator` today; it would also load the project from the
-  `ProjectRegistry`. When the config can't be read, kill anyway, as now:
-  you asked to kill it. When a teardown command fails, still kill the
-  session and report the failure.
-- Browser: `enter` and `x` run their use case after the Bubble Tea
-  program exits (`BrowseProjects.act`), so the output reaches the
-  terminal. A failure returns to the browser as its notice, and the
-  redraw hides the output: the error has to carry the command's last
-  lines of stderr itself.
-- The warnings check that `start` and teardown programs are on `PATH`,
-  as they do for pane commands.
-- Freeze can't see either list: replacing a config drops them, as it
-  drops comments. Freeze goes through the config form, which could keep
-  them from the existing config.
-- `d` deletes the config but keeps the session running, so no teardown
-  there.
-- Second step, optional: send Ctrl-C to every pane and wait, with a
-  timeout, until its shell is idle (`foreground`), so dev servers shut
-  down cleanly before the kill.
-
 ### Secrets read at start (M)
 
 **When**: a config would hold a secret.
@@ -259,46 +342,13 @@ output.
   print.
 - The warnings can check that the `from` program is on `PATH`.
 
-### Is it still running? (M, then M)
+### Live preview (M)
 
-**When**: "is my dev server still up?" comes up often enough to want an
-answer without attaching. Two answers, cheapest first; the first may be
-enough.
+**When**: the exited-command warning isn't enough to tell whether a
+pane is still doing its job.
 
-**Warn when a pane's command exited.** No config. In the browser
-summary, and on its pane, as a `Warning` concerning it:
-
-```text
- ⚠ api › task dev: back at the prompt, its command exited
-```
-
-weaver knows which panes it typed a command into (`Startup.Submits()`).
-In an owned session, such a pane whose shell is idle again means the
-server crashed or was interrupted.
-
-- `infra`: `foreground(pid)` already tells whether a pane's shell is
-  idle; freeze uses it. A new tmux method lists a session's panes with
-  their window tag (`@weaver_window`), label (`@label`) and pid.
-- That listing also fixes `Capture`'s four or five `display-message`
-  calls per pane, where one `list-panes -F` would do. Not worth changing
-  on its own: freeze is interactive, and splitting free-text paths and
-  labels out of one line of output adds parsing risk. Keep `foreground`
-  meaning "the shell is idle": this and the clean shutdown above rely on
-  it.
-- `domain`: a method on a session port (`SessionFinder` or a new one)
-  returning, per window, the panes whose shell is idle.
-- `app`: `ProjectOverview` gets the panes whose command exited. Only
-  panes with a `command`, not `prefill` or a plain shell, and only in
-  owned sessions.
-- Don't compare the command line: `ps` loses quotes, pipes and
-  variables (see `Capture`). A shell idle when it should be running
-  something is enough.
-- Caveat: a command interrupted on purpose (Ctrl-C) warns too. It is a
-  hint, not an error.
-- Later: a browser key that types the pane's command again.
-
-**Live preview.** Like tmux's `choose-tree` preview: `capture-pane` each
-pane of a running session and fill the drawing's boxes with their last lines,
+Like tmux's `choose-tree` preview: `capture-pane` each pane of a
+running session and fill the drawing's boxes with their last lines,
 drawn from tmux's real geometry instead of the plan, so panes closed or
 added show against the config. `infra/tmux_layout.go` already parses
 `#{window_layout}` for freeze, so the geometry costs almost nothing;
@@ -312,7 +362,7 @@ programs.
 
 **When**: a pane's command must run only once something answers: the
 front end after the API, the migrations after Postgres. Comes after
-start commands, which cover setup that must finish before the panes
+setup commands, which cover setup that must finish before the panes
 open; `wait` orders the panes among themselves.
 
 ```yaml
@@ -413,8 +463,8 @@ change to bring it back.
   already shows them, and tasks run them. Back if `note` and tasks prove
   not enough; the shell details (`ignorespace`, `HIST_IGNORE_SPACE`,
   `erasedups`, ordering) are in `docs/config-ideas.md` in the history.
-- **Hooks beyond start and teardown.** A general hook mechanism is an
-  abstraction with one user so far. Start and teardown commands are the
+- **Hooks beyond setup and teardown.** A general hook mechanism is an
+  abstraction with one user so far. Setup and teardown commands are the
   first two hooks; a third need is when to design the general shape
   (one `hooks:` key or top-level keys, what weaver hands a hook as
   environment variables, such as `WEAVER_PROJECT` and `WEAVER_ROOT`).
@@ -422,10 +472,10 @@ change to bring it back.
 - **A git plugin.** weaver knows nothing of git (`5e8f663`, `0355ed1`,
   then `repositories:` removed). Cloning missing repositories can come
   back only as a separate program, such as `weaver-git`, named in a
-  config's start commands (`weaver-git clone`), keeping its own list of
+  config's setup commands (`weaver-git clone`), keeping its own list of
   repositories. Showing a branch needs another hook: a command whose
   output is a line of the browser's summary, with a time limit, since
-  start commands run once with output to the terminal. It isn't
+  setup commands run once with output to the terminal. It isn't
   part of `weave`; plugins found on `PATH` as git finds `git-foo` would
   add dispatch code to the core. *plugin* needs a glossary entry first.
 - **Worktree variants** (`weave shop@fix-123`: the shop layout on a
@@ -527,7 +577,7 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 - The drawing's border drawing (`infra/tea_drawing.go`) serves the live
   preview.
-- `CommandRunner` serves start and teardown commands, and any later
+- `CommandRunner` serves setup and teardown commands, and any later
   hook.
 - The idle-shell check (`foreground`) serves tasks, the exited-command warning
   and the clean shutdown after teardown.
