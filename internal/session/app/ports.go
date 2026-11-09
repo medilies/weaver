@@ -19,7 +19,8 @@ var ErrAborted = errors.New("aborted")
 // editing it, whose name stays.
 type ProjectDraft struct {
 	Name      string
-	NameStays bool // editing: only a new config can be named otherwise
+	NameStays bool  // editing: only a new config can be named otherwise
+	Retype    error // why the name must be typed again; the form opens typing it
 	Root      string
 	Env       domain.Env
 	Before    []domain.Command

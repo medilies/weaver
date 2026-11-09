@@ -52,30 +52,42 @@ func NewFreezeProject(
 }
 
 // Handle runs the form and saves the project, asking before replacing a
-// registered one.
+// registered one. Declining opens the form again on the project as filled
+// in, typing its name, so another can be given.
 func (uc FreezeProject) Handle(request FreezeRequest) (domain.Project, error) {
 	draft, err := uc.draft(request)
 	if err != nil {
 		return domain.Project{}, err
 	}
-	project, err := uc.form.Fill(draft)
-	if err != nil {
-		return domain.Project{}, err
-	}
-	names, err := uc.projects.Names()
-	if err != nil {
-		return domain.Project{}, err
-	}
-	if slices.Contains(names, project.Name()) {
+	for {
+		project, err := uc.form.Fill(draft)
+		if err != nil {
+			return domain.Project{}, err
+		}
+		names, err := uc.projects.Names()
+		if err != nil {
+			return domain.Project{}, err
+		}
+		if !slices.Contains(names, project.Name()) {
+			return project, uc.projects.Save(project)
+		}
 		replace, err := uc.confirm.Confirm(fmt.Sprintf("%s is already registered. Replace it?", project.Name()))
 		if err != nil {
 			return domain.Project{}, err
 		}
-		if !replace {
-			return domain.Project{}, ErrAborted
+		if replace {
+			return project, uc.projects.Save(project)
+		}
+		draft = ProjectDraft{
+			Name:     project.Name().String(),
+			Retype:   fmt.Errorf("%s is already registered: type another name, or keep it to replace it", project.Name()),
+			Root:     project.Root().String(),
+			Env:      project.Env(),
+			Before:   project.Before(),
+			Clearing: project.Clearing(),
+			Windows:  project.Windows(),
 		}
 	}
-	return project, uc.projects.Save(project)
 }
 
 func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {

@@ -34,22 +34,8 @@ layers), XL (mostly open questions).
 
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
-| 12 | Replacing a registered project when freezing | form | S | |
 | 13 | Tasks | config, browser | L | |
 | 14 | Tasks in the config form | form | M | 13 |
-
-## 12. Replacing a registered project when freezing
-
-Freeze asks "already registered. Replace it?" only once the config form
-has closed (`FreezeProject.Handle`), and No ends the freeze, losing
-everything done in the form. Answer No by opening the form again on the
-project as filled in, its name still typed, so another name can be
-given. The diff the form shows before saving is against no config
-(`ProjectDraft.Config` is empty when freezing), not the one being
-replaced. The name is typed in the form, so the use case can't hand the
-right config over before it opens: either the form asks for a project's
-config as its name is kept, through a port, or the diff says it is
-against nothing and the question comes after.
 
 ## 13. Tasks
 

@@ -46,7 +46,7 @@ func wire() (application, error) {
 	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize})
 	workspace := infra.NewLocalWorkspace()
 
-	confirm, configForm := infra.NewHuhConfirmer(), infra.NewTeaConfigForm(workspace)
+	confirm, configForm := infra.NewHuhConfirmer(), infra.NewTeaConfigForm(workspace, projects)
 
 	weaver := application{
 		freezeProject: app.NewFreezeProject(projects, tmux, workspace, configForm, confirm),

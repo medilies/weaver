@@ -9,17 +9,40 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// fakeForm is an app.ProjectForm that records the draft it was given and
-// returns a set project, or an error.
+// fakeForm is an app.ProjectForm that records the drafts it was given
+// and returns a set project, or an error; then, when set, the next
+// projects in turn.
 type fakeForm struct {
 	draft   app.ProjectDraft
+	drafts  []app.ProjectDraft
 	project domain.Project
+	next    []domain.Project
 	err     error
 }
 
 func (f *fakeForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	f.draft = draft
-	return f.project, f.err
+	f.drafts = append(f.drafts, draft)
+	project := f.project
+	if len(f.next) > 0 {
+		f.project, f.next = f.next[0], f.next[1:]
+	}
+	return project, f.err
+}
+
+// leftSecondTime is an app.ProjectForm returning a set project, then
+// left by the user.
+type leftSecondTime struct {
+	project domain.Project
+	filled  bool
+}
+
+func (f *leftSecondTime) Fill(app.ProjectDraft) (domain.Project, error) {
+	if f.filled {
+		return domain.Project{}, app.ErrAborted
+	}
+	f.filled = true
+	return f.project, nil
 }
 
 // answer is an app.Confirmer giving the same answer to every question.
@@ -27,6 +50,15 @@ type answer bool
 
 func (a answer) Confirm(string) (bool, error) {
 	return bool(a), nil
+}
+
+// answers is an app.Confirmer giving its answers in turn.
+type answers []bool
+
+func (a *answers) Confirm(string) (bool, error) {
+	answer := (*a)[0]
+	*a = (*a)[1:]
+	return answer, nil
 }
 
 // capturedSessions is a fake domain.SessionCapturer: running sessions'
@@ -149,9 +181,59 @@ func TestFreezeProject(t *testing.T) {
 		s := newFreezeSetup(t)
 		existing := rootedAt(t, "shop", "/srv/old-shop")
 		s.configs.projects["shop"] = existing
+		s.form.next = []domain.Project{rootedAt(t, "store", "/srv/shop")}
 		_, err := s.freeze(t, answer(false), app.FreezeRequest{WorkingDir: "/srv/shop"})
-		if !errors.Is(err, app.ErrAborted) || s.configs.projects["shop"].Root() != existing.Root() {
-			t.Fatalf("got %v, root %s; want ErrAborted and the old project kept", err, s.configs.projects["shop"].Root())
+		if err != nil || s.configs.projects["shop"].Root() != existing.Root() {
+			t.Fatalf("got %v, root %s; want the old project kept", err, s.configs.projects["shop"].Root())
+		}
+	})
+
+	t.Run("reopens the form typing the name when the user won't replace", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
+		s.form.next = []domain.Project{rootedAt(t, "store", "/srv/shop")}
+		if _, err := s.freeze(t, &answers{false}, app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		again := s.form.drafts[1]
+		if again.Name != "shop" || again.Retype == nil || again.NameStays {
+			t.Fatalf("got name %q, retype %v, stays %t; want shop typed again", again.Name, again.Retype, again.NameStays)
+		}
+	})
+
+	t.Run("reopens the form on the project as filled in", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
+		s.form.next = []domain.Project{rootedAt(t, "store", "/srv/shop")}
+		if _, err := s.freeze(t, &answers{false}, app.FreezeRequest{WorkingDir: "/srv/blog"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		again := s.form.drafts[1]
+		if again.Root != "/srv/shop" || len(again.Windows) != len(shop(t).Windows()) {
+			t.Fatalf("got root %q and %d windows, want the filled-in shop's", again.Root, len(again.Windows))
+		}
+	})
+
+	t.Run("saves under the name typed after declining to replace", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
+		s.form.next = []domain.Project{rootedAt(t, "store", "/srv/shop")}
+		if _, err := s.freeze(t, &answers{false}, app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, saved := s.configs.projects["store"]; !saved {
+			t.Fatal("got store unsaved, want it saved")
+		}
+	})
+
+	t.Run("stops when the user leaves the reopened form", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
+		form := &leftSecondTime{project: shop(t)}
+		_, err := app.NewFreezeProject(s.configs, capturedSessions{}, s.workspace, form, answer(false)).
+			Handle(app.FreezeRequest{WorkingDir: "/srv/shop"})
+		if !errors.Is(err, app.ErrAborted) {
+			t.Fatalf("got %v, want ErrAborted", err)
 		}
 	})
 

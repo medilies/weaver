@@ -2,6 +2,7 @@ package infra
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -25,20 +26,24 @@ import (
 // the form only collects them.
 type TeaConfigForm struct {
 	workspace domain.Workspace
+	documents app.ProjectDocuments
 }
 
 // NewTeaConfigForm constructs a TeaConfigForm checking directories in
-// workspace.
-func NewTeaConfigForm(workspace domain.Workspace) TeaConfigForm {
-	return TeaConfigForm{workspace: workspace}
+// workspace, and showing what saving a new project under a registered
+// name replaces in its config, read from documents.
+func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments) TeaConfigForm {
+	return TeaConfigForm{workspace: workspace, documents: documents}
 }
 
 // Fill implements app.ProjectForm. The draft's name stays when it says
 // so, and is typed otherwise. It returns the project as ctrl+s saves it,
 // once the user has seen what saving changes in the draft's config, or
 // ErrAborted when the user leaves it unchanged or discards it. A draft
-// without a Config, as freezing gives, is unsaved until then. A name to
-// type that isn't valid opens the form typing it.
+// without a Config, as freezing gives, is unsaved until then, and saving
+// it under a registered name shows what it changes in that config. A name to
+// type that isn't valid, or that the draft says to retype, opens the form
+// typing it.
 func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	name, nameErr := domain.NewProjectName(draft.Name)
 	if nameErr != nil && draft.NameStays {
@@ -64,7 +69,7 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	}
 	model := configForm{
 		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
-		workspace: f.workspace, focus: spot{window: -1, pane: -1, field: fieldRoot},
+		workspace: f.workspace, documents: f.documents, focus: spot{window: -1, pane: -1, field: fieldRoot},
 	}
 	if !draft.NameStays {
 		model.focus.field = fieldName
@@ -73,6 +78,9 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 		model.unnamed = true
 		model, model.start = model.typeInto(model.focus, draft.Name, true)
 		model.edit.err = nameErr
+	} else if draft.Retype != nil && !draft.NameStays {
+		model, model.start = model.typeInto(model.focus, draft.Name, true)
+		model.edit.err = draft.Retype
 	}
 	final, err := tea.NewProgram(model).Run()
 	if err != nil {
@@ -129,6 +137,7 @@ type configForm struct {
 	unnamed       bool   // the project has standInName until a name typed is kept
 	start         tea.Cmd
 	workspace     domain.Workspace
+	documents     app.ProjectDocuments
 	focus         spot
 	picked        spot // the window and pane shown, kept while the cursor is above them
 	top           int  // the first line shown
@@ -158,10 +167,13 @@ var standInName, _ = domain.NewProjectName("project")
 var projectNameAt = spot{window: -1, pane: -1, field: fieldName}
 
 // review is what saving changes in the stored config, shown before
-// saving, and its first line shown.
+// saving, and its first line shown. A new project saved under a
+// registered name replaces that project's config.
 type review struct {
-	diff []string
-	top  int
+	diff     []string
+	top      int
+	unstored bool // no config is stored under the name
+	replaces bool // a new project's config replaces a registered one's
 }
 
 // typing is a field being typed.
@@ -375,13 +387,34 @@ func (m configForm) save() (configForm, tea.Cmd) {
 		m.problem = err.Error()
 		return m, nil
 	}
-	diff := configDiff(string(m.stored), string(doc))
-	if len(diff) == 0 {
+	stored, replaces, err := m.replaced()
+	if err != nil {
+		m.problem = err.Error()
+		return m, nil
+	}
+	diff := configDiff(string(stored), string(doc))
+	if len(diff) == 0 && !replaces {
 		m.saved = true
 		return m, tea.Quit
 	}
-	m.reviewing = &review{diff: diff}
+	m.reviewing = &review{diff: diff, unstored: len(stored) == 0, replaces: replaces}
 	return m, nil
+}
+
+// replaced is the config saving replaces: the one stored, else, for a new
+// project, the config registered under its name, if any.
+func (m configForm) replaced() ([]byte, bool, error) {
+	if len(m.stored) > 0 || m.nameStays || m.documents == nil {
+		return m.stored, false, nil
+	}
+	document, err := m.documents.Document(m.project.Name())
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return document.Content, true, nil
 }
 
 // reviewed is m after key, pressed on what saving changes: y, enter or
@@ -1788,6 +1821,10 @@ func (m configForm) trail() string {
 // the last change was refused.
 func (m configForm) status() string {
 	switch {
+	case m.reviewing != nil && m.reviewing.replaces:
+		return fmt.Sprintf(" Replace %s's registered config with this?", m.project.Name()) + keysStyle.Render("  y save · n back")
+	case m.reviewing != nil && m.reviewing.unstored:
+		return " Save the new project's config?" + keysStyle.Render("  y save · n back")
 	case m.reviewing != nil:
 		return " Save these changes to the config?" + keysStyle.Render("  y save · n back")
 	case m.asking != nil:
