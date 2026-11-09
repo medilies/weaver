@@ -46,8 +46,11 @@ func tasksOf(project domain.Project) []listedTask {
 // a space and a border on the right.
 const taskListPadding = 3
 
+// taskListTitle heads the task list.
+const taskListTitle = "tasks"
+
 // taskListWidth is the width the task list's lines take, wide enough for
-// every project's, so moving between projects keeps the column still, but
+// its title and every project's lines, so moving between projects keeps the column still, but
 // at most a quarter of width; 0 when no project has tasks, which leaves
 // the column out.
 func taskListWidth(projects []app.ProjectOverview, width int) int {
@@ -60,6 +63,7 @@ func taskListWidth(projects []app.ProjectOverview, width int) int {
 	if widest == 0 {
 		return 0
 	}
+	widest = max(widest, ansi.StringWidth(taskListTitle))
 	return min(widest, max(width/4-taskListPadding, 1))
 }
 
@@ -80,7 +84,8 @@ func (m browser) taskColumn(width, height int) (string, []int) {
 // the selected one highlighted while the cursor is in the list, kept in
 // view in height lines cut to width; with the task each line shows, or -1.
 func (m browser) taskList(width, height int) ([]string, []int) {
-	lines := []string{titleStyle.Render("tasks")}
+	// Cut, as every line is, so that each stays one row, as clicks count them.
+	lines := []string{titleStyle.Render(ansi.Truncate(taskListTitle, width, "…"))}
 	tasks := []int{-1}
 	listed := m.tasksShown()
 	if len(listed) == 0 {
