@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"testing"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
@@ -76,4 +77,14 @@ func (c *fakeCommands) commandsRun() []string {
 		out = append(out, r.cmd)
 	}
 	return out
+}
+
+// command is the command raw.
+func command(t *testing.T, raw string) domain.Command {
+	t.Helper()
+	cmd, err := domain.NewCommand(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return cmd
 }

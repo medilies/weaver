@@ -77,8 +77,9 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 	return slices.Clone(o.missing)
 }
 
-// Warnings are what would likely go wrong in the panes opening the
-// project creates: a directory missing, wrapping ErrMissingDirectory, a
+// Warnings are what would likely go wrong in the setup and teardown
+// commands, a program that can't be found or a quote left open, which
+// concern no pane, and in the panes opening the project creates: a directory missing, wrapping ErrMissingDirectory, a
 // command whose program can't be found, wrapping ErrMissingProgram, or a
 // command run that leaves a quote open, wrapping ErrUnclosedQuote; and in
 // any pane, a task whose program can't be found or that leaves a quote
@@ -357,7 +358,33 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, opening, all []domai
 			}
 		}
 	}
-	return warnings, nil
+	return append(warnings, uc.commandWarnings(overview)...), nil
+}
+
+// commandWarnings are what would likely go wrong in the project's setup
+// and teardown commands, which run in its root, concerning no pane: a
+// program that can't be found, unless the root is missing or the
+// project's env sets PATH, or a quote left open.
+func (uc BrowseProjects) commandWarnings(overview ProjectOverview) []Warning {
+	project := overview.project
+	setsPath := slices.ContainsFunc(project.Env().Vars(), func(v domain.EnvVar) bool { return v.Name() == "PATH" })
+	var warnings []Warning
+	for _, list := range []struct {
+		name string
+		cmds []domain.Command
+	}{{"setup", project.Setup()}, {"teardown", project.Teardown()}} {
+		for _, cmd := range list.cmds {
+			if cmd.Unclosed() {
+				warnings = append(warnings, Warning{err: fmt.Errorf("%s: %w: %s", list.name, ErrUnclosedQuote, cmd)})
+				continue
+			}
+			program, ok := cmd.Program()
+			if ok && overview.rootExists && !setsPath && !uc.workspace.Executable(program, project.Root().String()) {
+				warnings = append(warnings, Warning{err: fmt.Errorf("%s: %w: %s", list.name, ErrMissingProgram, program)})
+			}
+		}
+	}
+	return warnings
 }
 
 // runs is the program cmd starts in pane, when weaver can tell what it

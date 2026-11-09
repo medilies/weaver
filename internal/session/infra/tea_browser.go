@@ -758,12 +758,17 @@ func summary(project app.ProjectOverview) string {
 		lines = append(lines, warningStyle.Render("⚠ "+warning.Error()))
 	}
 
-	var before []string
-	for _, cmd := range project.Project().Before() {
-		before = append(before, cmd.String())
-	}
-	if len(before) > 0 {
-		lines = append(lines, keysStyle.Render("before "+strings.Join(before, " · ")))
+	for _, list := range []struct {
+		label string
+		cmds  []domain.Command
+	}{{"setup", project.Project().Setup()}, {"teardown", project.Project().Teardown()}, {"before", project.Project().Before()}} {
+		texts := make([]string, 0, len(list.cmds))
+		for _, cmd := range list.cmds {
+			texts = append(texts, cmd.String())
+		}
+		if len(texts) > 0 {
+			lines = append(lines, keysStyle.Render(list.label+" "+strings.Join(texts, " · ")))
+		}
 	}
 	var env []string
 	for _, v := range project.Project().Env().Vars() {

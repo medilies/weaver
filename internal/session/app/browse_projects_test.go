@@ -326,6 +326,37 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("warns about setup and teardown programs that can't be found, concerning no pane", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = project(t, "blog").SettingUp(command(t, "docker compose up -d")).
+			TearingDown(command(t, "make down"))
+		s.workspace.programs = map[string]bool{"make": true}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		got := blog.Warnings()
+		if len(got) != 1 || !errors.Is(got[0], app.ErrMissingProgram) || got[0].Error() != "setup: program not found: docker" {
+			t.Fatalf("got %v, want docker not found in setup", got)
+		}
+		if got[0].Concerns(blog.Project().Windows()[0].Name(), 0) {
+			t.Fatal("got the warning on a pane, want it on none")
+		}
+	})
+
+	t.Run("warns about a teardown command that leaves a quote open", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = project(t, "blog").TearingDown(command(t, `echo "bye`))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if got := blog.Warnings(); len(got) != 1 || !errors.Is(got[0], app.ErrUnclosedQuote) ||
+			!strings.HasPrefix(got[0].Error(), "teardown: ") {
+			t.Fatalf("got %v, want an unclosed quote in teardown", got)
+		}
+	})
+
 	t.Run("warns about a task whose program can't be found, in a running session", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["shop"] = tasked(t)
