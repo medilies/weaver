@@ -77,6 +77,27 @@ func TestRerunCommand(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a project that isn't running", func(t *testing.T) {
+		tasks := &fakeTasks{fakeSessions: &fakeSessions{}}
+		if err := rerun(t, tasks, front(t)); !errors.Is(err, domain.ErrSessionNotRunning) || len(tasks.typed) > 0 {
+			t.Fatalf("got %v with %q typed, want ErrSessionNotRunning and nothing typed", err, tasks.typed)
+		}
+	})
+
+	t.Run("refuses a window the project doesn't have", func(t *testing.T) {
+		err := rerun(t, runningShop(t), app.PaneAt{Window: windowName(t, "gone")})
+		if !errors.Is(err, domain.ErrWindowNotFound) {
+			t.Fatalf("got %v, want ErrWindowNotFound", err)
+		}
+	})
+
+	t.Run("refuses a pane its window doesn't have", func(t *testing.T) {
+		err := rerun(t, runningShop(t), app.PaneAt{Window: windowName(t, "shop"), Pane: 2})
+		if !errors.Is(err, domain.ErrPaneNotFound) {
+			t.Fatalf("got %v, want ErrPaneNotFound", err)
+		}
+	})
+
 	t.Run("refuses a session weaver didn't start", func(t *testing.T) {
 		tasks := &fakeTasks{fakeSessions: &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}}
 		if err := rerun(t, tasks, front(t)); !errors.Is(err, domain.ErrSessionNotOwned) || len(tasks.typed) > 0 {

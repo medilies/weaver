@@ -458,6 +458,22 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("tells no task runs in a session weaver didn't start", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = domain.NewRunningSession(false)
+		s.sessions.commands = map[string][]domain.RunningCommand{"shop": {
+			domain.NewRunningCommand(windowName(t, "shop"), 1, command(t, "npm run build")),
+		}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		if shop.TaskRuns(app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 1}) {
+			t.Fatal("got npm run build running, want no task running")
+		}
+	})
+
 	t.Run("leaves the browser once a command reruns", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["blog"] = serving(t, "", "npm run dev")

@@ -139,6 +139,27 @@ func TestKillProjectTearsDown(t *testing.T) {
 		}
 	})
 
+	t.Run("shows nothing when the teardown succeeds in the session weaver runs in", func(t *testing.T) {
+		killer := &fakeKiller{running: runningOwned("shop")}
+		acks := &fakeAcks{}
+		if err := app.NewKillProject(killer, capturedSessions{current: "shop"}, tornDownShop(t), &fakeCommands{}, acks).HandleCurrent(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(acks.shown) != 0 {
+			t.Fatalf("got %q shown, want nothing", acks.shown)
+		}
+	})
+
+	t.Run("reports failing to show a failing teardown, with the teardown", func(t *testing.T) {
+		killer := &fakeKiller{running: runningOwned("shop")}
+		commands := &fakeCommands{fails: map[string]bool{"docker compose down": true}}
+		lost := errors.New("terminal gone")
+		err := app.NewKillProject(killer, capturedSessions{current: "shop"}, tornDownShop(t), commands, &fakeAcks{err: lost}).HandleCurrent()
+		if !errors.Is(err, lost) || !errors.Is(err, domain.ErrCommandFailed) {
+			t.Fatalf("got %v, want both the lost terminal and the failing teardown", err)
+		}
+	})
+
 	t.Run("leaves a failing teardown to the error when weaver runs outside the session", func(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("shop")}
 		commands := &fakeCommands{fails: map[string]bool{"docker compose down": true}}

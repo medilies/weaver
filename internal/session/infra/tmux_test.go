@@ -1271,7 +1271,8 @@ func TestTmuxRunningCommands(t *testing.T) {
 	plan := planOf(t, "running", fmt.Sprintf(`{"root": %q, "windows": [
 		{"name": "api", "panes": [
 			{"name": "shell", "tasks": [{"command": "sleep 300"}, {"command": "true"}]},
-			{"name": "back", "split": {"direction": "right"}, "tasks": [{"command": "sleep 301"}]}
+			{"name": "back", "split": {"direction": "right"}, "tasks": [{"command": "sleep 301"}]},
+			{"name": "server", "split": {"direction": "below"}, "command": "sleep 302", "tasks": [{"command": "sleep 302"}]}
 		]}
 	]}`, t.TempDir()))
 	if err := server.tmux().Start(plan); err != nil {
@@ -1309,8 +1310,25 @@ func TestTmuxRunningCommands(t *testing.T) {
 		}
 	}
 
-	t.Run("finds nothing weaver typed running at first", func(t *testing.T) {
-		running(t)
+	t.Run("doesn't find a pane's own command, which weaver typed for no task", func(t *testing.T) {
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			busy, err := server.tmux().Busy(project, api, 2)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if busy {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("the server pane never got busy")
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		commands, err := server.tmux().RunningCommands(project, plan.Windows())
+		if err != nil || len(commands) != 0 {
+			t.Fatalf("got %d running (err %v), want none", len(commands), err)
+		}
 	})
 
 	t.Run("finds a command typed into a pane running", func(t *testing.T) {

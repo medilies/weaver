@@ -89,12 +89,14 @@ func command(t *testing.T, raw string) domain.Command {
 	return cmd
 }
 
-// fakeAcks is a fake app.Acknowledger recording the messages shown.
+// fakeAcks is a fake app.Acknowledger recording the messages shown, or
+// failing with err.
 type fakeAcks struct {
 	shown []string
+	err   error
 }
 
 func (a *fakeAcks) Acknowledge(message string) error {
 	a.shown = append(a.shown, message)
-	return nil
+	return a.err
 }
