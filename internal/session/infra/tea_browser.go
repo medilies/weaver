@@ -295,41 +295,6 @@ func (m browser) View() tea.View {
 	return view
 }
 
-// hotspot is the cells of a line a click acts on: a key told, doing
-// what the key does, or, without a key, a window in the window list, selecting it.
-type hotspot struct {
-	from, to int
-	key      string
-	window   int
-}
-
-// hotspotAt is the hotspot of spots covering column x, if any.
-func hotspotAt(spots []hotspot, x int) (hotspot, bool) {
-	for _, spot := range spots {
-		if x >= spot.from && x < spot.to {
-			return spot, true
-		}
-	}
-	return hotspot{}, false
-}
-
-// cut is line cut to width cells, "…" in place of the rest, and the
-// spots on it clipped to what is still shown: the "…" acts on nothing.
-func cut(line string, spots []hotspot, width int) (string, []hotspot) {
-	limit := width
-	if ansi.StringWidth(line) > width {
-		limit = max(width-1, 0)
-	}
-	var kept []hotspot
-	for _, spot := range spots {
-		if spot.from < limit {
-			spot.to = min(spot.to, limit)
-			kept = append(kept, spot)
-		}
-	}
-	return ansi.Truncate(line, width, "…"), kept
-}
-
 // clicked is m after a click at (x, y): on a project or a window in the window list,
 // selecting it as the arrow keys do, or on a key told, doing what the
 // key does.
@@ -369,7 +334,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 // selected.
 func (m browser) act(spot hotspot) (tea.Model, tea.Cmd) {
 	if spot.key == "" {
-		return m.windowSelected(spot.window), nil
+		return m.windowSelected(spot.item), nil
 	}
 	if m.filtering {
 		if next, ok := m.filterKey(spot.key); ok {
@@ -629,7 +594,7 @@ func windowList(project app.ProjectOverview, windows []domain.WindowPlan, select
 	}
 	for i := first; i < len(labels); i++ {
 		to := from + ansi.StringWidth(labels[i])
-		spots = append(spots, hotspot{from: from, to: to, window: i})
+		spots = append(spots, hotspot{from: from, to: to, item: i})
 		from = to + 2
 	}
 	line, spots = cut(line, spots, limit)

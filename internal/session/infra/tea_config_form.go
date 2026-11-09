@@ -17,8 +17,9 @@ import (
 )
 
 // TeaConfigForm is the config form: a project shown full screen as
-// cards, one for the project, then one for its windows, the window list first, the
-// selected one's panes drawn and the selected pane's card below, changed
+// cards, one for the project, then the window list and one for the
+// selected window, its panes drawn, the pane list and the selected
+// pane's card below, windows and panes picked by key or click, changed
 // in place. Each field is checked by the domain's constructors
 // as it is typed, and each change is made by the domain's own methods:
 // the form only collects them.
@@ -98,6 +99,7 @@ const (
 	fieldStarts
 	fieldCommand
 	fieldWindowList // the window list, the window being the one selected
+	fieldPaneList   // the pane list, the pane being the one selected
 	fieldDrawing    // the window's panes drawn, the pane being the one selected
 )
 
@@ -201,6 +203,14 @@ func (m configForm) update(msg tea.Msg) (configForm, tea.Cmd) {
 		m.edit.input.SetWidth(m.inputWidth(m.edit.at))
 		if m.reviewing != nil {
 			m.reviewing = m.reviewing.scrolledTo(m.reviewing.top, m.bodyHeight())
+		}
+		return m, nil
+	case tea.MouseClickMsg:
+		// A click picks a window or a pane: not while typing, asked or
+		// shown the diff, which the keyboard answers.
+		if msg.Button == tea.MouseLeft && m.reviewing == nil && m.asking == nil && !m.editing {
+			m.problem = ""
+			return m.clicked(msg.X, msg.Y), nil
 		}
 		return m, nil
 	case tea.KeyPressMsg:
@@ -533,12 +543,18 @@ func (m configForm) settled(prefer int) configForm {
 }
 
 // stepped is m after ← (by -1) or → (by 1) on a choice: the window
-// shown, the window list's entry after the last adding one, or how the pane starts.
+// shown or + window, the pane shown, or how the pane starts.
 func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 	switch m.focus.field {
 	case fieldWindowList:
 		count := len(m.project.Windows()) + 1
 		m.focus.window = ((m.focus.window+by)%count + count) % count
+		return m, nil
+	case fieldPaneList:
+		if window, ok := m.windowAt(m.focus.window); ok {
+			count := len(window.Panes())
+			m.focus.pane = ((m.focus.pane+by)%count + count) % count
+		}
 		return m, nil
 	case fieldStarts:
 		return m.started(by)
@@ -692,8 +708,8 @@ func (m configForm) started(by int) (configForm, tea.Cmd) {
 }
 
 // entered is m after enter on a row: a choice goes to its next option,
-// the window list types the window's name, or a new one's after the last, and
-// other rows are typed into.
+// the window list types the window's name, or a new one's on
+// "+ window", the pane list the pane's, and other rows are typed into.
 func (m configForm) entered() (configForm, tea.Cmd) {
 	at := m.focus
 	switch at.field {
@@ -704,6 +720,8 @@ func (m configForm) entered() (configForm, tea.Cmd) {
 		if _, ok := m.windowAt(at.window); !ok {
 			return m.typeInto(at, "", true)
 		}
+	case fieldPaneList:
+		at.field = fieldName
 	}
 	run := true
 	if _, pane, ok := m.paneAt(at); ok {
@@ -783,8 +801,12 @@ func (m configForm) deleting() configForm {
 		if split, ok := pane.Split(); ok {
 			heir = split.Of()
 		}
+		back := fieldDrawing // or the pane list, if deleted from there
+		if at.field == fieldPaneList {
+			back = fieldPaneList
+		}
 		m.asking = &question{text: fmt.Sprintf("Delete %s?", paneHeading(pane)), yes: func(m configForm) (configForm, tea.Cmd) {
-			return m.changedAt(project, nil, spot{window: at.window, pane: heir, field: fieldDrawing}), nil
+			return m.changedAt(project, nil, spot{window: at.window, pane: heir, field: back}), nil
 		}}
 	case inWindow && at.pane < 0:
 		project, err := m.project.WithoutWindow(at.window)
@@ -1090,6 +1112,15 @@ type section struct {
 	lines             []string
 	spots             []spot
 	cursor, cursorEnd int
+	hits              []hit
+}
+
+// hit is a row's line a click acts on: the spots of the items on it,
+// each picking its window or pane at the row.
+type hit struct {
+	line  int
+	at    spot
+	spots []hotspot
 }
 
 func newSection() section {
@@ -1110,6 +1141,22 @@ func (s *section) block(lines []string, at spot, focused bool) {
 	s.spots = append(s.spots, at)
 }
 
+// listRow adds a row of a list, its items at spots, offset cells in.
+func (s *section) listRow(line string, at spot, focused bool, offset int, spots []hotspot) {
+	s.hits = append(s.hits, hit{line: len(s.lines), at: at, spots: shifted(spots, offset)})
+	s.row(line, at, focused)
+}
+
+// shifted is spots moved by cells to the right.
+func shifted(spots []hotspot, cells int) []hotspot {
+	moved := make([]hotspot, len(spots))
+	for i, spot := range spots {
+		spot.from, spot.to = spot.from+cells, spot.to+cells
+		moved[i] = spot
+	}
+	return moved
+}
+
 // text adds a line the cursor can't be on.
 func (s *section) text(line string) {
 	s.lines = append(s.lines, line)
@@ -1119,6 +1166,11 @@ func (s *section) text(line string) {
 func (s *section) boxed(title string, child section, width int, heavy bool) {
 	if child.cursor >= 0 { // below the card's top border
 		s.cursor, s.cursorEnd = len(s.lines)+1+child.cursor, len(s.lines)+1+child.cursorEnd
+	}
+	for _, h := range child.hits { // inside the card's top and left borders
+		h.line += len(s.lines) + 1
+		h.spots = shifted(h.spots, 2)
+		s.hits = append(s.hits, h)
 	}
 	s.lines = append(s.lines, card(title, child.lines, width, heavy)...)
 	s.spots = append(s.spots, child.spots...)
@@ -1150,15 +1202,14 @@ const gutterWidth, labelWidth = 2, 10
 func (m configForm) put(s *section, label, value, after string, at spot) {
 	focused := m.focus == at
 	typed := m.editing && m.edit.at == at
-	gutter, shown := "  ", padded(label, labelWidth)
+	shown := padded(label, labelWidth)
 	if focused {
-		gutter = "› "
 		shown = cursorStyle.Render(label) + strings.Repeat(" ", max(labelWidth-ansi.StringWidth(label), 0))
 	}
 	if typed {
 		value = m.edit.input.View()
 	}
-	line := gutter + shown + value
+	line := gutter(focused) + shown + value
 	if after != "" {
 		line += "  " + after
 	}
@@ -1227,15 +1278,57 @@ func (m configForm) selection() spot {
 	return picked
 }
 
-// layout is the page: the project's card, then the windows' card.
+// layout is the page: the project's card, then the window list and the
+// windows' card.
 func (m configForm) layout() section {
 	shown := m
 	shown.project = m.shown()
 	width := max(m.width, 30)
 	page := newSection()
 	page.boxed("project", shown.projectCard(), width, m.focus.window < 0)
+	picked := shown.selection()
+	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
+	focused := m.focus == listAt
+	line, spots := formWindowList(shown.project.Windows(), picked.window, focused, width-gutterWidth)
+	page.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	page.boxed("windows", shown.windowsCard(width-4), width, m.focus.window >= 0)
 	return page
+}
+
+// gutter is the cells before a row: the cursor's mark when focused.
+func gutter(focused bool) string {
+	if focused {
+		return "› "
+	}
+	return "  "
+}
+
+// clicked is m after a click at (x, y) on a window in the window list
+// or a pane in the pane list, the cursor going there as the arrows take
+// it; elsewhere, m as it was.
+func (m configForm) clicked(x, y int) configForm {
+	line := m.top + y - 1 // below the trail
+	if y < 1 || y > m.bodyHeight() {
+		return m
+	}
+	for _, h := range m.layout().hits {
+		if h.line != line {
+			continue
+		}
+		spot, ok := hotspotAt(h.spots, x)
+		if !ok {
+			return m
+		}
+		at := h.at
+		if at.field == fieldWindowList {
+			at.window = spot.item
+		} else {
+			at.pane = spot.item
+		}
+		m.focus = at
+		return m.settled(1)
+	}
+	return m
 }
 
 // projectCard is the project's name, root, before commands and env.
@@ -1263,24 +1356,19 @@ func (m configForm) projectCard() section {
 	return s
 }
 
-// windowsCard is the window list, then the selected window's name, dir
-// and before commands, its grid, its panes drawn, where the selected
-// pane is placed, then the selected pane's card, all within width cells.
-// On the entry after the last, it is the row typing a new window's name.
+// windowsCard is the selected window's name, dir and before commands,
+// its grid, its panes drawn, the pane list, then the selected pane's
+// card, all within width cells. On "+ window", it is the row typing a
+// new window's name, or, before typing, how to start.
 func (m configForm) windowsCard(width int) section {
 	picked := m.selection()
 	windows := m.project.Windows()
 	s := newSection()
-	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
-	focused := m.focus == listAt
-	gutter := "  "
-	if focused {
-		gutter = "› "
-	}
-	s.row(gutter+formWindowList(windows, picked.window, focused, width-gutterWidth), listAt, focused)
 	if picked.window == len(windows) {
 		if at := (spot{window: picked.window, pane: -1, field: fieldName}); m.editing && m.edit.at == at {
 			m.put(&s, "name", "", "", at)
+		} else {
+			s.text(strings.Repeat(" ", gutterWidth) + keysStyle.Render("enter names a new window"))
 		}
 		return s
 	}
@@ -1306,7 +1394,7 @@ func (m configForm) windowsCard(width int) section {
 	s.text("")
 
 	drawingAt := spot{window: picked.window, pane: picked.pane, field: fieldDrawing}
-	focused = m.focus == drawingAt
+	focused := m.focus == drawingAt
 	plan := m.project.Plan().Windows()[picked.window]
 	// The page is at least 30 cells wide, which leaves the drawing at least
 	// its least width. A session opens at the terminal's size, less tmux's
@@ -1318,13 +1406,12 @@ func (m configForm) windowsCard(width int) section {
 		drawn[i] = strings.Repeat(" ", gutterWidth) + line
 	}
 	s.block(drawn, drawingAt, focused)
-	pane := window.Panes()[picked.pane]
-	name := pane.Name().String()
-	if name == "" {
-		name = "pane"
-	}
-	s.text(strings.Repeat(" ", gutterWidth) + name + "  " + keysStyle.Render(placement(window, pane)))
+	listAt := spot{window: picked.window, pane: picked.pane, field: fieldPaneList}
+	focused = m.focus == listAt
+	line, spots := formPaneList(window, picked.pane, focused, width-gutterWidth)
+	s.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	s.text("")
+	pane := window.Panes()[picked.pane]
 
 	inPane := m.focus.window == picked.window && m.focus.pane == picked.pane && m.focus.field != fieldDrawing
 	s.boxed(paneHeading(pane), m.paneCard(picked.window, picked.pane), width, inPane)
@@ -1332,10 +1419,10 @@ func (m configForm) windowsCard(width int) section {
 }
 
 // formWindowList is the windows' names, then "+ window" adding one, the
-// selected one highlighted as the cursor when focused, else in bold.
-// When they don't fit in width, the first ones make way for the selected
-// one.
-func formWindowList(windows []domain.Window, selected int, focused bool, width int) string {
+// selected one highlighted as the cursor when focused, else in bold,
+// with the cells each covers, to click it. When they don't fit in width,
+// the first ones make way for the selected one.
+func formWindowList(windows []domain.Window, selected int, focused bool, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(windows)+1)
 	for _, window := range windows {
 		labels = append(labels, " "+window.Name().String()+" ")
@@ -1351,13 +1438,30 @@ func formWindowList(windows []domain.Window, selected int, focused bool, width i
 			labels[i] = keysStyle.Render(label)
 		}
 	}
-	first := 0
-	line := strings.Join(labels, " ")
-	for first < selected && ansi.StringWidth(line) > width {
-		first++
-		line = "…" + strings.Join(labels[first:], " ")
+	return listed(labels, selected, width)
+}
+
+// formPaneList is the names of window's panes, or their numbers for
+// those without, the selected one in cyan, highlighted as the cursor
+// when focused, with the cells each covers, to click it. When they don't
+// fit in width, the first ones make way for the selected one.
+func formPaneList(window domain.Window, selected int, focused bool, width int) (string, []hotspot) {
+	labels := make([]string, 0, len(window.Panes()))
+	for i, pane := range window.Panes() {
+		name := pane.Name().String()
+		if name == "" {
+			name = strconv.Itoa(i + 1)
+		}
+		switch {
+		case i == selected && focused:
+			labels = append(labels, pickedStyle.Reverse(true).Render(" "+name+" "))
+		case i == selected:
+			labels = append(labels, pickedStyle.Render("["+name+"]"))
+		default:
+			labels = append(labels, " "+name+" ")
+		}
 	}
-	return line
+	return listed(labels, selected, width)
 }
 
 // placement is how pane is placed in window: by its grid, or splitting
@@ -1397,6 +1501,7 @@ func (m configForm) paneCard(index, j int) section {
 	pane := window.Panes()[j]
 	at := func(f field) spot { return spot{window: index, pane: j, field: f} }
 	s := newSection()
+	s.text(strings.Repeat(" ", gutterWidth) + keysStyle.Render(placement(window, pane)))
 
 	name := pane.Name().String()
 	if name == "" {
@@ -1503,6 +1608,7 @@ func (m configForm) bodyHeight() int {
 func (m configForm) View() tea.View {
 	view := tea.NewView(m.render())
 	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
 }
 
