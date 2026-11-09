@@ -32,13 +32,7 @@ layers), XL (mostly open questions).
 
 ## Order
 
-| # | Task | Kind | Size | Needs |
-| --- | --- | --- | --- | --- |
-| 14 | Tasks in the config form | form | M | |
-
-## 14. Tasks in the config form
-
-Add, edit, remove and reorder a pane's tasks in its card.
+Nothing is scheduled: what is left waits for a need, below.
 
 ## By need
 

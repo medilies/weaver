@@ -107,6 +107,8 @@ const (
 	fieldStarts
 	fieldClear
 	fieldCommand
+	fieldTask       // a task's command, past the last task the row adding one
+	fieldTaskName   // a task's name
 	fieldWindowList // the window list, the window being the one selected
 	fieldPaneList   // the pane list, the pane being the one selected
 	fieldDrawing    // the window's panes drawn, the pane being the one selected
@@ -115,6 +117,11 @@ const (
 // isList reports whether f holds a list, a row per item.
 func isList(f field) bool {
 	return f == fieldBefore || f == fieldEnv || f == fieldNote
+}
+
+// isTask reports whether f is a row of a pane's tasks, two rows each.
+func isTask(f field) bool {
+	return f == fieldTask || f == fieldTaskName
 }
 
 // spot is a row the cursor can be on: a field of the project (window
@@ -883,8 +890,9 @@ func (m configForm) inputWidth(at spot) int {
 	return max(m.width-4*depth-gutterWidth-labelWidth-12, 10)
 }
 
-// added is m after o: an item typed into the list the cursor is in, the
-// pane it is in split right, or a window typed after the last.
+// added is m after o: an item typed into the list the cursor is in, a
+// task's command into its pane's tasks, the pane it is in split right, or
+// a window typed after the last.
 func (m configForm) added() (configForm, tea.Cmd) {
 	at := m.focus
 	switch {
@@ -895,14 +903,16 @@ func (m configForm) added() (configForm, tea.Cmd) {
 		}
 		list.item = len(m.items(list))
 		return m.typeInto(list, "", true)
+	case isTask(at.field):
+		return m.typeInto(spot{window: at.window, pane: at.pane, field: fieldTask, item: len(m.tasksAt(at))}, "", true)
 	case at.window >= 0 && at.pane >= 0:
 		return m.split(domain.Right), nil
 	}
 	return m.typeInto(spot{window: len(m.project.Windows()), pane: -1, field: fieldName}, "", true)
 }
 
-// deleting is m after d: the item removed from its list, or the pane or
-// window the cursor is in, once the user confirms.
+// deleting is m after d: the item or task removed from its list, or the
+// pane or window the cursor is in, once the user confirms.
 func (m configForm) deleting() configForm {
 	at := m.focus
 	window, inWindow := m.windowAt(at.window)
@@ -915,6 +925,12 @@ func (m configForm) deleting() configForm {
 	case isList(at.field):
 		if items := m.items(at); at.item < len(items) {
 			return m.changedTo(m.withItems(at, slices.Delete(items, at.item, at.item+1)))
+		}
+	case isTask(at.field):
+		if tasks := m.tasksAt(at); at.item < len(tasks) {
+			project, err := m.withTasks(at, slices.Delete(tasks, at.item, at.item+1))
+			at.field = fieldTask // the next task's command, or + add
+			return m.changedAt(project, err, at)
 		}
 	case at.field == fieldProjectEnv:
 		m.problem = "The project sets this variable: change it in the project's card."
@@ -959,7 +975,7 @@ func replaced(project domain.Project, index int, window domain.Window, err error
 	return project.ReplacingWindow(index, window)
 }
 
-// reordered is m after J (by 1) or K (by -1): the item or the window
+// reordered is m after J (by 1) or K (by -1): the item, task or window
 // the cursor is on moved down or up, the cursor following it.
 func (m configForm) reordered(by int) configForm {
 	at := m.focus
@@ -974,6 +990,15 @@ func (m configForm) reordered(by int) configForm {
 		}
 		items[at.item], items[to] = items[to], items[at.item]
 		project, err := m.withItems(at, items)
+		at.item = to
+		return m.changedAt(project, err, at)
+	case isTask(at.field):
+		tasks, to := m.tasksAt(at), at.item+by
+		if at.item >= len(tasks) || to < 0 || to >= len(tasks) {
+			return m
+		}
+		tasks[at.item], tasks[to] = tasks[to], tasks[at.item]
+		project, err := m.withTasks(at, tasks)
 		at.item = to
 		return m.changedAt(project, err, at)
 	case inWindow && at.pane < 0:
@@ -1028,6 +1053,8 @@ func (m configForm) applied(at spot, text string) (domain.Project, error) {
 		return m.withVar(spot{window: at.window, pane: at.pane, field: fieldEnv, item: len(m.ownEnv(at).Names())}, text)
 	case isList(at.field):
 		return m.withItems(at, withItem(m.items(at), at.item, text))
+	case isTask(at.field):
+		return m.withTask(at, text)
 	case at.window == len(m.project.Windows()):
 		name, err := domain.NewWindowName(text)
 		if err != nil {
@@ -1196,6 +1223,58 @@ func withItem(items []string, index int, text string) []string {
 	return append(items, text)
 }
 
+// tasksAt are the tasks of the pane at's row is in.
+func (m configForm) tasksAt(at spot) []domain.Task {
+	_, pane, _ := m.paneAt(at)
+	return pane.Tasks()
+}
+
+// withTasks is the project with the pane at's row is in offering tasks.
+func (m configForm) withTasks(at spot, tasks []domain.Task) (domain.Project, error) {
+	return m.paneChanged(at, func(pane domain.Pane) (domain.Pane, error) { return pane.Offering(tasks...), nil })
+}
+
+// withTask is the project with text typed on the task row at: a task's
+// command, blank removing the task and past the last adding one, or its
+// name, blank for none.
+func (m configForm) withTask(at spot, text string) (domain.Project, error) {
+	tasks := m.tasksAt(at)
+	if at.field == fieldTaskName {
+		if at.item >= len(tasks) {
+			return domain.Project{}, fmt.Errorf("%w: #%d", domain.ErrTaskNotFound, at.item+1)
+		}
+		task, err := domain.NewTask(text, tasks[at.item].Command())
+		if err != nil {
+			return domain.Project{}, err
+		}
+		tasks[at.item] = task
+		return m.withTasks(at, tasks)
+	}
+	if strings.TrimSpace(text) == "" {
+		if at.item < len(tasks) {
+			tasks = slices.Delete(tasks, at.item, at.item+1)
+		}
+		return m.withTasks(at, tasks)
+	}
+	cmd, err := domain.NewCommand(text)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	if at.item >= len(tasks) {
+		task, err := domain.NewTask("", cmd)
+		if err != nil {
+			return domain.Project{}, err
+		}
+		return m.withTasks(at, append(tasks, task))
+	}
+	task, err := domain.NewTask(tasks[at.item].Name(), cmd)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	tasks[at.item] = task
+	return m.withTasks(at, tasks)
+}
+
 // current is what the row at holds, as typed.
 func (m configForm) current(at spot) string {
 	root := m.project.Root()
@@ -1213,6 +1292,15 @@ func (m configForm) current(at spot) string {
 		return ""
 	case at.field == fieldProjectEnv:
 		return envItems(m.projectEnv(at))[at.item]
+	case isTask(at.field):
+		tasks := m.tasksAt(at)
+		switch {
+		case at.item >= len(tasks):
+			return ""
+		case at.field == fieldTaskName:
+			return tasks[at.item].Name()
+		}
+		return tasks[at.item].Command().String()
 	case !inPane && at.field == fieldName:
 		return window.Name().String()
 	case !inPane:
@@ -1365,7 +1453,7 @@ func (m configForm) list(s *section, label string, items []string, at spot) {
 // shown is the project with what is typed, when it is valid and shows
 // where it is typed, else the project.
 func (m configForm) shown() domain.Project {
-	if m.editing && m.edit.err == nil && !isList(m.edit.at.field) && m.edit.at.field != fieldProjectEnv {
+	if m.editing && m.edit.err == nil && !isList(m.edit.at.field) && !isTask(m.edit.at.field) && m.edit.at.field != fieldProjectEnv {
 		return m.edit.preview
 	}
 	return m.project
@@ -1624,7 +1712,7 @@ func placement(window domain.Window, pane domain.Pane) string {
 
 // paneCard is a pane's fields, its project's and window's before
 // commands and its project's variables dimmed among its own, with the
-// level they come from.
+// level they come from, then its tasks.
 func (m configForm) paneCard(index, j int) section {
 	p := m.project
 	root := p.Root()
@@ -1681,7 +1769,24 @@ func (m configForm) paneCard(index, j int) section {
 	m.put(&s, label, keysStyle.Render("+ add"), "", spot{window: index, pane: j, field: fieldEnv, item: len(vars)})
 
 	m.list(&s, "note", pane.Note(), at(fieldNote))
+	m.taskRows(&s, pane.Tasks(), at(fieldTask))
 	return s
+}
+
+// taskRows adds a pane's tasks, a row for each one's command and one for
+// its name, then the row adding one.
+func (m configForm) taskRows(s *section, tasks []domain.Task, at spot) {
+	label := "tasks"
+	for i, task := range tasks {
+		m.put(s, label, task.Command().String(), "", spot{window: at.window, pane: at.pane, field: fieldTask, item: i})
+		name := task.Name()
+		if name == "" {
+			name = keysStyle.Render("none: shown by its command")
+		}
+		m.put(s, "  name", name, "", spot{window: at.window, pane: at.pane, field: fieldTaskName, item: i})
+		label = ""
+	}
+	m.put(s, label, keysStyle.Render("+ add"), "", spot{window: at.window, pane: at.pane, field: fieldTask, item: len(tasks)})
 }
 
 // varText is v as shown, "NAME=value", its value quoted when it would
