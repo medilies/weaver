@@ -292,12 +292,14 @@ windows:
 | `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, a space first so shells ignoring such lines keep it out of their history, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
+| `windows[].focus` | `true` lands `weave <project>` in this window when it starts the session, instead of the first. At most one window. |
 | `windows[].env` | Variables for every pane of the window, over the project's, per variable. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
 | `windows[].clear` | Whether the window's panes clear their `before` commands, over the project's `clear`. |
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see below. |
 | `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
+| `focus` (pane) | `true` selects this pane in its window, instead of the first. At most one pane per window. Freezing a session focuses the window and panes that were active. |
 | `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |

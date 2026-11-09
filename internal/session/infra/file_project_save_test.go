@@ -91,6 +91,23 @@ func TestFileProjectRegistrySave(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves out the focus of a first window and a first pane, which they have anyway", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "shop", `root: /srv/shop
+windows:
+  - name: api
+    focus: true
+    panes:
+      - name: shell
+        focus: true
+      - name: tests
+        split: { direction: right }
+  - name: app
+`))
+		if strings.Contains(got, "focus") {
+			t.Fatalf("got:\n%s\nwant no focus", got)
+		}
+	})
+
 	t.Run("keeps commands to run first in a project's default window", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "weaver", "root: /srv/weaver\nwindows: [{name: weaver, before: [nvm use 20]}]\n"))
 		if !strings.Contains(got, "    before:\n      - nvm use 20\n") {

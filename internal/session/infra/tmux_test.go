@@ -259,6 +259,62 @@ func TestTmuxStart(t *testing.T) {
 	})
 }
 
+func TestTmuxFocus(t *testing.T) {
+	doc := fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "a"},
+		{"name": "b", "focus": true, "panes": [
+			{"name": "left"},
+			{"name": "right", "focus": true, "split": {"direction": "right"}},
+			{"name": "under", "split": {"direction": "below"}}
+		]}
+	]}`, t.TempDir())
+	start := func(t *testing.T) (tmuxServer, domain.Project) {
+		t.Helper()
+		server := newTmuxServer(t)
+		project, err := load(t, "focus", doc)
+		if err != nil {
+			t.Fatalf("loading: %v", err)
+		}
+		if err := server.tmux().Start(project.Plan()); err != nil {
+			t.Fatalf("starting: %v", err)
+		}
+		return server, project
+	}
+
+	t.Run("lands a started session in its focused window", func(t *testing.T) {
+		server, _ := start(t)
+		if got := server.query(t, "display-message", "-p", "-t", "=focus:", "#{window_name}"); got != "b" {
+			t.Fatalf("got window %q, want b", got)
+		}
+	})
+
+	t.Run("selects a window's focused pane", func(t *testing.T) {
+		server, _ := start(t)
+		if got := server.query(t, "display-message", "-p", "-t", "=focus:b", "#{@label}"); got != "right" {
+			t.Fatalf("got pane %q, want right", got)
+		}
+	})
+
+	t.Run("selects a restored window's focused pane without switching to it", func(t *testing.T) {
+		server, project := start(t)
+		server.query(t, "select-window", "-t", "=focus:a")
+		server.query(t, "kill-window", "-t", "=focus:b")
+		session, _, err := server.tmux().Find(project.Name())
+		if err != nil {
+			t.Fatalf("finding: %v", err)
+		}
+		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := server.query(t, "display-message", "-p", "-t", "=focus:", "#{window_name}"); got != "a" {
+			t.Fatalf("got window %q, want a still", got)
+		}
+		if got := server.query(t, "display-message", "-p", "-t", "=focus:b", "#{@label}"); got != "right" {
+			t.Fatalf("got pane %q, want right", got)
+		}
+	})
+}
+
 func TestTmuxStartClearing(t *testing.T) {
 	server := newTmuxServer(t)
 	plan := planOf(t, "cleared", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
@@ -780,6 +836,27 @@ func TestTmuxCapture(t *testing.T) {
 		}
 		if got := layoutOf(t, windows, root); !slices.Equal(got, want) {
 			t.Fatalf("got  %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("focuses the window and the panes that are active", func(t *testing.T) {
+		server.query(t, "select-window", "-t", "=capture:app")
+		server.query(t, "select-pane", "-t", server.paneLabelled(t, "capture", "main"))
+		windows, err := server.tmux().Capture("capture")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		name, _ := domain.NewProjectName("capture")
+		projectRoot, _ := domain.NewProjectRoot(root)
+		project, err := domain.NewProject(name, projectRoot).WithWindows(windows...)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := project.FocusedWindow(); got != 1 {
+			t.Fatalf("got window #%d, want #2, app", got+1)
+		}
+		if got := windows[1].FocusedPane(); got != 1 {
+			t.Fatalf("got pane #%d, want #2, main", got+1)
 		}
 	})
 

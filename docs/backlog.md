@@ -38,45 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 3. Focus (S)
-
-**When**: the pane you work in isn't the first one created, such as a
-wide editor split off a narrow log pane.
-
-```yaml
-windows:
-  - name: shell
-  - name: editor
-    focus: true
-    panes:
-      - name: logs
-      - name: nvim
-        split: { direction: right, size: 70% }
-        focus: true
-```
-
-Windows and splits are created with `-d` (`Tmux.newWindow`, `Tmux.fill`),
-so you always land in the first window's first pane. That stays the
-default. tmuxinator has it as `startup_window` and `startup_pane`, tmuxp
-as `focus: true`.
-
-- `domain`: at most one focused window per project and one focused pane
-  per window, checked in `WithWindows` and `NewWindow` (two new errors).
-  The plans carry the choice.
-- `infra`: `Tmux.Start` ends with a `select-pane` per window and one
-  `select-window`. `Tmux.Restore` selects the focused pane in the
-  windows it adds, without switching away from the window you're in;
-  only a new session lands you on the focused window.
-- The domain moves focus: `Project.Focusing(window)` and
-  `Window.Focusing(pane)` drop the previous one, so the config form only
-  passes the choice on; the two errors catch a hand-written config.
-- Freeze reads `#{window_active}` and `#{pane_active}` in `Capture`, so
-  a captured session keeps where you were. `focus` is written only off
-  the default (not on the first window or pane), by freeze and the
-  config form alike.
-- Schema: `focus` boolean on windows and panes.
-- Test (tmux): after `Start`, the focused window and pane are active.
-
 ### 4. Setup and teardown in the config form (S)
 
 **When**: someone wants to change setup or teardown commands without

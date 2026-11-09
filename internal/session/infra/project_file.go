@@ -43,6 +43,7 @@ type projectFile struct {
 
 type windowFile struct {
 	Name   string            `yaml:"name"`
+	Focus  bool              `yaml:"focus,omitempty"`
 	Dir    string            `yaml:"dir,omitempty"`
 	Env    map[string]string `yaml:"env,omitempty"`
 	Before []string          `yaml:"before,omitempty"`
@@ -75,6 +76,7 @@ func (r areaRow) MarshalYAML() (any, error) {
 
 type paneFile struct {
 	Name    string            `yaml:"name,omitempty"`
+	Focus   bool              `yaml:"focus,omitempty"`
 	Dir     string            `yaml:"dir,omitempty"`
 	Split   *splitFile        `yaml:"split,omitempty"`
 	Before  []string          `yaml:"before,omitempty"`
@@ -310,7 +312,11 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	} else if window, err = domain.NewWindow(name, panes...); err != nil {
 		return domain.Window{}, err
 	}
-	return window.In(dir).WithEnv(env).RunningFirst(before...).WithClearing(toClearing(w.Clear)), nil
+	window = window.In(dir).WithEnv(env).RunningFirst(before...).WithClearing(toClearing(w.Clear))
+	if w.Focus {
+		window = window.WithFocus()
+	}
+	return window, nil
 }
 
 // toDir reads a window or pane dir, "~" expanded.
@@ -415,7 +421,11 @@ func (p paneFile) toPane(index int, siblings []paneFile) (domain.Pane, error) {
 		}
 		tasks = append(tasks, task)
 	}
-	return pane.WithEnv(env).Offering(tasks...), nil
+	pane = pane.WithEnv(env).Offering(tasks...)
+	if p.Focus {
+		pane = pane.WithFocus()
+	}
+	return pane, nil
 }
 
 func (t taskFile) toTask() (domain.Task, error) {
@@ -499,11 +509,11 @@ func commented(node *yaml.Node) bool {
 }
 
 // encodeProject writes a config in its canonical form: defaults left out,
-// a grid as written, with its window's panes in creation order and no
-// splits, "split.of" only when it isn't the previous pane, a pane's dir
-// only when it isn't its window's, directories under the root relative to
-// it, the home directory as "~", and pointing to the schema saved next to
-// it with a header line.
+// focus only off the first window or pane, a grid as written, with its
+// window's panes in creation order and no splits, "split.of" only when it
+// isn't the previous pane, a pane's dir only when it isn't its window's,
+// directories under the root relative to it, the home directory as "~",
+// and pointing to the schema saved next to it with a header line.
 func encodeProject(project domain.Project) ([]byte, error) {
 	root := project.Root()
 	file := projectFile{
@@ -515,8 +525,9 @@ func encodeProject(project domain.Project) ([]byte, error) {
 		Clear:    clearOf(project.Clearing()),
 	}
 	if !onlyDefaultWindow(project) {
-		for _, window := range project.Windows() {
+		for i, window := range project.Windows() {
 			file.Windows = append(file.Windows, windowFileOf(root, window))
+			file.Windows[i].Focus = i > 0 && i == project.FocusedWindow()
 		}
 	}
 
@@ -593,6 +604,7 @@ func paneFileOf(root domain.ProjectRoot, window domain.Window, index int) paneFi
 		Clear:  clearOf(pane.Clearing()),
 		Note:   pane.Note(),
 		Env:    envMap(pane.Env()),
+		Focus:  index > 0 && index == window.FocusedPane(),
 	}
 	for _, task := range pane.Tasks() {
 		file.Tasks = append(file.Tasks, taskFile{Name: task.Name(), Command: task.Command().String()})

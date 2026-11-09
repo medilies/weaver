@@ -226,6 +226,29 @@ func TestFileProjectRegistryReadsLayouts(t *testing.T) {
 	})
 }
 
+func TestFileProjectRegistryReadsFocus(t *testing.T) {
+	nimbus := loadFixture(t, "nimbus")
+
+	t.Run("reads the focused window", func(t *testing.T) {
+		if got := nimbus.FocusedWindow(); got != 1 {
+			t.Fatalf("got window #%d, want #2, app", got+1)
+		}
+	})
+
+	t.Run("reads a window's focused pane", func(t *testing.T) {
+		if got := nimbus.Windows()[1].FocusedPane(); got != 1 {
+			t.Fatalf("got pane #%d, want #2, flutter run", got+1)
+		}
+	})
+
+	t.Run("rejects two focused windows", func(t *testing.T) {
+		_, err := load(t, "shop", "root: /srv/shop\nwindows: [{name: a, focus: true}, {name: b, focus: true}]\n")
+		if !errors.Is(err, domain.ErrFocusedWindowTwice) {
+			t.Fatalf("got %v, want ErrFocusedWindowTwice", err)
+		}
+	})
+}
+
 func TestFileProjectRegistryReadsEnvironments(t *testing.T) {
 	shop := loadFixture(t, "shop")
 

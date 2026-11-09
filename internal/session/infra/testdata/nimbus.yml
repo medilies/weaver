@@ -16,10 +16,12 @@ windows:
           direction: below
         command: nimbus psql
   - name: app
+    focus: true
     dir: app
     panes:
       - name: app shell
       - name: flutter run
+        focus: true
         split:
           direction: right
           size: 40%

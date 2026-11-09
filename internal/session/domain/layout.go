@@ -392,6 +392,7 @@ type Pane struct {
 	env     Env
 	clears  Clearing
 	tasks   []Task
+	focused bool
 }
 
 // NewPane is an unnamed shell in its window's directory.
@@ -476,6 +477,13 @@ func (p Pane) WithEnv(env Env) Pane {
 	return p
 }
 
+// WithFocus makes the pane the one its window selects. A window has at
+// most one; its first pane is selected unless another is focused.
+func (p Pane) WithFocus() Pane {
+	p.focused = true
+	return p
+}
+
 // Offering gives the pane tasks to run on request, in order, in place of
 // those it had. Its window checks they can be told apart.
 func (p Pane) Offering(tasks ...Task) Pane {
@@ -541,18 +549,25 @@ type Window struct {
 	clears  Clearing
 	grid    Grid
 	gridded bool
+	focused bool
 }
 
 // NewWindow validates and constructs a Window. With no panes, it holds one
 // shell in its directory. Panes must be named, uniquely, when there are
 // several: the names label their borders. Each pane's tasks must be told
-// apart: no two share a name, nor two unnamed ones a command.
+// apart: no two share a name, nor two unnamed ones a command. At most one
+// pane is focused.
 func NewWindow(name WindowName, panes ...Pane) (Window, error) {
 	if len(panes) == 0 {
 		panes = []Pane{NewPane()}
 	}
 	named := make(map[string]bool, len(panes))
+	focused := false
 	for i, pane := range panes {
+		if pane.focused && focused {
+			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), ErrFocusedPaneTwice)
+		}
+		focused = focused || pane.focused
 		if err := checkPlacement(i, pane); err != nil {
 			return Window{}, fmt.Errorf("pane %s: %w", paneRef(i, pane), err)
 		}
@@ -657,6 +672,33 @@ func (w Window) WithEnv(env Env) Window {
 func (w Window) WithClearing(c Clearing) Window {
 	w.clears = c
 	return w
+}
+
+// WithFocus makes the window the one opening a project lands in. A
+// project has at most one; its first window is, unless another is
+// focused.
+func (w Window) WithFocus() Window {
+	w.focused = true
+	return w
+}
+
+// Focusing is the window selecting the pane at index instead of the one
+// it selected.
+func (w Window) Focusing(index int) (Window, error) {
+	if err := w.checkPaneIndex(index); err != nil {
+		return Window{}, err
+	}
+	w.panes = slices.Clone(w.panes)
+	for i := range w.panes {
+		w.panes[i].focused = i == index
+	}
+	return w, nil
+}
+
+// FocusedPane is the index of the pane the window selects: the focused
+// one, else the first.
+func (w Window) FocusedPane() int {
+	return max(slices.IndexFunc(w.panes, func(p Pane) bool { return p.focused }), 0)
 }
 
 // Named renames the window. Window names are unique within a project,

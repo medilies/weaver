@@ -143,19 +143,24 @@ func NewProject(name ProjectName, root ProjectRoot) Project {
 }
 
 // WithWindows replaces the windows the project's session opens, in order.
-// Window names must be unique. With no windows, the project falls back to
-// its default window.
+// Window names must be unique, and at most one window focused. With no
+// windows, the project falls back to its default window.
 func (p Project) WithWindows(windows ...Window) (Project, error) {
 	if len(windows) == 0 {
 		p.windows, p.defaulted = []Window{defaultWindow(p.name)}, true
 		return p, nil
 	}
 	seen := make(map[string]bool, len(windows))
+	focused := false
 	for _, window := range windows {
 		if seen[window.name.value] {
 			return Project{}, fmt.Errorf("window %q: %w", window.name.value, ErrDuplicateWindowName)
 		}
+		if window.focused && focused {
+			return Project{}, fmt.Errorf("window %q: %w", window.name.value, ErrFocusedWindowTwice)
+		}
 		seen[window.name.value] = true
+		focused = focused || window.focused
 	}
 	p.windows, p.defaulted = slices.Clone(windows), false
 	return p, nil
@@ -296,6 +301,25 @@ func (p Project) MovingWindow(from, to int) (Project, error) {
 	}
 	window := p.windows[from]
 	return p.WithWindows(slices.Insert(slices.Delete(p.Windows(), from, from+1), to, window)...)
+}
+
+// Focusing is the project landing in the window at index when opened,
+// instead of the one it landed in.
+func (p Project) Focusing(index int) (Project, error) {
+	if err := p.checkWindowIndex(index); err != nil {
+		return Project{}, err
+	}
+	p.windows = slices.Clone(p.windows)
+	for i := range p.windows {
+		p.windows[i].focused = i == index
+	}
+	return p, nil
+}
+
+// FocusedWindow is the index of the window opening the project lands in:
+// the focused one, else the first.
+func (p Project) FocusedWindow() int {
+	return max(slices.IndexFunc(p.windows, func(w Window) bool { return w.focused }), 0)
 }
 
 func (p Project) checkWindowIndex(index int) error {

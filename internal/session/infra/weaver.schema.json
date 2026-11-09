@@ -91,6 +91,10 @@
           "type": "string",
           "minLength": 1
         },
+        "focus": {
+          "description": "true lands weave <project> in this window when it starts the session, instead of the first. At most one window.",
+          "type": "boolean"
+        },
         "dir": {
           "description": "Where the window's panes start, unless they have their own dir: relative to root, absolute, or starting with ~/.",
           "type": "string"
@@ -127,6 +131,10 @@
           "description": "Shown in the pane's top border. Required, and unique, when the window has several panes or a grid.",
           "type": "string",
           "minLength": 1
+        },
+        "focus": {
+          "description": "true selects this pane in its window, instead of the first. At most one pane per window.",
+          "type": "boolean"
         },
         "dir": {
           "description": "Where the pane's shell starts, instead of its window's dir: relative to root (. for root itself), absolute, or starting with ~/.",

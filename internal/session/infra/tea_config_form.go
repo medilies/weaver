@@ -107,6 +107,7 @@ const (
 	fieldNote
 	fieldStarts
 	fieldClear
+	fieldFocus
 	fieldCommand
 	fieldTask       // a task's command, past the last task the row adding one
 	fieldTaskName   // a task's name
@@ -608,8 +609,58 @@ func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 		count := len(clearOptions(m.focus))
 		next := ((clearIndex(m.clearingAt(m.focus))+by)%count + count) % count
 		return m.changedTo(m.cleared(m.focus, clearings[next])), nil
+	case fieldFocus:
+		return m.changedTo(m.refocused(m.focus, !m.focusedAt(m.focus))), nil
 	}
 	return m, nil
+}
+
+// focusOptions are the options of a focus row, false then true.
+var focusOptions = []string{"no", "yes"}
+
+// focusedAt reports whether the window or pane of at's row is the one
+// its project lands in, or its window selects.
+func (m configForm) focusedAt(at spot) bool {
+	window, _ := m.windowAt(at.window)
+	if at.pane < 0 {
+		return m.project.FocusedWindow() == at.window
+	}
+	return window.FocusedPane() == at.pane
+}
+
+// refocused is the project with the window or pane of at's row focused,
+// or not, its first one then being focused, as it is unless another is.
+func (m configForm) refocused(at spot, on bool) (domain.Project, error) {
+	index := at.window
+	if at.pane >= 0 {
+		index = at.pane
+	}
+	if !on {
+		if !m.focusedAt(at) {
+			return m.project, nil
+		}
+		if index == 0 {
+			return domain.Project{}, errors.New("the first one is focused unless another is: focus another one")
+		}
+		index = 0
+	}
+	if at.pane < 0 {
+		return m.project.Focusing(index)
+	}
+	return m.windowChanged(at, func(w domain.Window) (domain.Window, error) { return w.Focusing(index) })
+}
+
+// putFocus adds the focus row of the window or pane at, when there is
+// another one to focus instead.
+func (m configForm) putFocus(s *section, at spot, among int) {
+	if among < 2 {
+		return
+	}
+	selected := 0
+	if m.focusedAt(at) {
+		selected = 1
+	}
+	m.putChoices(s, "focus", focusOptions, selected, at)
 }
 
 // clearings are the settings a clear row goes through, in the order of
@@ -848,7 +899,7 @@ func (m configForm) startsClicked(at spot, option int) (configForm, tea.Cmd) {
 func (m configForm) entered() (configForm, tea.Cmd) {
 	at := m.focus
 	switch at.field {
-	case fieldStarts, fieldClear:
+	case fieldStarts, fieldClear, fieldFocus:
 		return m.stepped(1)
 	case fieldWindowList:
 		at.field = fieldName
@@ -1639,6 +1690,9 @@ func (m configForm) clicked(x, y int) (configForm, tea.Cmd) {
 		case fieldClear:
 			m.focus = at
 			return m.changedTo(m.cleared(at, clearings[spot.item])), nil
+		case fieldFocus:
+			m.focus = at
+			return m.changedTo(m.refocused(at, spot.item == 1)), nil
 		case fieldWindowList:
 			at.window = spot.item
 		default:
@@ -1692,6 +1746,7 @@ func (m configForm) windowsCard(width int) section {
 	at := func(f field) spot { return spot{window: picked.window, pane: -1, field: f} }
 	m.put(&s, "name", window.Name().String(), "", at(fieldName))
 	m.put(&s, "dir", shownDir(root, window.Dir()), m.mark(root.Resolve(window.Dir())), at(fieldDir))
+	m.putFocus(&s, at(fieldFocus), len(windows))
 	m.list(&s, "before", lines(window.Before()), at(fieldBefore))
 	m.putClear(&s, at(fieldClear))
 	m.envRows(&s, at(fieldEnv))
@@ -1835,6 +1890,7 @@ func (m configForm) paneCard(index, j int) section {
 		}
 	}
 	m.put(&s, "dir", value, m.mark(root.Resolve(dir)), at(fieldDir))
+	m.putFocus(&s, at(fieldFocus), len(window.Panes()))
 	mode := startMode(pane)
 	if m.editing && m.edit.at == at(fieldCommand) {
 		mode = m.typedMode()

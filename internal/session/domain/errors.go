@@ -59,6 +59,12 @@ var (
 	// ErrDuplicatePaneName is returned when two panes of a window share a
 	// name.
 	ErrDuplicatePaneName = errors.New("pane names must be unique within a window")
+	// ErrFocusedPaneTwice is returned when two panes of a window are
+	// focused: a window selects one.
+	ErrFocusedPaneTwice = errors.New("at most one pane of a window can be focused")
+	// ErrFocusedWindowTwice is returned when two windows of a project are
+	// focused: opening lands in one.
+	ErrFocusedWindowTwice = errors.New("at most one window of a project can be focused")
 	// ErrDuplicateWindowName is returned when two windows of a project
 	// share a name.
 	ErrDuplicateWindowName = errors.New("window names must be unique within a project")

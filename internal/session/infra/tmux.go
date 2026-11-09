@@ -76,9 +76,11 @@ func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error)
 	return domain.NewRunningSession(owned, windows...), true, nil
 }
 
-// Start implements domain.SessionLauncher.
+// Start implements domain.SessionLauncher. The session lands in its
+// focused window.
 func (t Tmux) Start(plan domain.SessionPlan) error {
 	var session, previous, defaultCommand string
+	var focused string
 	for i, window := range plan.Windows() {
 		var windowID, paneID string
 		var err error
@@ -100,6 +102,15 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 			return err
 		}
 		previous = windowID
+		if i == plan.FocusedWindow() {
+			focused = windowID
+		}
+	}
+	if plan.FocusedWindow() > 0 {
+		if _, err := t.run("select-window", "-t", focused); err != nil {
+			_, _ = t.run("kill-session", "-t", session)
+			return err
+		}
 	}
 	return nil
 }
@@ -156,14 +167,15 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // its window or session gets a number. The job in the foreground of a
 // pane's terminal, if any, is typed at its prompt but not run: ps rebuilds
 // it from its arguments, losing quotes, pipes and variables, so the user
-// checks it first. A pane started with a command, rather than a shell,
+// checks it first. The active window and panes are focused, so freezing
+// keeps where you were. A pane started with a command, rather than a shell,
 // gets that command, as tmux holds it, in the directory it started in. The pane weaver runs in gets no
 // command: its job is weaver. A pane with a job keeps its shell's
 // directory, which the typed command will run from, rather than the
 // job's, when /proc tells them apart.
 func (t Tmux) Capture(session string) ([]domain.Window, error) {
 	out, err := t.run("list-windows", "-t", "="+session, "-F",
-		"#{?"+throwawayTag+",1,0} #{window_layout} "+sized("window_name"))
+		"#{?"+throwawayTag+",1,0} #{window_active} #{window_layout} "+sized("window_name"))
 	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, session)
 	}
@@ -188,6 +200,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 		if throwaway == "1" {
 			continue
 		}
+		active, rest, _ := strings.Cut(rest, " ")
 		layout, rawName, _ := strings.Cut(rest, " ")
 		rawName = verbatim(rawName)
 		cell, err := parseLayout(layout)
@@ -205,6 +218,9 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 		window, err := domain.NewWindow(name, panes...)
 		if err != nil {
 			return nil, fmt.Errorf("window %q: %w", name, err)
+		}
+		if active == "1" {
+			window = window.WithFocus()
 		}
 		windows = append(windows, window)
 	}
@@ -234,7 +250,14 @@ func (t Tmux) capturePanes(order []domain.CarvedPane, shells map[string]bool) ([
 		if err != nil {
 			return nil, err
 		}
+		active, err := t.run("display-message", "-p", "-t", target, "#{pane_active}")
+		if err != nil {
+			return nil, err
+		}
 		pane := domain.NewPane()
+		if active == "1" {
+			pane = pane.WithFocus()
+		}
 		if target != t.opts.Pane {
 			if cmd, ok := startedWith(startArgs(verbatim(start)), shells); ok {
 				pane = pane.Prefilling(cmd)
@@ -728,9 +751,9 @@ func (t Tmux) newWindow(target []string, window domain.WindowPlan, defaultComman
 }
 
 // fill tags the window as the project's, splits its first pane into the
-// others, labels them in their borders, then types their commands: those
-// to run first, clear and the note when the pane clears, then the startup
-// one.
+// others, labels them in their borders, types their commands: those to
+// run first, clear and the note when the pane clears, then the startup
+// one, and selects its focused pane, without switching to the window.
 func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defaultCommand string) error {
 	if _, err := t.run("set-option", "-w", "-t", windowID, "@weaver_window", argument(window.Name().String())); err != nil {
 		return err
@@ -774,6 +797,10 @@ func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defau
 				return err
 			}
 		}
+	}
+	if focused := window.FocusedPane(); focused > 0 {
+		_, err := t.run("select-pane", "-t", ids[focused])
+		return err
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import "slices"
 type SessionPlan struct {
 	name    ProjectName
 	windows []WindowPlan
+	focused int
 }
 
 // Name is the tmux session name.
@@ -21,10 +22,17 @@ func (p SessionPlan) Windows() []WindowPlan {
 	return slices.Clone(p.windows)
 }
 
+// FocusedWindow is the index of the window starting the session lands
+// in.
+func (p SessionPlan) FocusedWindow() int {
+	return p.focused
+}
+
 // WindowPlan is one window of a SessionPlan.
 type WindowPlan struct {
-	name  WindowName
-	panes []PanePlan
+	name    WindowName
+	panes   []PanePlan
+	focused int
 }
 
 func (w WindowPlan) Name() WindowName {
@@ -34,6 +42,11 @@ func (w WindowPlan) Name() WindowName {
 // Panes are created in order; each later one splits an earlier one.
 func (w WindowPlan) Panes() []PanePlan {
 	return slices.Clone(w.panes)
+}
+
+// FocusedPane is the index of the pane the window selects.
+func (w WindowPlan) FocusedPane() int {
+	return w.focused
 }
 
 // PanePlan is one pane of a WindowPlan.
@@ -104,7 +117,7 @@ func (p Project) Plan() SessionPlan {
 	for _, window := range p.windows {
 		windows = append(windows, p.planWindow(window))
 	}
-	return SessionPlan{name: p.name, windows: windows}
+	return SessionPlan{name: p.name, windows: windows, focused: p.FocusedWindow()}
 }
 
 func (p Project) planWindow(window Window) WindowPlan {
@@ -112,7 +125,7 @@ func (p Project) planWindow(window Window) WindowPlan {
 	for _, pane := range window.panes {
 		panes = append(panes, p.planPane(window, pane))
 	}
-	return WindowPlan{name: window.name, panes: panes}
+	return WindowPlan{name: window.name, panes: panes, focused: window.FocusedPane()}
 }
 
 func (p Project) planPane(window Window, pane Pane) PanePlan {
