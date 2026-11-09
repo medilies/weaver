@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -101,6 +102,7 @@ type browser struct {
 	tasking       bool
 	filter        string
 	filtering     bool // typing the filter
+	config        bool // the selected project's config shown instead of its drawing
 	notice        string
 	width, height int
 	choice        app.Choice
@@ -251,16 +253,22 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m = m.paneMoved(-1)
 	case "/":
 		m.filtering = true
+	case "y":
+		m.config = !m.config
 	case "t":
 		if len(m.tasksShown()) > 0 {
 			m.tasking = true
 			m = m.taskSelected(m.task)
 		}
 	case "esc":
-		if m.filter == "" {
+		switch {
+		case m.config:
+			m.config = false
+		case m.filter == "":
 			return m, tea.Quit
+		default:
+			m = m.filtered("")
 		}
-		m = m.filtered("")
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	default:
@@ -373,7 +381,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	}
 	project := shown[m.cursor]
 	windows := project.Project().Plan().Windows()
-	if len(windows) == 0 {
+	if len(windows) == 0 || m.config {
 		return m, nil
 	}
 	m.tasking = false // a window or pane clicked is no longer the task's
@@ -470,11 +478,14 @@ var (
 )
 
 // paneKey is tab told, before the last two keys, when the drawn window
-// has panes to switch between, and taskKey t, when the selected project
-// has tasks.
+// has panes to switch between, taskKey t, when the selected project
+// has tasks, and configKey y, or drawingKey while the config is shown,
+// when there is a project.
 var (
-	paneKey = keyTold{"tab", "pane"}
-	taskKey = keyTold{"t", "tasks"}
+	paneKey    = keyTold{"tab", "pane"}
+	taskKey    = keyTold{"t", "tasks"}
+	configKey  = keyTold{"y", "config"}
+	drawingKey = keyTold{"y", "drawing"}
 )
 
 // taskingKeys are told while the cursor is in the task list.
@@ -500,6 +511,13 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if !m.filtering && len(m.tasksShown()) > 0 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, taskKey)
+	}
+	if !m.filtering && len(m.shown()) > 0 {
+		key := configKey
+		if m.config {
+			key = drawingKey
+		}
+		told = slices.Insert(slices.Clone(told), len(told)-2, key)
 	}
 	if m.tasking {
 		line, spots, told = "", nil, taskingKeys
@@ -589,6 +607,9 @@ func (m browser) details(width, height int) string {
 		return fmt.Sprintf("No project's name contains %q.", m.filter)
 	}
 	project := shown[m.cursor]
+	if m.config {
+		return detailsTop(project, width) + "\n\n" + configText(project.Config().Content, width)
+	}
 	windows := project.Project().Plan().Windows()
 	if len(windows) == 0 {
 		return detailsTop(project, width)
@@ -600,6 +621,23 @@ func (m browser) details(width, height int) string {
 	}
 	listLine, _ := windowList(project, windows, laid.index, width)
 	return laid.top + "\n\n" + listLine + "\n" + strings.Join(append(panes, laid.levels...), "\n")
+}
+
+// configText is a config's YAML as stored, each line cut to width, tabs
+// and other control characters shown as spaces so they can't break the
+// lines.
+func configText(content []byte, width int) string {
+	var shown []string
+	for line := range strings.Lines(string(content)) {
+		line = strings.Map(func(r rune) rune {
+			if unicode.IsControl(r) {
+				return ' '
+			}
+			return r
+		}, strings.TrimRight(line, "\r\n"))
+		shown = append(shown, ansi.Truncate(line, width, "…"))
+	}
+	return strings.Join(shown, "\n")
 }
 
 // detailsLayout is the parts of the details below the window list.

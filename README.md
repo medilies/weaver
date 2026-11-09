@@ -104,6 +104,7 @@ or that leaves a quote open, marks its pane.
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
 | tab or shift+tab | select the next or previous pane of the selected window, in the pane list's order |
+| y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it, esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
@@ -113,7 +114,7 @@ or that leaves a quote open, marks its pane.
 | E | edit its config in your editor, like `weave edit --raw <project>` |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
-| q or esc | quit (esc clears the filter first) |
+| q or esc | quit (esc hides the config, then clears the filter, first) |
 
 After freezing, editing, killing, deleting or running a task, the list
 comes back, unfiltered, with what happened. Since the browser and the config form take

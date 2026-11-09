@@ -38,15 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 5. The config in the browser (XS)
-
-**When**: someone misses the config's YAML in the details pane, which
-the drawing replaced. `E` opens the file, and a config that can't be
-read shows why. Bring it back behind a key (`y`):
-`ProjectOverview.Config()` still carries it. `y` toggles the details
-pane between the drawing and the YAML, staying on while you move
-between projects; `y` or `esc` turns it off.
-
 ### 6. A failed teardown seen from inside the session (XS)
 
 **When**: `weave kill` run in a pane of the session it kills hides a
