@@ -602,11 +602,10 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		}
 	})
 
-	t.Run("skips a config whose name has spaces around it", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml", "shop .yml", " shop.yml")
-		var warnings strings.Builder
+	t.Run("lists a name once when a config beside it has blank space around it", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml", "shop .yml")
 
-		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
+		names, err := infra.NewFileProjectRegistry(dir).Names()
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -614,8 +613,18 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		if len(names) != 1 || names[0].String() != "shop" {
 			t.Fatalf("got %v, want only shop", names)
 		}
-		if got := strings.Count(warnings.String(), "spaces around it"); got != 2 {
-			t.Fatalf("got %q, want a warning for each of the two files", warnings.String())
+	})
+
+	t.Run("warns about each config with blank space around its name", func(t *testing.T) {
+		dir := writeConfigs(t, "shop .yml", " shop.yml", "shop\t.yml")
+		var warnings strings.Builder
+
+		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if got := strings.Count(warnings.String(), "blank space around its name"); got != 3 {
+			t.Fatalf("got %q, want a warning for each of the three files", warnings.String())
 		}
 	})
 

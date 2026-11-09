@@ -43,13 +43,6 @@ command; breaking changes are allowed, but none is planned. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-### 1. Housekeeping (XS)
-
-A config file whose stem isn't exactly its name is skipped with a
-warning: `shop .yml` lists as `shop`, because `NewProjectName` trims, so
-with `shop.yml` beside it `Names()` lists `shop` twice and `FindByName`
-reads `shop.yml` for both. Moved from [Left](#left-and-ignored).
-
 ### 2. Settings (M)
 
 Weaver-wide preferences, never a project's config (glossary:

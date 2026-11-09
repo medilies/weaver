@@ -68,7 +68,7 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 		}
 		// "shop .yml" would list as shop, whose config is shop.yml.
 		if name.String() != stem {
-			r.warnSkipped(entry.Name(), fmt.Errorf("its name has spaces around it, read as %q", name))
+			r.warnSkipped(entry.Name(), fmt.Errorf("blank space around its name, read as %q", name))
 			continue
 		}
 		names = append(names, name)
