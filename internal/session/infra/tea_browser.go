@@ -295,7 +295,7 @@ func (m browser) View() tea.View {
 }
 
 // hotspot is the cells of a line a click acts on: a key told, doing
-// what the key does, or, without a key, a window's tab, selecting it.
+// what the key does, or, without a key, a window in the window list, selecting it.
 type hotspot struct {
 	from, to int
 	key      string
@@ -329,7 +329,7 @@ func cut(line string, spots []hotspot, width int) (string, []hotspot) {
 	return ansi.Truncate(line, width, "…"), kept
 }
 
-// clicked is m after a click at (x, y): on a project or a window's tab,
+// clicked is m after a click at (x, y): on a project or a window in the window list,
 // selecting it as the arrow keys do, or on a key told, doing what the
 // key does.
 func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
@@ -354,10 +354,10 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	}
 	project := shown[m.cursor]
 	windows := project.Project().Plan().Windows()
-	if len(windows) == 0 || y != tabsRow(detailsTop(project, width)) {
+	if len(windows) == 0 || y != windowListRow(detailsTop(project, width)) {
 		return m, nil
 	}
-	_, spots := tabs(project, windows, m.drawn(windows), width)
+	_, spots := windowList(project, windows, m.drawn(windows), width)
 	if spot, ok := hotspotAt(spots, x-listWidth-detailsPadding); ok {
 		return m.act(spot)
 	}
@@ -423,7 +423,7 @@ var paneKey = keyTold{"tab", "pane"}
 // keys are the filter being typed and what its keys do, or the filter
 // kept and the keys acting on what it shows, cut to the width; with the
 // cells each key told covers, and the filter kept, which / edits again,
-// to click them. ←→ is told beside the tabs.
+// to click them. ←→ is told beside the window list.
 func (m browser) keys() (string, []hotspot) {
 	var line string
 	var spots []hotspot
@@ -515,7 +515,7 @@ func root(project app.ProjectOverview) string {
 const minDrawingWidth, minDrawingHeight = 24, 6
 
 // details are the selected project's summary, or why its config can't
-// be read, then its windows' tabs, the selected one drawn in what is left
+// be read, then its window list, the selected one drawn in what is left
 // of width×height, and the levels of its selected pane below.
 func (m browser) details(width, height int) string {
 	shown := m.shown()
@@ -534,11 +534,11 @@ func (m browser) details(width, height int) string {
 	index := m.drawn(windows)
 	window, root := windows[index], project.Project().Root().String()
 	pane := m.selectedPane(len(window.Panes()))
-	below := height - tabsRow(top) - 1 // the tabs
+	below := height - windowListRow(top) - 1 // the window list
 	levelLines := levels(project.Project(), index, pane, width)
 	var panes []string
 	if width < minDrawingWidth || below < minDrawingHeight {
-		panes = paneList(window, root, alerts(project, window), pane, width, below)
+		panes = undrawnPanes(window, root, alerts(project, window), pane, width, below)
 	} else {
 		// A session opens at the browser's size, less tmux's status line.
 		// The levels leave the drawing its least height.
@@ -546,13 +546,13 @@ func (m browser) details(width, height int) string {
 			width, max(below-len(levelLines), minDrawingHeight))
 	}
 	levelLines = fitted(levelLines, below-len(panes))
-	tabLine, _ := tabs(project, windows, index, width)
-	return top + "\n\n" + tabLine + "\n" + strings.Join(append(panes, levelLines...), "\n")
+	listLine, _ := windowList(project, windows, index, width)
+	return top + "\n\n" + listLine + "\n" + strings.Join(append(panes, levelLines...), "\n")
 }
 
-// tabsRow is the details' line the tabs are on, below top and a blank
+// windowListRow is the details' line the window list is on, below top and a blank
 // line.
-func tabsRow(top string) int {
+func windowListRow(top string) int {
 	return lipgloss.Height(top) + 1
 }
 
@@ -588,12 +588,12 @@ func detailsTop(project app.ProjectOverview, width int) string {
 	return lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
 }
 
-// tabs are the names of windows, the selected one highlighted, ○ marking
+// windowList is the names of windows, the selected one highlighted, ○ marking
 // those the project's owned session lacks, and which one of how many is
 // drawn, after ←→ when there are several to switch between; with the
-// cells each tab shown and each arrow covers, to click them. When they
+// cells each window's name and each arrow covers, to click them. When they
 // don't fit in width, the first ones make way for the selected one.
-func tabs(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) (string, []hotspot) {
+func windowList(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) (string, []hotspot) {
 	missing := map[domain.WindowName]bool{}
 	for _, name := range project.MissingWindows() {
 		missing[name] = true

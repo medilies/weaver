@@ -78,7 +78,7 @@ its own decision.
 **When**: projects with many windows, and a details pane tall enough
 to spare the lines.
 
-The tabs above the drawing become small drawings of every window, the
+The window list above the drawing becomes small drawings of every window, the
 selected one highlighted:
 
 ```text
@@ -89,7 +89,7 @@ selected one highlighted:
 └──────┴────┘    └──────┴────┘    └───────────┘
 ```
 
-`drawing` already draws at any size; this is `tabs` calling it small.
+`drawing` already draws at any size; this is `windowList` calling it small.
 
 ### Window `env` (S)
 
@@ -381,7 +381,7 @@ browser, does.
 - `app`: a new use case, `OpenWindow`. It starts the session without
   its lazy windows if needed, adds the window, then attaches with it
   selected.
-- Browser: lazy windows marked in the tabs (`emulator · lazy`), and a
+- Browser: lazy windows marked in the window list (`emulator · lazy`), and a
   key with a small picker to open one (a new `Action`).
 - The warnings check a lazy window only when it is being opened.
 - Freeze from a session where the window isn't open drops it from the
