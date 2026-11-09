@@ -43,8 +43,8 @@ func (r FileProjectRegistry) WithWarnings(w io.Writer) FileProjectRegistry {
 }
 
 // Names implements domain.ProjectRegistry. It reads file names only:
-// config files whose stem isn't a valid project name are skipped, with a
-// warning, and a missing directory has no projects.
+// config files whose stem isn't exactly a valid project name are
+// skipped, with a warning, and a missing directory has no projects.
 func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 	entries, err := os.ReadDir(r.dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -64,6 +64,11 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 		name, err := domain.NewProjectName(stem)
 		if err != nil {
 			r.warnSkipped(entry.Name(), err)
+			continue
+		}
+		// "shop .yml" would list as shop, whose config is shop.yml.
+		if name.String() != stem {
+			r.warnSkipped(entry.Name(), fmt.Errorf("its name has spaces around it, read as %q", name))
 			continue
 		}
 		names = append(names, name)

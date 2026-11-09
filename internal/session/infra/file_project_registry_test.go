@@ -602,6 +602,23 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		}
 	})
 
+	t.Run("skips a config whose name has spaces around it", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml", "shop .yml", " shop.yml")
+		var warnings strings.Builder
+
+		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(names) != 1 || names[0].String() != "shop" {
+			t.Fatalf("got %v, want only shop", names)
+		}
+		if got := strings.Count(warnings.String(), "spaces around it"); got != 2 {
+			t.Fatalf("got %q, want a warning for each of the two files", warnings.String())
+		}
+	})
+
 	t.Run("warns once per skipped config", func(t *testing.T) {
 		dir := writeConfigs(t, "edit.yml")
 		var warnings strings.Builder
