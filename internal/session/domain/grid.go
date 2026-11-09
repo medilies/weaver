@@ -172,9 +172,10 @@ func shares(tracks []Track, n int) []float64 {
 
 // cellsIn is how many cells each of n tracks takes in total cells, the
 // n-1 borders between them aside: equal without tracks, else cells as
-// they are, percentages of total, and weights sharing out the rest, the
-// last one taking what rounding leaves. Each takes a cell at least, as
-// tmux makes it.
+// they are, percentages of what the borders leave, and weights sharing
+// out the rest. The last weight, or the last track without one, takes
+// what rounding leaves. Each takes a cell at least, as tmux makes it, so
+// a window too small for the cells asked shrinks none of them.
 func cellsIn(tracks []Track, n, total int) []float64 {
 	room := max(total-(n-1), n)
 	out := make([]float64, n)
@@ -194,8 +195,19 @@ func cellsIn(tracks []Track, n, total int) []float64 {
 		case t.cells:
 			taken += t.amount
 		default:
-			taken += t.amount * total / 100
+			taken += t.amount * room / 100
 		}
+	}
+	if weights == 0 {
+		// Percentages only, adding up to 100%: the last takes what
+		// rounding leaves.
+		left := room
+		for i, t := range tracks[:n-1] {
+			out[i] = max(float64(t.amount*room/100), 1)
+			left -= int(out[i])
+		}
+		out[n-1] = float64(max(left, 1))
+		return out
 	}
 	rest, shared := max(room-taken, 0), 0
 	for i, t := range tracks {
@@ -210,7 +222,7 @@ func cellsIn(tracks []Track, n, total int) []float64 {
 		case t.cells:
 			out[i] = float64(t.amount)
 		default:
-			out[i] = float64(t.amount * total / 100)
+			out[i] = float64(t.amount * room / 100)
 		}
 		out[i] = max(out[i], 1)
 	}

@@ -49,13 +49,13 @@ func newTmuxServer(t *testing.T) tmuxServer {
 	}
 }
 
-// tmux is the adapter under test, talking to this server in a 200x50
-// terminal.
+// tmux is the adapter under test, talking to this server in a 200x51
+// terminal: its sessions' windows are 200x50, below the status line.
 func (s tmuxServer) tmux() infra.Tmux {
 	return infra.NewTmux(infra.TmuxOptions{
 		Global: s.global,
 		Env:    s.env,
-		Size:   func() (int, int, bool) { return 200, 50, true },
+		Size:   func() (int, int, bool) { return 200, 51, true },
 	})
 }
 
@@ -329,6 +329,37 @@ func TestTmuxStartSizesGridTracksInCells(t *testing.T) {
 	tree := server.paneLabelled(t, "cells", "tree")
 	if got := server.query(t, "display-message", "-p", "-t", tree, "#{pane_width}"); got != "30" {
 		t.Fatalf("got %s columns, want 30", got)
+	}
+}
+
+func TestTmuxStartSizesTheWindowBelowTheStatusLine(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "status", fmt.Sprintf(`{"root": %q}`, t.TempDir()))
+
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := server.query(t, "display-message", "-p", "-t", "=status:", "#{window_width}x#{window_height}"); got != "200x50" {
+		t.Fatalf("got %s, want 200x50 in a 200x51 terminal", got)
+	}
+}
+
+func TestTmuxStartInsideTmuxTakesTheClientsSize(t *testing.T) {
+	server := newTmuxServer(t)
+	server.query(t, "new-session", "-d", "-s", "home", "-x", "200", "-y", "50")
+	server.attached(t, "home") // a 200x50 client, in a detached viewer
+	inside := infra.NewTmux(infra.TmuxOptions{
+		Global: server.global, Env: server.env, Inside: true,
+		Size: func() (int, int, bool) { return 80, 20, true }, // the pane weave runs in
+	})
+
+	if err := inside.Start(planOf(t, "inner", fmt.Sprintf(`{"root": %q}`, t.TempDir()))); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := server.query(t, "display-message", "-p", "-t", "=inner:", "#{window_width}x#{window_height}"); got != "200x49" {
+		t.Fatalf("got %s, want 200x49: the client's 200x50 less the status line", got)
 	}
 }
 

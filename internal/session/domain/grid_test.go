@@ -423,6 +423,27 @@ func TestGridTracksInCells(t *testing.T) {
 		}
 	})
 
+	t.Run("sizes a cell column spanning rows, beside nested panes", func(t *testing.T) {
+		g := grid(t, []string{"30", "1fr"}, nil, []string{"tree", "a"}, []string{"tree", "b"})
+		got := sizedSplits(t, g, 100, 31, named(t, "tree", "a", "b")...)
+		if want := []string{"tree", "a right of #1 69", "b below of #2 15"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("shares percentages beside cells out of what the borders leave", func(t *testing.T) {
+		g := grid(t, nil, []string{"34%", "33%", "33%"}, []string{"tree", "a"}, []string{"tree", "b"}, []string{"tree", "c"})
+		g, err := domain.NewGrid(g.Areas(), tracks(t, "30", "1fr"), g.Rows())
+		if err != nil {
+			t.Fatalf("NewGrid: %v", err)
+		}
+		got := sizedSplits(t, g, 100, 32, named(t, "tree", "a", "b", "c")...)
+		// 32 rows less two borders: 10, 9 and the 11 left.
+		if want := []string{"tree", "a right of #1 69", "b below of #2 21", "c below of #3 11"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
 	t.Run("leaves a grid without cells in percentages", func(t *testing.T) {
 		g := grid(t, []string{"60%", "40%"}, nil, []string{"a", "b"})
 		if got := sizedSplits(t, g, 100, 30, named(t, "a", "b")...); !slices.Equal(got, []string{"a", "b right of #1 40%"}) {

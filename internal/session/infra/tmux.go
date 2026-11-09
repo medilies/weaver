@@ -29,9 +29,11 @@ type TmuxOptions struct {
 	// Pane is the pane weaver runs in ($TMUX_PANE): empty outside tmux,
 	// and inside a popup or run-shell, which have no pane of their own.
 	Pane string
-	// Size reports the terminal's size in cells. A new session starts that
-	// big, so its percentage splits come out as they will be seen; without
-	// it, tmux's default size applies.
+	// Size reports the terminal's size in cells. Outside tmux, a new
+	// session's window starts that big, less tmux's status lines, so its
+	// splits come out as they will be seen; inside, it takes the client's
+	// size instead, the pane weaver runs in being smaller. Without either,
+	// tmux's default size applies.
 	Size func() (cols, rows int, ok bool)
 }
 
@@ -806,10 +808,8 @@ func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (ses
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{session_id} #{window_id} #{pane_id} " + sized("default-command"),
 	}
-	if t.opts.Size != nil {
-		if cols, rows, ok := t.opts.Size(); ok {
-			args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
-		}
+	if cols, rows, ok := t.windowSize(); ok {
+		args = append(args, "-x", strconv.Itoa(cols), "-y", strconv.Itoa(rows))
 	}
 	scripted := shellCommand(pane, "") != nil
 	if scripted {
@@ -829,6 +829,45 @@ func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (ses
 			shellCommand(pane, defaultCommand)...)...)
 	}
 	return session, windowID, paneID, defaultCommand, err
+}
+
+// windowSize is the size a new session's window has once attached: the
+// client's, inside tmux, else the terminal's, less the status lines. A
+// grid's columns or rows in cells are sized for it: were the window to
+// change size on attaching, tmux would share the difference out over the
+// panes, those in cells too.
+func (t Tmux) windowSize() (cols, rows int, ok bool) {
+	if t.opts.Inside {
+		out, err := t.run("display-message", "-p", "#{client_width} #{client_height}")
+		if _, scanErr := fmt.Sscan(out, &cols, &rows); err == nil && scanErr == nil && cols > 0 && rows > 0 {
+			ok = true
+		}
+	}
+	if !ok && t.opts.Size != nil {
+		cols, rows, ok = t.opts.Size()
+	}
+	if !ok {
+		return 0, 0, false
+	}
+	return cols, max(rows-t.statusLines(), 1), true
+}
+
+// statusLines is how many lines tmux's status takes: its global status
+// option, read from a running server, else tmux's default of one line.
+func (t Tmux) statusLines() int {
+	out, err := t.run("show-options", "-gv", "status")
+	switch {
+	case err != nil:
+		return 1
+	case out == "off":
+		return 0
+	case out == "on":
+		return 1
+	}
+	if n, err := strconv.Atoi(out); err == nil {
+		return n
+	}
+	return 1
 }
 
 // newWindow creates a window placed by target: "-a" (after) or "-b"
