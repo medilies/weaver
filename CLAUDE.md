@@ -59,7 +59,8 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | level | Where a pane's dir, before commands, env or clear is set: the project, the pane's window or the pane. The Tab key selects a pane in the drawing, and below it the browser lists what that pane gets, each with the level it comes from and, when it replaces a higher level's, what it is over. A pane's card in the config form shows the same, the higher levels' dimmed | Tab key in the browser; config form | `levels`, `higherBefore`, `overProject` in `tea_levels.go`, `fieldProjectEnv` |
 | filter | Text narrowing the browser's list to the projects whose names contain it, ignoring case | `/` in the browser | `filter` in `tea_browser.go` |
 | notice | The browser's status line: what the last action did, or why it failed | browser | the `notice` passed to `ProjectBrowser.Browse` |
-| warning | Something opening would likely fail on, in the panes it concerns | browser summary and drawing | `Warning`, `ProjectOverview.Warnings()` |
+| warning | Something opening would likely fail on, or an exited command, in the panes it concerns | browser summary and drawing | `Warning`, `ProjectOverview.Warnings()` |
+| exited command | A pane's command, in an owned session, whose shell is back at its prompt: it crashed, was interrupted or finished. A hint, not an error. Never a prefill, a plain shell or a task | browser summary and drawing | `ErrCommandExited` |
 | program | The program a command starts, `npm` in `NODE_ENV=dev npm run dev`, checked to warn when missing | browser summary | `Command.Program`, `ErrMissingProgram` |
 
 ## Environment
