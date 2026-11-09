@@ -257,8 +257,8 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m.config = !m.config
 	case "r":
 		windows := m.windowsShown()
-		if len(windows) == 0 {
-			break
+		if !m.selectedExited() {
+			break // only an exited command reruns
 		}
 		window := windows[m.drawn(windows)]
 		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Name(),
