@@ -102,6 +102,24 @@ func TestProjectFocus(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps landing in whichever window is first once focus goes back to the first", func(t *testing.T) {
+		withWindows, err := project.WithWindows(window(t, "shell"), window(t, "editor").WithFocus())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		unfocused, err := withWindows.Focusing(0)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		moved, err := unfocused.MovingWindow(0, 1)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := moved.FocusedWindow(); got != 0 {
+			t.Fatalf("got window #%d, want the first", got+1)
+		}
+	})
+
 	t.Run("plans the focused window and each window's focused pane", func(t *testing.T) {
 		logs := domain.NewPane().Named(paneName(t, "logs"))
 		editor := domain.NewPane().Named(paneName(t, "editor")).Splitting(split(t, 0, domain.Right, "")).WithFocus()

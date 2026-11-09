@@ -304,14 +304,15 @@ func (p Project) MovingWindow(from, to int) (Project, error) {
 }
 
 // Focusing is the project landing in the window at index when opened,
-// instead of the one it landed in.
+// instead of the one it landed in. It lands in its first window unless
+// another is focused, so focusing it unfocuses the others.
 func (p Project) Focusing(index int) (Project, error) {
 	if err := p.checkWindowIndex(index); err != nil {
 		return Project{}, err
 	}
 	p.windows = slices.Clone(p.windows)
 	for i := range p.windows {
-		p.windows[i].focused = i == index
+		p.windows[i].focused = index > 0 && i == index
 	}
 	return p, nil
 }

@@ -683,14 +683,15 @@ func (w Window) WithFocus() Window {
 }
 
 // Focusing is the window selecting the pane at index instead of the one
-// it selected.
+// it selected. Its first pane is selected unless another is focused, so
+// focusing it unfocuses the others.
 func (w Window) Focusing(index int) (Window, error) {
 	if err := w.checkPaneIndex(index); err != nil {
 		return Window{}, err
 	}
 	w.panes = slices.Clone(w.panes)
 	for i := range w.panes {
-		w.panes[i].focused = i == index
+		w.panes[i].focused = index > 0 && i == index
 	}
 	return w, nil
 }

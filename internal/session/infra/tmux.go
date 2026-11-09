@@ -219,7 +219,7 @@ func (t Tmux) Capture(session string) ([]domain.Window, error) {
 		if err != nil {
 			return nil, fmt.Errorf("window %q: %w", name, err)
 		}
-		if active == "1" {
+		if active == "1" && len(windows) > 0 { // the first is focused unless another is
 			window = window.WithFocus()
 		}
 		windows = append(windows, window)
@@ -255,7 +255,7 @@ func (t Tmux) capturePanes(order []domain.CarvedPane, shells map[string]bool) ([
 			return nil, err
 		}
 		pane := domain.NewPane()
-		if active == "1" {
+		if active == "1" && i > 0 { // the first is focused unless another is
 			pane = pane.WithFocus()
 		}
 		if target != t.opts.Pane {
