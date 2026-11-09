@@ -139,22 +139,6 @@ func (c confirmation) laidOut() (lines []string, spots [][]hotspot, left, top in
 	return lines, spots, max((c.cols-blockWidth)/2, 0), max((c.rows-len(lines))/2, 0)
 }
 
-// toldKeys is keys told side by side, faint, with the cells each covers.
-func toldKeys(told []keyTold) (string, []hotspot) {
-	var line string
-	var spots []hotspot
-	for i, k := range told {
-		if i > 0 {
-			line += keysStyle.Render(" · ")
-		}
-		text := k.key + " " + k.does
-		from := ansi.StringWidth(line)
-		spots = append(spots, hotspot{from: from, to: from + ansi.StringWidth(text), key: k.key})
-		line += keysStyle.Render(text)
-	}
-	return line, spots
-}
-
 func (c confirmation) View() tea.View {
 	view := tea.NewView("") // until the terminal's size is known
 	if c.cols > 0 {

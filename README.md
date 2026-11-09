@@ -69,7 +69,7 @@ run, whether they are cleared, and its variables, each with the level it comes f
 the window or the pane) and what it is over when it replaces the
 window's `dir` or a project variable.
 
-On the right, the task list shows the selected project's tasks under
+Beside the project list, the task list shows the selected project's tasks under
 `window › pane`, in the order its panes are created. Running one needs the project's
 session running, started by weaver: when the pane's shell is idle at its
 prompt, the task's command is typed into it and run, after cutting
@@ -366,7 +366,7 @@ graph TD
         DP["ProjectRegistry, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>HuhConfirmer, TeaBrowser, TeaConfigForm"]
+        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>TeaConfirmer, TeaBrowser, TeaConfigForm"]
     end
 
     CLI --> UC

@@ -344,8 +344,8 @@ func (m browser) View() tea.View {
 // does.
 func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	shown := m.shown()
-	notice, list, _, height, width := m.frame()
-	listWidth := lipgloss.Width(list)
+	notice, list, taskColumn, height, width := m.frame()
+	listWidth, tasksWidth := lipgloss.Width(list), lipgloss.Width(taskColumn)
 	if y == height+lipgloss.Height(notice) {
 		_, spots := m.keys()
 		if spot, ok := hotspotAt(spots, x); ok {
@@ -356,7 +356,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	if len(shown) == 0 || y >= height {
 		return m, nil
 	}
-	if x >= listWidth+detailsPadding+width { // in the task list's column
+	if x >= listWidth && x < listWidth+tasksWidth { // in the task list's column
 		_, tasks := m.taskList(taskListWidth(m.projects, m.width), height)
 		if y < len(tasks) && tasks[y] >= 0 {
 			if next, chosen := m.runningTask(tasks[y]); chosen {
@@ -378,7 +378,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	}
 	m.tasking = false // a window or pane clicked is no longer the task's
 	laid := m.laidOut(project, windows, width, height)
-	x -= listWidth + detailsPadding
+	x -= listWidth + tasksWidth + detailsPadding
 	var spots []hotspot
 	switch y {
 	case windowListRow(laid.top):
@@ -422,13 +422,13 @@ func (m browser) render() string {
 	keysLine, _ := m.keys()
 	details := lipgloss.NewStyle().PaddingLeft(detailsPadding).Width(width + detailsPadding).
 		Height(height).MaxHeight(height).Render(m.details(width, height))
-	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, details, tasks), notice, keysLine)
+	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, tasks, details), notice, keysLine)
 }
 
 // frame is the notice, the list with its border and the task list's
-// column, as render lays them out, the height they leave the list, the
-// details and the task list above the notice and the keys, and the width
-// the details' content has between the list and the task list.
+// column beside it, as render lays them out, the height they leave the
+// list, the task list and the details above the notice and the keys, and
+// the width the details' content has right of the task list.
 func (m browser) frame() (notice, list, tasks string, height, width int) {
 	notice = lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
 	height = max(m.height-lipgloss.Height(notice)-1, 1)
@@ -438,12 +438,29 @@ func (m browser) frame() (notice, list, tasks string, height, width int) {
 	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-detailsPadding-lipgloss.Width(tasks), 1)
 }
 
-// detailsPadding is the cells between the list's border and the details.
+// detailsPadding is the cells between the border left of the details and
+// their content.
 const detailsPadding = 1
 
 // keyTold is a key the keys line tells, and what it does.
 type keyTold struct {
 	key, does string
+}
+
+// toldKeys is keys told side by side, faint, with the cells each covers.
+func toldKeys(told []keyTold) (string, []hotspot) {
+	var line string
+	var spots []hotspot
+	for i, k := range told {
+		if i > 0 {
+			line += keysStyle.Render(" · ")
+		}
+		text := k.key + " " + k.does
+		from := ansi.StringWidth(line)
+		spots = append(spots, hotspot{from: from, to: from + ansi.StringWidth(text), key: k.key})
+		line += keysStyle.Render(text)
+	}
+	return line, spots
 }
 
 var (

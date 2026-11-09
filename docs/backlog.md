@@ -33,17 +33,9 @@ layers), XL (mostly open questions).
 
 ## Order
 
-Finish tasks before adding: the first two come from using them.
+Finish tasks before adding: the first comes from using them.
 
-### 1. Task list between the projects and the details (XS)
-
-The task list moves from the third column to the second, keeping its
-width measured over every project (`taskListWidth`), so the layout
-stays still while moving through the list, and taking no room when no
-project has tasks. Update the clicks' columns (`clicked` in
-`tea_browser.go`) and the glossary's *task list* entry.
-
-### 2. Running a task switches to it (S)
+### 1. Running a task switches to it (S)
 
 After a task starts, the browser exits and you land where it runs: its
 pane, selected in its window, or its throwaway window. Always, no
@@ -51,7 +43,7 @@ setting. A mark in the browser for a running task waits for the
 exited-command warning's idle check, and a preview for the live
 preview.
 
-### 3. Setup and teardown commands (M)
+### 2. Setup and teardown commands (M)
 
 **Why now**: `bicyclette`'s `task dev` runs `docker compose up -d
 --wait`, and its containers outlive `weave kill`: tmux's `kill-session`
@@ -114,7 +106,7 @@ session behind.
   timeout, until its shell is idle (`foreground`), so dev servers shut
   down cleanly before the kill.
 
-### 4. Exited-command warning (M)
+### 3. Exited-command warning (M)
 
 **Why now**: `bicyclette`'s `task dev` and `bicyclette app` run for
 hours and can crash unseen. The live preview, under [By need](#by-need),

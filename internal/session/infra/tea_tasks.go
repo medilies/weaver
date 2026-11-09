@@ -42,8 +42,9 @@ func tasksOf(project domain.Project) []listedTask {
 }
 
 // taskListPadding is the cells around the task list's lines, in its
-// column: a space, a border and a space on the left, a space on the right.
-const taskListPadding = 4
+// column between the project list and the details: a space on the left,
+// a space and a border on the right.
+const taskListPadding = 3
 
 // taskListWidth is the width the task list's lines take, wide enough for
 // every project's, so moving between projects keeps the column still, but
@@ -70,8 +71,8 @@ func (m browser) taskColumn(width, height int) (string, []int) {
 		return "", nil
 	}
 	lines, tasks := m.taskList(width, height)
-	return lipgloss.NewStyle().Width(width+taskListPadding-1).Height(height).MaxHeight(height).
-		Border(lipgloss.NormalBorder(), false, false, false, true).Padding(0, 1).MarginLeft(1).
+	return lipgloss.NewStyle().Width(width+taskListPadding).Height(height).MaxHeight(height).
+		Border(lipgloss.NormalBorder(), false, true, false, false).Padding(0, 1).
 		Render(strings.Join(lines, "\n")), tasks
 }
 
