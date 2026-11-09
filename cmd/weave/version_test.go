@@ -7,8 +7,8 @@ import (
 
 func TestReleaseBuildsReportTheStampedVersion(t *testing.T) {
 	info := &debug.BuildInfo{Main: debug.Module{Version: "v0.1.0"}}
-	if got := resolveVersion("0.2.0", info); got != "0.2.0" {
-		t.Fatalf("got %q, want the stamped 0.2.0", got)
+	if got := resolveVersion("v0.2.0", info); got != "v0.2.0" {
+		t.Fatalf("got %q, want the stamped v0.2.0", got)
 	}
 }
 
