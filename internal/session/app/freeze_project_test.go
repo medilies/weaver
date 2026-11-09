@@ -250,14 +250,7 @@ func TestFreezeProject(t *testing.T) {
 
 	t.Run("keeps the setup and teardown commands of the project registered under the name", func(t *testing.T) {
 		s := newFreezeSetup(t)
-		up, err := domain.NewCommand("docker compose up -d")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		down, err := domain.NewCommand("docker compose down")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		up, down := command(t, "docker compose up -d"), command(t, "docker compose down")
 		s.configs.projects["shop"] = shop(t).SettingUp(up).TearingDown(down)
 		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)

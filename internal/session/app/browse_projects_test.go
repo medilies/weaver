@@ -344,6 +344,33 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("doesn't warn about setup programs under a missing root", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = project(t, "blog").SettingUp(command(t, "docker compose up -d"))
+		delete(s.workspace.dirs, "/srv/blog")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) > 0 {
+			t.Fatalf("got %v, want the missing root alone", blog.Warnings())
+		}
+	})
+
+	t.Run("doesn't warn about setup programs when the project's env sets PATH", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		env, err := domain.NewEnv(map[string]string{"PATH": "/opt/bin"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.configs.projects["blog"] = project(t, "blog").WithEnv(env).SettingUp(command(t, "docker compose up -d"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if blog, _ := s.browser.last().overview("blog"); len(blog.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", blog.Warnings())
+		}
+	})
+
 	t.Run("warns about a teardown command that leaves a quote open", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["blog"] = project(t, "blog").TearingDown(command(t, `echo "bye`))

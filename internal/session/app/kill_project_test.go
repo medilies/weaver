@@ -54,15 +54,8 @@ func tornDownShop(t *testing.T) inMemoryRegistry {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	var teardown []domain.Command
-	for _, raw := range []string{"docker compose down", "rm -f .lock"} {
-		cmd, err := domain.NewCommand(raw)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		teardown = append(teardown, cmd)
-	}
-	return inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).TearingDown(teardown...)}}
+	torn := shop(t).WithEnv(env).TearingDown(command(t, "docker compose down"), command(t, "rm -f .lock"))
+	return inMemoryRegistry{projects: map[string]domain.Project{"shop": torn}}
 }
 
 func TestKillProjectTearsDown(t *testing.T) {

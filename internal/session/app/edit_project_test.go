@@ -106,14 +106,7 @@ func TestEditProject(t *testing.T) {
 	})
 
 	t.Run("gives the form the setup and teardown commands to keep", func(t *testing.T) {
-		up, err := domain.NewCommand("docker compose up -d")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		down, err := domain.NewCommand("docker compose down")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		up, down := command(t, "docker compose up -d"), command(t, "docker compose down")
 		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).SettingUp(up).TearingDown(down)}}
 		form := &fakeForm{project: moved}
 		documents := storedDocuments{"shop": "root: /srv/shop"}

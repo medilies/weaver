@@ -174,7 +174,9 @@ running, weaver first:
 weaver doesn't know git and clones nothing: clone what a project needs
 yourself before opening it.
 
-If a step fails, nothing is left half-built.
+If a step fails, nothing is left half-built. What the `setup` commands
+did stays done, though: with no session, there is nothing to kill, so
+no `teardown` runs, and the error says so.
 
 When weaver started the running session (an owned session) and you
 closed some of its windows, `weave <project>` puts them back where the

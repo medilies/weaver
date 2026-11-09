@@ -8,7 +8,10 @@ func newKillCommand(weaver application) *cobra.Command {
 		Short: "Kill a project's tmux session and everything running in it",
 		Long: `weave kill ends a project's tmux session and everything running in
 it. Without a project, it kills the session weave runs in, if weave
-started it.`,
+started it.
+
+Before killing a session weave started, it runs the config's teardown
+commands in the root; the session is killed even when one fails.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		RunE: func(cmd *cobra.Command, args []string) error {

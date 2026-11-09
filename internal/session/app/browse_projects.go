@@ -77,13 +77,14 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 	return slices.Clone(o.missing)
 }
 
-// Warnings are what would likely go wrong in the setup and teardown
-// commands, a program that can't be found or a quote left open, which
-// concern no pane, and in the panes opening the project creates: a directory missing, wrapping ErrMissingDirectory, a
-// command whose program can't be found, wrapping ErrMissingProgram, or a
-// command run that leaves a quote open, wrapping ErrUnclosedQuote; and in
-// any pane, a task whose program can't be found or that leaves a quote
-// open; each once, however many panes it concerns. Opening a project that
+// Warnings are what would likely go wrong: in the setup and teardown
+// commands, which concern no pane, a program that can't be found or a
+// quote left open; in the panes opening the project creates, a directory
+// missing, wrapping ErrMissingDirectory, a command whose program can't be
+// found, wrapping ErrMissingProgram, or a command run that leaves a quote
+// open, wrapping ErrUnclosedQuote; and in any pane, a task whose program
+// can't be found or that leaves a quote open; each once, however many
+// panes it concerns. Opening a project that
 // isn't running creates every pane, an owned session the missing windows'
 // panes, and a session weaver didn't start none.
 func (o ProjectOverview) Warnings() []Warning {
