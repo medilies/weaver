@@ -123,7 +123,25 @@ func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {
 	if draft.Name == "" {
 		draft.Name = filepath.Base(draft.Root)
 	}
+	uc.keepCommands(&draft)
 	return draft, nil
+}
+
+// keepCommands starts draft with the setup and teardown commands of the
+// project registered under its name, if any, which a session can't show,
+// so replacing that project keeps them; the form's diff shows them under
+// whatever name it is saved. A config that can't be read has none to
+// keep.
+func (uc FreezeProject) keepCommands(draft *ProjectDraft) {
+	name, err := domain.NewProjectName(draft.Name)
+	if err != nil {
+		return
+	}
+	registered, err := uc.projects.FindByName(name)
+	if err != nil {
+		return
+	}
+	draft.Setup, draft.Teardown = registered.Setup(), registered.Teardown()
 }
 
 // underRoot moves captured pane directories, which tmux reports with

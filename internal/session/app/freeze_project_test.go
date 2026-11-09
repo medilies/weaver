@@ -248,6 +248,35 @@ func TestFreezeProject(t *testing.T) {
 		}
 	})
 
+	t.Run("keeps the setup and teardown commands of the project registered under the name", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		up, err := domain.NewCommand("docker compose up -d")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		down, err := domain.NewCommand("docker compose down")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.configs.projects["shop"] = shop(t).SettingUp(up).TearingDown(down)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.form.draft; len(got.Setup) != 1 || got.Setup[0] != up || len(got.Teardown) != 1 || got.Teardown[0] != down {
+			t.Fatalf("got setup %v, teardown %v; want the registered shop's", got.Setup, got.Teardown)
+		}
+	})
+
+	t.Run("starts a new project without setup or teardown commands", func(t *testing.T) {
+		s := newFreezeSetup(t)
+		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.form.draft; len(got.Setup)+len(got.Teardown) != 0 {
+			t.Fatalf("got setup %v, teardown %v; want none", got.Setup, got.Teardown)
+		}
+	})
+
 	t.Run("starts from a running session's windows", func(t *testing.T) {
 		s := newFreezeSetup(t)
 		if _, err := s.freeze(t, answer(true), app.FreezeRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
