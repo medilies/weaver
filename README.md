@@ -40,24 +40,25 @@ projects, drawing each window as it will open and warning about what
 would likely fail:
 
 ```text
-   nimbus ~/dev/nimbus │ tasks          │ nimbus.yml
-   weaver ~/dev/weaver │ api › task dev │
-                       │   migrate      │ ~/dev/nimbus
-                       │                │
-                       │                │  api    app    repo                                         ←→ 2/3
-                       │                │ ┌─[ app shell ]────────────────────────┬─ flutter run ───────────┐
-                       │                │ │ app/                                 │ app/                    │
-                       │                │ │ $ █                                  │ $ nimbus app            │
-                       │                │ │                                      │                         │
-                       │                │ │                                      │                         │
-                       │                │ │                                      ├─ emulator ──────────────┤
-                       │                │ │                                      │ $ nimbus emulator█      │
-                       │                │ │                                      │                         │
-                       │                │ └──────────────────────────────────────┴─────────────────────────┘
-                       │                │  app shell   flutter run   emulator
-                       │                │ app shell  ~/dev/nimbus/app  window app
+nimbus ~/dev/nimbus │ tasks          │ nimbus.yml
+weaver ~/dev/weaver │ api › task dev │
+                    │   migrate      │ ~/dev/nimbus
+                    │                │
+                    │                │  api    app    repo                         2/3
+                    │                │ ┌─[ app shell ]──────────┬─ flutter run ──────┐
+                    │                │ │ app/                   │ app/               │
+                    │                │ │ $                      │ $ nimbus app       │
+                    │                │ │                        │                    │
+                    │                │ │                        │                    │
+                    │                │ │                        ├─ emulator ─────────┤
+                    │                │ │                        │ $ nimbus emulator  │
+                    │                │ │                        │                    │
+                    │                │ └────────────────────────┴────────────────────┘
+                    │                │  app shell   flutter run   emulator
+                    │                │ app shell  ~/dev/nimbus/app  window app
 
-enter open · f freeze · e edit · E raw · x kill · d delete · tab pane · t tasks · y config · / filter · q quit
+enter open · f freeze · e edit · E raw · x kill · d delete · tab pane
+t tasks · y config · / filter · q quit
 ```
 
 ## Install
