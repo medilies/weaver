@@ -81,14 +81,18 @@ window's `dir` or a project variable.
 | q or esc | quit (esc clears the filter first) |
 
 After freezing, editing, killing or deleting, the list comes back,
-unfiltered, with what happened. Since the browser takes the mouse, most
-terminals select text with shift held.
+unfiltered, with what happened. Since the browser and the config form take
+the mouse, most terminals select text with shift held, and the wheel
+doesn't scroll them.
 
-The config form shows a project as cards: the project's, then its
-windows', starting with the window list. Freezing starts it on a name, the root, and the
-session's windows if you named one; the name is typed there, and stays
-when editing. The selected window's panes are drawn as they
-open, the selected pane in cyan, heavy when the cursor is on the drawing, and its card is below it. Each field is
+The config form shows a project as cards: the project's, then the
+window list and the selected window's card. Freezing starts it on a
+name, the root, and the session's windows if you named one; the name is
+typed there, and stays when editing. The selected window's panes are
+drawn as they open, the selected pane in cyan, heavy when the cursor is
+on the drawing; below them are the pane list, then the selected pane's
+card, starting with where the pane is placed. Click a window in the
+window list or a pane in the pane list to select it. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists. A
 pane lists the project's and its window's before commands and the
 project's variables dimmed, with the level they come from; enter on such
@@ -98,10 +102,10 @@ keeps its panes' names and places.
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a field |
-| enter | type into it, or pick the next choice; on `+ add` or `+ window` in the window list, add one |
-| ← → | on the window list, select a window; on a pane's `starts`, whether it starts a shell, runs a command or prefills it |
+| enter | type into it, or pick the next choice; on the window list or the pane list, type the window's or pane's name; on `+ add` or `+ window`, add one |
+| ← → | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it |
 | o | add an item to the list selected, split the pane selected right, or add a window |
-| d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
+| d | remove the item selected at once; on the pane list or a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
 | J K | move the item or window selected down or up |
 | u, ctrl+r | undo the last change, or redo the last change undone |
 | ctrl+s | show what saving changes in the config (↑ ↓ scroll), then y, enter or ctrl+s saves and n or esc goes back; the config is rewritten, without its comments |
