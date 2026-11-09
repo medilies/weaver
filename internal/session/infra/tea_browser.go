@@ -170,8 +170,9 @@ func (m browser) paneMoved(by int) browser {
 	if len(windows) == 0 {
 		return m
 	}
-	count := len(windows[m.drawn(windows)].Panes())
-	m.pane = ((m.selectedPane(count)+by)%count + count) % count
+	window := windows[m.drawn(windows)]
+	order := drawnOrder(window, m.width, max(m.height-1, 1))
+	m.pane = steppedIn(order, m.selectedPane(len(window.Panes())), by)
 	return m
 }
 
@@ -632,7 +633,7 @@ func (m browser) panesShown(project app.ProjectOverview, index, width, below, le
 	// A session opens at the browser's size, less tmux's status line.
 	drawn := drawing(window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
 		width, max(below-1-levelHeight, minDrawingHeight))
-	line, spots := paneList(project.Project().Windows()[index], pane, width)
+	line, spots := paneList(project.Project().Windows()[index], drawnOrder(window, m.width, max(m.height-1, 1)), pane, width)
 	return drawn, line, spots
 }
 

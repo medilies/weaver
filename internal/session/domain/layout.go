@@ -318,6 +318,49 @@ func (c Command) Program() (string, bool) {
 	return "", false
 }
 
+// Unclosed reports whether the command line leaves a quote open, so a
+// shell would wait for the rest of it instead of running it. Only when no
+// shell closes it: POSIX shells end single quotes at the next one, while
+// fish's take \' as a quote; a # starting a word outside quotes begins a
+// comment, its quotes not counting.
+func (c Command) Unclosed() bool {
+	return openQuote(c.text, false) && openQuote(c.text, true)
+}
+
+// openQuote reports whether line ends inside quotes, single quotes taking
+// \' and \\ as escapes when fish says so.
+func openQuote(line string, fish bool) bool {
+	var quote rune
+	escaped, wordStart := false, true
+	for _, r := range line {
+		start := wordStart
+		wordStart = false
+		switch {
+		case escaped:
+			escaped = false
+		case quote == '\'':
+			escaped = fish && r == '\\'
+			if r == '\'' {
+				quote = 0
+			}
+		case quote == '"':
+			escaped = r == '\\'
+			if r == '"' {
+				quote = 0
+			}
+		case r == '\\':
+			escaped = true
+		case r == '\'' || r == '"':
+			quote = r
+		case r == '#' && start:
+			return false
+		default:
+			wordStart = strings.ContainsRune(" ;&|()", r)
+		}
+	}
+	return quote != 0
+}
+
 // Startup is what a pane does once its shell is up: nothing, run a
 // command, or leave a command typed at the prompt for the user to run.
 type Startup struct {

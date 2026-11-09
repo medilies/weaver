@@ -212,6 +212,37 @@ func TestCommandProgram(t *testing.T) {
 	}
 }
 
+func TestCommandUnclosed(t *testing.T) {
+	for reason, raw := range map[string]string{
+		"an open double quote":            `echo "oops`,
+		"an open single quote":            `echo 'oops`,
+		"an apostrophe in a word":         `echo it's`,
+		"an escaped quote in double ones": `echo "a\"`,
+	} {
+		t.Run("finds "+reason, func(t *testing.T) {
+			if !command(t, raw).Unclosed() {
+				t.Fatalf("%s: got closed, want unclosed", raw)
+			}
+		})
+	}
+
+	for reason, raw := range map[string]string{
+		"closed quotes":                       `echo "a b" 'c d'`,
+		"a quote in the other kind":           `echo "it's" '"'`,
+		"an escaped quote":                    `echo it\'s \"`,
+		"a quote in a comment":                `make # don't`,
+		"a backslash in single quotes":        `printf '\n'`,
+		"an escaped single quote fish closes": `echo 'it\'s'`,
+		"a # inside a word":                   `echo a#'b'`,
+	} {
+		t.Run("passes "+reason, func(t *testing.T) {
+			if command(t, raw).Unclosed() {
+				t.Fatalf("%s: got unclosed, want closed", raw)
+			}
+		})
+	}
+}
+
 func TestPaneStartup(t *testing.T) {
 	t.Run("a new pane types nothing", func(t *testing.T) {
 		if _, ok := domain.NewPane().Startup().Command(); ok {

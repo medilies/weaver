@@ -47,9 +47,11 @@ beside a summary of the selected one: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a
 warning when it is gone; what would likely fail in the panes enter
-creates (a directory missing, or a command whose program isn't on your `PATH`,
+creates (a directory missing, a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
-which may provide it; aliases and shell functions show as not found); and
+which may provide it, aliases and shell functions showing as not found,
+or a command run, `before` ones included, that leaves a quote open, so
+the shell would wait for the rest of it instead of running it); and
 the `before` commands and variables every pane starts with. Below it,
 the window list names the project's windows, ○ marking those enter restores, and the
 selected window is drawn as it opens: each pane a box in its
@@ -60,7 +62,8 @@ neither (`$ █`). A pane with a warning has ⚠ in its top border, and
 the border is red when its directory is missing, yellow when its
 program isn't found. In a small terminal the panes are listed instead.
 The selected pane is cyan, its name in brackets. Below the drawing, the
-pane list names the window's panes, the selected one in a cyan block, and
+pane list names the window's panes as the drawing places them, top to
+bottom then left to right, the selected one in a cyan block, and
 below it are the selected pane's directory, its `before` commands in the order they
 run, whether they are cleared, and its variables, each with the level it comes from (the project,
 the window or the pane) and what it is over when it replaces the
@@ -89,14 +92,14 @@ where:
           - {command: 'php artisan db:seed'}
 ```
 
-The warnings cover tasks too: a task whose program isn't on your `PATH`
-marks its pane.
+The warnings cover tasks too: a task whose program isn't on your `PATH`,
+or that leaves a quote open, marks its pane.
 
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
-| tab or shift+tab | select the next or previous pane of the selected window |
+| tab or shift+tab | select the next or previous pane of the selected window, in the pane list's order |
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it, esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
@@ -122,7 +125,9 @@ on the drawing; below them are the pane list, then the selected pane's
 card, starting with where the pane is placed. Click a window in the
 window list or a pane in the pane list to select it, or a `starts` or `clear` option
 to pick it; the selected ones are cyan blocks. Each field is
-checked as you type it, and a root or dir is marked ✓ when it exists. A
+checked as you type it, and a root or dir is marked ✓ when it exists; a
+command run that leaves a quote open is marked ⚠, as it would leave the
+shell waiting, but kept. A
 pane lists the project's and its window's before commands and the
 project's variables dimmed, with the level they come from; enter on such
 a variable sets it for the pane instead. A pane's tasks come last: each

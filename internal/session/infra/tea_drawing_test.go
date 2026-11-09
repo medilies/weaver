@@ -387,3 +387,29 @@ func TestBorderRune(t *testing.T) {
 		}
 	}
 }
+
+func TestDrawnOrder(t *testing.T) {
+	// a | c | b: c splits a after b was created.
+	window := firstWindow(t, `      - name: a
+      - name: b
+        split: { direction: right }
+      - name: c
+        split: { of: a, direction: right }
+`)
+
+	t.Run("lists the panes as drawn, not as created", func(t *testing.T) {
+		if got, want := drawnOrder(window, 81, 20), []int{0, 2, 1}; !slices.Equal(got, want) {
+			t.Fatalf("got %v, want %v", got, want)
+		}
+	})
+
+	t.Run("steps through them as drawn, going round", func(t *testing.T) {
+		order := drawnOrder(window, 81, 20)
+		if got := steppedIn(order, 0, 1); got != 2 {
+			t.Fatalf("after a got %d, want c (2)", got)
+		}
+		if got := steppedIn(order, 0, -1); got != 1 {
+			t.Fatalf("before a got %d, want b (1)", got)
+		}
+	})
+}

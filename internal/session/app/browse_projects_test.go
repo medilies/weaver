@@ -298,6 +298,18 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("warns about a command run that leaves a quote open", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server", `echo "starting`)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if got := blog.Warnings(); len(got) != 1 || !errors.Is(got[0], app.ErrUnclosedQuote) {
+			t.Fatalf("got %v, want an unclosed quote", got)
+		}
+	})
+
 	t.Run("doesn't warn about a program that can be run", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["blog"] = serving(t, "", "hugo server")

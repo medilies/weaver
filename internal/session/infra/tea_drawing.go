@@ -1,8 +1,10 @@
 package infra
 
 import (
+	"cmp"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -11,6 +13,28 @@ import (
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
+
+// drawnOrder is the indexes of window's panes in the order a drawing of
+// a window of cols×rows cells places them: top to bottom, then left to
+// right.
+func drawnOrder(window domain.WindowPlan, cols, rows int) []int {
+	boxes := layOut(window, cols, rows)
+	order := make([]int, len(boxes))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int {
+		return cmp.Or(cmp.Compare(boxes[a].y, boxes[b].y), cmp.Compare(boxes[a].x, boxes[b].x))
+	})
+	return order
+}
+
+// steppedIn is the item by places after from in order, before it when by
+// is negative, going round.
+func steppedIn(order []int, from, by int) int {
+	n := len(order)
+	return order[((slices.Index(order, from)+by)%n+n)%n]
+}
 
 // box is the cells a pane covers in its window, its borders left out:
 // tmux draws one cell of border between panes.

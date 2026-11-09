@@ -13,6 +13,10 @@ import (
 // program that can't be found.
 var ErrMissingProgram = errors.New("program not found")
 
+// ErrUnclosedQuote is warned about when a command run in a pane leaves a
+// quote open, so the shell waits for the rest of it instead of running it.
+var ErrUnclosedQuote = errors.New("unclosed quote")
+
 // ProjectOverview is a registered project as the browser shows it: its
 // config as written and, when the config is valid, the project, where it
 // stands on disk and how its running session differs from it.
@@ -74,12 +78,13 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 }
 
 // Warnings are what would likely go wrong in the panes opening the
-// project creates: a directory missing, wrapping ErrMissingDirectory, or
-// a command whose program can't be found, wrapping ErrMissingProgram;
-// and in any pane, a task whose program can't be found; each once,
-// however many panes it concerns. Opening a project that isn't running
-// creates every pane, an owned session the missing windows' panes, and a
-// session weaver didn't start none.
+// project creates: a directory missing, wrapping ErrMissingDirectory, a
+// command whose program can't be found, wrapping ErrMissingProgram, or a
+// command run that leaves a quote open, wrapping ErrUnclosedQuote; and in
+// any pane, a task whose program can't be found or that leaves a quote
+// open; each once, however many panes it concerns. Opening a project that
+// isn't running creates every pane, an owned session the missing windows'
+// panes, and a session weaver didn't start none.
 func (o ProjectOverview) Warnings() []Warning {
 	return slices.Clone(o.warnings)
 }
@@ -104,7 +109,7 @@ func (w Warning) Error() string {
 	return w.err.Error()
 }
 
-// Unwrap is ErrMissingDirectory or ErrMissingProgram.
+// Unwrap is ErrMissingDirectory, ErrMissingProgram or ErrUnclosedQuote.
 func (w Warning) Unwrap() error {
 	return errors.Unwrap(w.err)
 }
@@ -300,9 +305,20 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, opening, all []domai
 			return fmt.Errorf("%s: %w: %s", whose, ErrMissingProgram, program)
 		})
 	}
+	quote := func(at paneAt, cmd domain.Command, whose string) {
+		warn("quote\x00"+cmd.String(), at, cmd.Unclosed, func() error {
+			return fmt.Errorf("%s: %w: %s", whose, ErrUnclosedQuote, cmd)
+		})
+	}
 	for _, window := range opening {
 		for index, pane := range window.Panes() {
 			at := paneAt{window: window.Name(), pane: index}
+			for _, cmd := range pane.Before() {
+				quote(at, cmd, where(window, pane))
+			}
+			if cmd, ok := pane.Startup().Command(); ok && pane.Startup().Submits() {
+				quote(at, cmd, where(window, pane))
+			}
 			exists, err := uc.workspace.Exists(pane.Dir())
 			if err != nil {
 				return nil, err
@@ -326,6 +342,10 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, opening, all []domai
 			if len(tasks) == 0 {
 				continue
 			}
+			at := paneAt{window: window.Name(), pane: index}
+			for _, task := range tasks {
+				quote(at, task.Command(), fmt.Sprintf("%s, task %q", where(window, pane), task.Label()))
+			}
 			if exists, err := uc.workspace.Exists(pane.Dir()); err != nil {
 				return nil, err
 			} else if !exists {
@@ -333,7 +353,7 @@ func (uc BrowseProjects) warnings(overview ProjectOverview, opening, all []domai
 			}
 			for _, task := range tasks {
 				whose := fmt.Sprintf("%s, task %q", where(window, pane), task.Label())
-				program(paneAt{window: window.Name(), pane: index}, pane, task.Command(), whose)
+				program(at, pane, task.Command(), whose)
 			}
 		}
 	}

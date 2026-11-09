@@ -596,9 +596,9 @@ func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 		m.focus.window = ((m.focus.window+by)%count + count) % count
 		return m, nil
 	case fieldPaneList:
-		if window, ok := m.windowAt(m.focus.window); ok {
-			count := len(window.Panes())
-			m.focus.pane = ((m.focus.pane+by)%count + count) % count
+		if _, ok := m.windowAt(m.focus.window); ok {
+			plan := m.project.Plan().Windows()[m.focus.window]
+			m.focus.pane = steppedIn(drawnOrder(plan, m.width, max(m.height-1, 1)), m.focus.pane, by)
 		}
 		return m, nil
 	case fieldStarts:
@@ -883,11 +883,16 @@ func (m configForm) typeInto(at spot, text string, run bool) (configForm, tea.Cm
 // inputWidth is the cells a field typed at gets: what its card leaves
 // beside the label, less room for a check mark.
 func (m configForm) inputWidth(at spot) int {
+	return max(m.valueWidth(at)-12, 10)
+}
+
+// valueWidth is the cells the card of the row at leaves beside the label.
+func (m configForm) valueWidth(at spot) int {
 	depth := 1
 	if at.pane >= 0 && at.window >= 0 {
 		depth = 2
 	}
-	return max(m.width-4*depth-gutterWidth-labelWidth-12, 10)
+	return max(max(m.width, 30)-4*depth-gutterWidth-labelWidth, 10)
 }
 
 // added is m after o: an item typed into the list the cursor is in, a
@@ -1413,7 +1418,8 @@ func card(title string, body []string, width int, heavy bool) []string {
 const gutterWidth, labelWidth = 2, 10
 
 // put adds a row labelled label showing value, or the field typed into
-// it, then after, and below it why what is typed isn't valid.
+// it, then after, or a warning when its command leaves a quote open, and
+// below it why what is typed isn't valid, wrapped within its card.
 func (m configForm) put(s *section, label, value, after string, at spot) {
 	focused := m.focus == at
 	typed := m.editing && m.edit.at == at
@@ -1424,14 +1430,47 @@ func (m configForm) put(s *section, label, value, after string, at spot) {
 	if typed {
 		value = m.edit.input.View()
 	}
+	if m.quoteOpen(at) {
+		after = warningStyle.Render("⚠ unclosed quote")
+	}
 	line := gutter(focused) + shown + value
 	if after != "" {
 		line += "  " + after
 	}
 	s.row(line, at, focused)
 	if typed && m.edit.err != nil {
-		s.text(strings.Repeat(" ", gutterWidth+labelWidth) + problemStyle.Render("✗ "+m.edit.err.Error()))
+		indent := strings.Repeat(" ", gutterWidth+labelWidth)
+		wrapped := ansi.Wrap("✗ "+m.edit.err.Error(), m.valueWidth(at)-2, " ")
+		for i, line := range strings.Split(wrapped, "\n") {
+			if i > 0 {
+				line = "  " + line // under the text, past the ✗
+			}
+			s.text(indent + problemStyle.Render(line))
+		}
 	}
+}
+
+// quoteOpen reports whether the row at holds a command run, or one being
+// typed into it, that leaves a quote open: a before command, a task's, or
+// a pane's command run rather than prefilled.
+func (m configForm) quoteOpen(at spot) bool {
+	typed := m.editing && m.edit.at == at
+	switch at.field {
+	case fieldBefore, fieldTask:
+	case fieldCommand:
+		_, pane, _ := m.paneAt(at)
+		if (typed && !m.edit.run) || (!typed && !pane.Startup().Submits()) {
+			return false
+		}
+	default:
+		return false
+	}
+	text := m.current(at)
+	if typed {
+		text = m.edit.input.Value()
+	}
+	cmd, err := domain.NewCommand(text)
+	return err == nil && cmd.Unclosed()
 }
 
 // shownText adds a line under label the cursor can't be on.
@@ -1632,7 +1671,7 @@ func (m configForm) windowsCard(width int) section {
 	s.block(drawn, drawingAt, focused)
 	listAt := spot{window: picked.window, pane: picked.pane, field: fieldPaneList}
 	focused = m.focus == listAt
-	line, spots := paneList(window, picked.pane, width-gutterWidth)
+	line, spots := paneList(window, drawnOrder(plan, m.width, max(m.height-1, 1)), picked.pane, width-gutterWidth)
 	s.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	s.text("")
 	pane := window.Panes()[picked.pane]
@@ -1664,12 +1703,13 @@ func formWindowList(windows []domain.Window, selected int, width int) (string, [
 }
 
 // paneList is the names of window's panes, or their numbers for
-// those without, the selected one in a cyan block, with the cells each
-// covers, to click it. When they don't fit in width, the first ones make
-// way for the selected one.
-func paneList(window domain.Window, selected int, width int) (string, []hotspot) {
-	labels := make([]string, 0, len(window.Panes()))
-	for i, pane := range window.Panes() {
+// those without, in order, as the drawing places them, the selected one
+// in a cyan block, with the cells each covers, to click it. When they
+// don't fit in width, the first ones make way for the selected one.
+func paneList(window domain.Window, order []int, selected int, width int) (string, []hotspot) {
+	labels := make([]string, 0, len(order))
+	for _, i := range order {
+		pane := window.Panes()[i]
 		name := pane.Name().String()
 		if name == "" {
 			name = strconv.Itoa(i + 1)
@@ -1680,7 +1720,11 @@ func paneList(window domain.Window, selected int, width int) (string, []hotspot)
 			labels = append(labels, " "+name+" ")
 		}
 	}
-	return listed(labels, selected, width)
+	line, spots := listed(labels, slices.Index(order, selected), width)
+	for k := range spots {
+		spots[k].item = order[spots[k].item]
+	}
+	return line, spots
 }
 
 // placement is how pane is placed in window: by its grid, or splitting
