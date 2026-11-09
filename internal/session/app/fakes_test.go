@@ -48,6 +48,7 @@ func (r inMemoryRegistry) Names() ([]domain.ProjectName, error) {
 type fakeCommands struct {
 	ran   []ranCommand
 	fails map[string]bool
+	onRun func() // called as each command runs
 }
 
 // ranCommand is a command fakeCommands ran, where and with what env.
@@ -59,6 +60,9 @@ type ranCommand struct {
 
 func (c *fakeCommands) Run(cmd domain.Command, dir string, env domain.Env) error {
 	c.ran = append(c.ran, ranCommand{cmd: cmd.String(), dir: dir, env: env})
+	if c.onRun != nil {
+		c.onRun()
+	}
 	if c.fails[cmd.String()] {
 		return fmt.Errorf("%w (exit status 1): boom", domain.ErrCommandFailed)
 	}

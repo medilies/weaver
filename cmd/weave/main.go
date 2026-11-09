@@ -54,7 +54,7 @@ func wire() (application, error) {
 		editProject:   app.NewEditProject(projects, projects, configForm, infra.NewEditor(), confirm),
 		sessions:      tmux,
 		openProject:   app.NewOpenProject(projects, tmux, workspace, commands),
-		killProject:   app.NewKillProject(tmux, tmux),
+		killProject:   app.NewKillProject(tmux, tmux, projects, commands),
 		listProjects:  app.NewListProjects(projects, tmux),
 		documents:     projects,
 	}

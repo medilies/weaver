@@ -74,10 +74,14 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 	return domain.RunningSession{}, false, s.err
 }
 
-// unkillableSessions is a domain.SessionKiller that fails to kill.
+// unkillableSessions is a domain.SessionKiller that finds a session
+// weaver didn't start, and fails to kill it.
 type unkillableSessions struct {
-	unfindableSessions
 	err error
+}
+
+func (s unkillableSessions) Find(domain.ProjectName) (domain.RunningSession, bool, error) {
+	return domain.NewRunningSession(false), true, nil
 }
 
 func (s unkillableSessions) Kill(domain.ProjectName) error {
@@ -119,7 +123,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		app.NewOpenProject(s.configs, server, s.workspace, &fakeCommands{}),
 		app.NewFreezeProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form, confirm),
 		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
-		app.NewKillProject(server, capturedSessions{}),
+		app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}),
 		app.NewRunTask(s.configs, &fakeTasks{fakeSessions: s.sessions}, confirm),
 	).Handle("/srv/new")
 }
@@ -540,7 +544,7 @@ func TestBrowseProjects(t *testing.T) {
 		err := app.NewBrowseProjects(
 			s.browser, answer(true), s.configs, s.documents, s.workspace, server,
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
-			app.NewKillProject(unkillableSessions{err: errors.New("tmux kill-session: lost server")}, capturedSessions{}), app.RunTask{},
+			app.NewKillProject(unkillableSessions{err: errors.New("tmux kill-session: lost server")}, capturedSessions{}, s.configs, &fakeCommands{}), app.RunTask{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -557,7 +561,7 @@ func TestBrowseProjects(t *testing.T) {
 		err := app.NewBrowseProjects(
 			s.browser, confirm, s.configs, s.documents, s.workspace, unfindableSessions{errors.New("tmux: not found")},
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.FreezeProject{}, app.EditProject{},
-			app.NewKillProject(server, capturedSessions{}), app.RunTask{},
+			app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}), app.RunTask{},
 		).Handle("/srv/new")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
