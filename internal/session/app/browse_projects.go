@@ -171,8 +171,8 @@ func NewBrowseProjects(
 	}
 }
 
-// Handle shows the browser until the user opens a project or quits; a
-// project frozen from it is rooted at workingDir.
+// Handle shows the browser until the user opens a project, runs a task,
+// or quits; a project frozen from it is rooted at workingDir.
 func (uc BrowseProjects) Handle(workingDir string) error {
 	var selected domain.ProjectName
 	notice := ""
@@ -190,8 +190,8 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 		}
 		selected, notice, err = uc.act(choice, workingDir, overviews)
 		switch {
-		case err == nil && choice.Action == ActionOpen:
-			return nil
+		case err == nil && (choice.Action == ActionOpen || choice.Action == ActionRunTask):
+			return nil // the user is in the session
 		case errors.Is(err, ErrAborted):
 			notice = "Nothing done."
 		case err != nil:
@@ -414,8 +414,7 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		}
 		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
 	case ActionRunTask:
-		notice, err := uc.run.Handle(name, choice.Task)
-		return name, notice, err
+		return name, "", uc.run.Handle(name, choice.Task)
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)
 }

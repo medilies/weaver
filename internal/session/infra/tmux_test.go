@@ -1079,6 +1079,12 @@ func TestTmuxTasks(t *testing.T) {
 		server.waitFor(t, back, "hi-before task-42")
 	})
 
+	t.Run("selects the pane a task is typed into", func(t *testing.T) {
+		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{pane_id}"); got != back {
+			t.Fatalf("got pane %q current, want %q", got, back)
+		}
+	})
+
 	t.Run("cuts what is at the prompt before typing a task", func(t *testing.T) {
 		server.query(t, "send-keys", "-t", back, "-l", "echo prefilled")
 		if err := server.tmux().Type(project, api, 1, greet); err != nil {
@@ -1114,6 +1120,12 @@ func TestTmuxTasks(t *testing.T) {
 		server.waitFor(t, "=tasks:logs", "logs-42")
 	})
 
+	t.Run("selects the window a task is typed into", func(t *testing.T) {
+		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "logs" {
+			t.Fatalf("got %q current, want logs", got)
+		}
+	})
+
 	t.Run("finds a pane running a command busy", func(t *testing.T) {
 		server.query(t, "send-keys", "-t", back, "sleep 300", "Enter")
 		deadline := time.Now().Add(5 * time.Second)
@@ -1142,9 +1154,9 @@ func TestTmuxTasks(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps the user's window current", func(t *testing.T) {
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "api" {
-			t.Fatalf("got %q current, want api", got)
+	t.Run("makes the throwaway window current", func(t *testing.T) {
+		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "greet" {
+			t.Fatalf("got %q current, want greet", got)
 		}
 	})
 

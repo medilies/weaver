@@ -33,17 +33,7 @@ layers), XL (mostly open questions).
 
 ## Order
 
-Finish tasks before adding: the first comes from using them.
-
-### 1. Running a task switches to it (S)
-
-After a task starts, the browser exits and you land where it runs: its
-pane, selected in its window, or its throwaway window. Always, no
-setting. A mark in the browser for a running task waits for the
-exited-command warning's idle check, and a preview for the live
-preview.
-
-### 2. Setup and teardown commands (M)
+### 1. Setup and teardown commands (M)
 
 **Why now**: `bicyclette`'s `task dev` runs `docker compose up -d
 --wait`, and its containers outlive `weave kill`: tmux's `kill-session`
@@ -106,7 +96,7 @@ session behind.
   timeout, until its shell is idle (`foreground`), so dev servers shut
   down cleanly before the kill.
 
-### 3. Exited-command warning (M)
+### 2. Exited-command warning (M)
 
 **Why now**: `bicyclette`'s `task dev` and `bicyclette app` run for
 hours and can crash unseen. The live preview, under [By need](#by-need),
@@ -142,7 +132,9 @@ server crashed or was interrupted.
   something is enough.
 - Caveat: a command interrupted on purpose (Ctrl-C) warns too. It is a
   hint, not an error.
-- Later: a browser key that types the pane's command again.
+- Later: a browser key that types the pane's command again, and a
+  mark in the task list on a task still running, from the same idle
+  check.
 
 ## By need
 
@@ -326,7 +318,8 @@ output.
 ### Live preview (M)
 
 **When**: the exited-command warning isn't enough to tell whether a
-pane is still doing its job.
+pane is still doing its job, or a task's output is wanted without
+leaving the browser.
 
 Like tmux's `choose-tree` preview: `capture-pane` each pane of a
 running session and fill the drawing's boxes with their last lines,

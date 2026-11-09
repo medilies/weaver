@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -74,7 +75,7 @@ func tasked(t *testing.T) domain.Project {
 
 // runTask runs the task at of the tasked shop project, its session in
 // sessions, confirming with confirm.
-func runTask(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) (string, error) {
+func runTask(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) error {
 	t.Helper()
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
 	name, err := domain.NewProjectName("shop")
@@ -92,7 +93,7 @@ func runningShop(t *testing.T) *fakeTasks {
 func TestRunTask(t *testing.T) {
 	t.Run("types the task into its pane when its shell is idle", func(t *testing.T) {
 		tasks := runningShop(t)
-		if _, err := runTask(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}); err != nil {
+		if err := runTask(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if want := []string{"shop/1: php artisan migrate"}; len(tasks.typed) != 1 || tasks.typed[0] != want[0] {
@@ -100,29 +101,19 @@ func TestRunTask(t *testing.T) {
 		}
 	})
 
-	t.Run("says the task runs in the pane, by its name", func(t *testing.T) {
-		notice, err := runTask(t, runningShop(t), answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
-		if err != nil {
+	t.Run("puts the user in the session after typing the task", func(t *testing.T) {
+		tasks := runningShop(t)
+		if err := runTask(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "logs"), Pane: 0, Task: 0}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if want := "migrate running in front."; notice != want {
-			t.Fatalf("got %q, want %q", notice, want)
-		}
-	})
-
-	t.Run("names an unnamed pane after its window", func(t *testing.T) {
-		notice, err := runTask(t, runningShop(t), answer(false), app.TaskAt{Window: windowName(t, "logs"), Pane: 0, Task: 0})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if want := "tail running in logs."; notice != want {
-			t.Fatalf("got %q, want %q", notice, want)
+		if want := []string{"shop"}; !slices.Equal(tasks.attached, want) {
+			t.Fatalf("got %q attached, want %q", tasks.attached, want)
 		}
 	})
 
 	t.Run("refuses a project that isn't running", func(t *testing.T) {
 		tasks := &fakeTasks{fakeSessions: &fakeSessions{}}
-		_, err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
 		if !errors.Is(err, domain.ErrSessionNotRunning) || !strings.Contains(err.Error(), "open it first") {
 			t.Fatalf("got %v, want ErrSessionNotRunning saying to open it first", err)
 		}
@@ -133,7 +124,7 @@ func TestRunTask(t *testing.T) {
 
 	t.Run("refuses a session weaver didn't start", func(t *testing.T) {
 		tasks := &fakeTasks{fakeSessions: &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}}
-		_, err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
 		if !errors.Is(err, domain.ErrSessionNotOwned) || len(tasks.typed)+len(tasks.apart) > 0 {
 			t.Fatalf("got %v, ran %q %q, want ErrSessionNotOwned and nothing run", err, tasks.typed, tasks.apart)
 		}
@@ -142,7 +133,7 @@ func TestRunTask(t *testing.T) {
 	t.Run("runs the task in a throwaway window when its pane is busy and the user agrees", func(t *testing.T) {
 		tasks := runningShop(t)
 		tasks.busy = map[string]bool{"shop/1": true}
-		if _, err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 1}); err != nil {
+		if err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 1}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if want := "npm in /srv/shop/front: npm run build"; len(tasks.apart) != 1 || tasks.apart[0] != want || len(tasks.typed) > 0 {
@@ -150,29 +141,28 @@ func TestRunTask(t *testing.T) {
 		}
 	})
 
-	t.Run("says the task runs in its throwaway window", func(t *testing.T) {
+	t.Run("puts the user in the session after running the task apart", func(t *testing.T) {
 		tasks := runningShop(t)
 		tasks.busy = map[string]bool{"shop/1": true}
-		notice, err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 1})
-		if err != nil {
+		if err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 1}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if want := "npm run build running in the throwaway window npm."; notice != want {
-			t.Fatalf("got %q, want %q", notice, want)
+		if want := []string{"shop"}; !slices.Equal(tasks.attached, want) {
+			t.Fatalf("got %q attached, want %q", tasks.attached, want)
 		}
 	})
 
 	t.Run("runs nothing when its pane is busy and the user declines", func(t *testing.T) {
 		tasks := runningShop(t)
 		tasks.busy = map[string]bool{"shop/1": true}
-		_, err := runTask(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
-		if !errors.Is(err, app.ErrAborted) || len(tasks.typed)+len(tasks.apart) > 0 {
-			t.Fatalf("got %v, ran %q %q, want ErrAborted and nothing run", err, tasks.typed, tasks.apart)
+		err := runTask(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		if !errors.Is(err, app.ErrAborted) || len(tasks.typed)+len(tasks.apart)+len(tasks.attached) > 0 {
+			t.Fatalf("got %v, ran %q %q, attached %q, want ErrAborted and nothing run", err, tasks.typed, tasks.apart, tasks.attached)
 		}
 	})
 
 	t.Run("rejects a task the pane doesn't offer", func(t *testing.T) {
-		_, err := runTask(t, runningShop(t), answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 0, Task: 0})
+		err := runTask(t, runningShop(t), answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 0, Task: 0})
 		if !errors.Is(err, domain.ErrTaskNotFound) {
 			t.Fatalf("got %v, want ErrTaskNotFound", err)
 		}

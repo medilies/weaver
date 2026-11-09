@@ -80,8 +80,8 @@ instead, named after the task (or its command's program), starting in
 the pane's directory with its `env` and `before` commands, and kept open
 once the task ends until you close it. `weave freeze` leaves throwaway
 windows out, and opening the project doesn't restore them. Either way
-you stay in the browser, the task's pane selected, with what started
-where:
+weaver then puts you where the task runs, as opening the project does.
+A pane offers tasks under `tasks:`:
 
 ```yaml
       - name: api

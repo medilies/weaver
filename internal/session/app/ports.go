@@ -84,7 +84,8 @@ const (
 	ActionKill
 	// ActionDelete unregisters the chosen project.
 	ActionDelete
-	// ActionRunTask runs the chosen task of the chosen project.
+	// ActionRunTask runs the chosen task of the chosen project, then puts
+	// the user where it runs.
 	ActionRunTask
 )
 

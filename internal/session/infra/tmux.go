@@ -423,10 +423,17 @@ func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index i
 
 // Type implements domain.TaskRunner. Whatever is at the prompt, as a
 // prefill not run yet, is cut first, with C-e C-u, which shells keep to
-// paste back with C-y, so the task's command isn't added to it.
+// paste back with C-y, so the task's command isn't added to it. The pane
+// and its window are selected first, so a failure types nothing.
 func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
 	id, _, err := t.paneOf(project, window, index)
 	if err != nil {
+		return err
+	}
+	if _, err := t.run("select-window", "-t", id); err != nil {
+		return err
+	}
+	if _, err := t.run("select-pane", "-t", id); err != nil {
 		return err
 	}
 	if _, err := t.run("send-keys", "-t", id, "C-e", "C-u"); err != nil {
@@ -436,7 +443,7 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 }
 
 // RunApart implements domain.TaskRunner. The window goes after the
-// session's last, and the user stays where they are.
+// session's last, and is selected.
 func (t Tmux) RunApart(project domain.ProjectName, pane domain.PanePlan, task domain.Task) error {
 	session := "=" + project.String()
 	defaultCommand, err := t.option(session, "default-command")
@@ -447,7 +454,7 @@ func (t Tmux) RunApart(project domain.ProjectName, pane domain.PanePlan, task do
 		return err
 	}
 	args := []string{
-		"new-window", "-d", "-t", session + ":",
+		"new-window", "-t", session + ":",
 		"-n", formatArgument(task.ThrowawayWindow().String()),
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{window_id} #{pane_id}",

@@ -338,7 +338,7 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("runs a task and says where", func(t *testing.T) {
+	t.Run("leaves the browser once a task runs", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["shop"] = tasked(t)
 		s.sessions.running["shop"] = owned(t, "shop", "logs")
@@ -348,8 +348,8 @@ func TestBrowseProjects(t *testing.T) {
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got, want := s.browser.last().notice, "tail running in logs."; got != want {
-			t.Fatalf("got notice %q, want %q", got, want)
+		if got := len(s.browser.shown); got != 1 {
+			t.Fatalf("browser shown %d times, want once", got)
 		}
 	})
 

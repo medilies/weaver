@@ -32,18 +32,24 @@ type SessionFinder interface {
 	Find(name ProjectName) (RunningSession, bool, error)
 }
 
+// SessionAttacher puts the user in projects' running tmux sessions.
+// Infrastructure provides the implementation.
+type SessionAttacher interface {
+	// Attach puts the user in the project's running session.
+	Attach(name ProjectName) error
+}
+
 // SessionLauncher starts projects' tmux sessions and puts the user in
 // them. Infrastructure provides the implementation.
 type SessionLauncher interface {
 	SessionFinder
+	SessionAttacher
 	// Start creates a detached session from plan. If a step fails, none
 	// of the session is left running.
 	Start(plan SessionPlan) error
 	// Restore adds windows to the project's running session, each where
 	// its placement says.
 	Restore(name ProjectName, placements []WindowPlacement) error
-	// Attach puts the user in the project's running session.
-	Attach(name ProjectName) error
 }
 
 // SessionLister lists running tmux sessions. Infrastructure provides the
@@ -80,22 +86,25 @@ type SessionKiller interface {
 	Kill(name ProjectName) error
 }
 
-// TaskRunner runs panes' tasks in projects' running sessions. A pane is
-// found in the window of its project's session tagged with its window's
-// name: the window's only pane, or the one labelled with its name.
-// Infrastructure provides the implementation.
+// TaskRunner runs panes' tasks in projects' running sessions, and puts
+// the user where they run. A pane is found in the window of its project's
+// session tagged with its window's name: the window's only pane, or the
+// one labelled with its name. Infrastructure provides the implementation.
 type TaskRunner interface {
 	SessionFinder
+	SessionAttacher
 	// Busy reports whether something runs in the pane at index of window,
 	// in the project's running session, rather than its shell idling at
 	// its prompt; an error wrapping ErrPaneNotRunning when the session
 	// lacks the pane.
 	Busy(project ProjectName, window WindowPlan, index int) (bool, error)
-	// Type types task's command into that pane and runs it.
+	// Type types task's command into that pane and runs it, the pane
+	// becoming its session's current one.
 	Type(project ProjectName, window WindowPlan, index int, task Task) error
 	// RunApart runs task in a throwaway window of the project's running
 	// session, named after it, starting in pane's dir with its env and
-	// before commands, and kept open once the task ends. Capture skips
+	// before commands, and kept open once the task ends, the window
+	// becoming its session's current one. Capture skips
 	// throwaway windows, and restoration ignores them.
 	RunApart(project ProjectName, pane PanePlan, task Task) error
 }
