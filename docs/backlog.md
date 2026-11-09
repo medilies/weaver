@@ -4,7 +4,8 @@ Everything left to do or decide, in the order to do it: the browser
 ideas, the config ideas and what is left of the quality report (review
 of 2026-11-06, revised 2026-11-07), merged on 2026-11-08, then the
 first brief and its later notes, sorted on 2026-11-09, the first use
-of tasks, and v0.5.0, both scheduled on 2026-11-09. Their history is
+of tasks, and v0.5.0, both scheduled on 2026-11-09, then v0.6.0,
+scheduled on 2026-11-09 with the triggers dropped. Their history is
 in `git log -- docs/ideas.md docs/config-ideas.md
 docs/quality-report.md specs.md`.
 
@@ -19,8 +20,8 @@ From the project rules in `CLAUDE.md`:
   `app`.
 - **Domain before forms.** Rules go into `domain` before a form or the
   browser needs them; the forms only collect answers.
-- **Config fields only when a config needs them.** A field no config
-  uses yet waits in [By need](#by-need), with what would call for it.
+- **Config fields only when a config needs them.** Each of the
+  [Candidates](#candidates) says the use that calls for it.
 - **weaver runs only what a config says, and knows nothing of git.**
   Ideas that act on the user's behalf, or need git, are
   [Parked](#parked).
@@ -33,76 +34,114 @@ layers), XL (mostly open questions).
 
 ## Order
 
-v0.5.0, scheduled on 2026-11-09, is done: window `env`, focus, setup
-and teardown in the config form, the config in the browser, a failed
-teardown seen from inside the session, rerun and a mark on a running
-task. What comes next is picked from [By need](#by-need) when its
-trigger fires.
+v0.5.0 is done: window `env`, focus, setup and teardown in the config
+form, the config in the browser, a failed teardown seen from inside the
+session, rerun and a mark on a running task.
 
-## By need
+v0.6.0, scheduled on 2026-11-09: settings, and grids finished. No new
+command; breaking changes are allowed, but none is planned. The
+backlog's triggers are dropped: what comes next is picked from the
+[Candidates](#candidates) by judgement, each still with a concrete use.
 
-### Settings (by item)
+### 1. Housekeeping (XS)
 
-**When**: one of these bothers you enough to want it changed. Delayed
-on 2026-11-09 for v0.5.0's more essential items. Each is a
-weaver-wide setting, not a project's config, so the first one brings a
-settings file, which needs a glossary entry first.
+A config file whose stem isn't exactly its name is skipped with a
+warning: `shop .yml` lists as `shop`, because `NewProjectName` trims, so
+with `shop.yml` beside it `Names()` lists `shop` twice and `FindByName`
+reads `shop.yml` for both. Moved from [Left](#left-and-ignored).
 
-- The config form's keys for splitting panes (tmux's `%` and `"` today),
-  or reading them from the user's tmux bindings.
-- The selected colour (cyan), the config form's layout.
+### 2. Settings (M)
 
-Each waits for a config or a user that needs it; the trigger says what
-that looks like. They are listed from the smallest.
+Weaver-wide preferences, never a project's config (glossary:
+*settings*, *selected colour*).
 
-### A clean shutdown when killing (M)
+```yaml
+# yaml-language-server: $schema=settings.schema.json
+selected-colour: "#5fafd7"     # or an ANSI number, 0-255; cyan unless set
+keys:
+  split-right: "|"
+  split-below: "-"
+  remove: x
+  shrink: H
+  grow: L
+```
 
-**When**: a dev server leaves state behind (a lock file, a stale PID,
-an unflushed log) when its session is killed. After the teardown
-commands, the kill sends Ctrl-C to every pane and waits, with a
-timeout, until each shell is idle, then kills the session. It relies on
-the idle check meaning "the shell is idle", as `Idle` and `Busy` do.
+- `os.UserConfigDir()/weaver/settings.yml`, beside `projects/`, edited by
+  hand only: no command, no form, no `--raw`. A missing file means the
+  defaults.
+- weave writes `settings.schema.json` wherever it writes
+  `weaver.schema.json`, so it is there before the file is; the docs show
+  the `$schema` line to start the file with. A test checks the defaults
+  only use declared fields.
+- An invalid file stops weave with an error naming the file and the
+  field, as an invalid config is refused. A key already taken in the
+  config form (`u`, `j/k/h/l`, `enter`, …), or two actions on one key,
+  is refused, naming both.
+- `infra` only: an `infra.Settings` loaded by `cmd/weave` and handed to
+  `TeaConfigForm` and the browser. No port: no use case reads it.
+- The keys: the five drawing keys of the config form
+  (`pressedOnDrawing`), never read from the user's tmux bindings (ADR
+  0001). The colour: every `lipgloss.Color("6")` (`pickedStyle`,
+  `selectedStyle` and the drawing's); green, red and yellow stay.
+- "The config form's layout", listed before as a setting, is dropped
+  until someone can say what it would change.
+- Docs: `browser.md` and `config-form.md` say "selected colour" instead
+  of "cyan"; a settings page beside `config.md`.
 
-### Grid sizes in cells (S)
+### 3. Grid sizes in cells (S)
 
-**When**: a config wants a fixed-width column or row beside ones that
-share the rest, such as a 30-cell file tree.
+A fixed-width column or row beside ones that share the rest, such as a
+30-cell file tree:
 
-A grid's `columns` and `rows` take `%` and `fr` only: a split's `-l`
-is the new pane's size, so a cell size on a leading track depends on
-the window's width. Either size the split from the terminal's size
-(`TmuxOptions.Size`), split with `-b` so the new pane is the fixed one,
-or apply a `select-layout` string with tmux's checksum. Freeze would
-still write splits; writing a grid when a session fits a small one is
-its own decision.
+```yaml
+grid:
+  areas:
+    - [tree, editor]
+  columns: [30, 1fr]
+```
 
-### The browser full screen inside tmux (S to M)
+- A bare number is cells, as for splits and tmux's `-l`. An axis with a
+  cell track needs a `%` or `fr` track to take the rest; all cells is
+  refused (a new error), as the first pane takes what splits leave.
+- How tmux gets them: a split's `-l` is the new pane's size, so a cell
+  size on a leading track depends on the window's width. Spike first:
+  apply a `select-layout` string with tmux's checksum, serialised from
+  the grid's `LayoutCell`, and check what tmux does to a fixed track
+  when the window's size differs from the string's. If it rescales it,
+  fall back to sizing the splits from the terminal's size
+  (`TmuxOptions.Size`).
+- Schema: the track pattern takes a bare number. Freeze still writes
+  splits.
 
-**When**: running `weave` in a small pane keeps getting in the way.
-Inside tmux, `weave` runs in the pane it was typed in. Three ways, from
-the least code:
+### 4. Grid windows in the config form (M)
 
-- **A binding the user writes**, no code: `bind-key W display-popup -E
-  -w 100% -h 100% weave`. weave already works in a popup (no
-  `$TMUX_PANE`), switching sessions included. Could go in the README.
-- **weave re-running itself in a full-size popup** when inside tmux.
-  It acts on the user's behalf, so it is a weaver-wide setting, the
-  first (see [Settings](#settings-by-item)).
-- **The browser in its own tmux session**, weave switching to it and
-  back. Open questions: its name clashes with a project's session (a
-  project named `weaver` has the session `weaver`); it shows in tmux's
-  session list and among the sessions `weave freeze` offers to capture;
-  weaver would start a session that isn't a project's, so *owned
-  session* must leave it out; and whether it is killed or kept once a
-  project opens. Needs a glossary entry first.
+The config form draws a grid window and selects its panes, but refuses
+its keys that split, remove and resize panes (`ErrChangingGridPanes`)
+and shows its areas as text.
 
-### Window miniatures (S)
+- The window's card edits `areas` (one line per row), `columns` and
+  `rows` as text fields, each checked by `NewGrid` as it is typed; the
+  drawing follows. The drawing's keys stay refused on a grid: reshaping
+  it with keys would need `Grid` methods for adding tracks and merging
+  cells, each with its own edge cases.
+- `domain`: a grid window takes a new grid whose names match its panes
+  (a pane renamed or added in the areas is a pane added or renamed,
+  checked there, never in the form).
+- Saving keeps the panes in the config's order, not their creation
+  order, now that the pane list and the diff show it.
 
-**When**: projects with many windows, and a details pane tall enough
-to spare the lines.
+### 5. A grid turned into splits (S)
 
-The window list above the drawing becomes small drawings of every window, the
-selected one highlighted:
+One explicit action in the config form, never a side effect of another
+key: the grid's cut (`LayoutCell`, `CarvedPane`) becomes the window's
+splits, as capture does. Not the other way round: not every split tree
+has a tidy grid, and freeze already writes splits.
+
+### 6. Window miniatures (S)
+
+The browser's window list becomes small drawings of every window, the
+selected one in the selected colour, when the details pane has about
+five lines to spare, and stays names otherwise:
 
 ```text
  api              app              repo
@@ -112,26 +151,45 @@ selected one highlighted:
 └──────┴────┘    └──────┴────┘    └───────────┘
 ```
 
-`drawing` already draws at any size; this is `windowList` calling it small.
+`drawing` already draws at any size; this is `windowList` calling it
+small, keeping ○ and clicks (`hotspot`). The config form keeps its
+window list of names, with `+ window`.
 
-### Grid windows in the config form (M)
+## Candidates
 
-**When**: someone wants to change a grid window's layout without
-editing its YAML.
+Each says what it is for; picked by judgement, not by a trigger.
 
-The config form draws a grid window and selects its panes, but its
-keys that split, remove and resize panes are refused: the domain
-refuses changing a grid's panes (`ErrChangingGridPanes`), and the form
-shows its areas as text. Editing it as a grid means changing its
-`areas`, `columns` and `rows`, with new `Grid` methods in `domain`
-first. Turning a grid window into splits, or back, is an action of its
-own, never a side effect of another key. Saving a grid window lists its
-panes in creation order, not as the config listed them; keep the
-config's order if the form makes that visible.
+### A clean shutdown when killing (M)
+
+**Use**: a dev server leaves state behind (a lock file, a stale PID,
+an unflushed log) when its session is killed. After the teardown
+commands, the kill sends Ctrl-C to every pane and waits, with a
+timeout, until each shell is idle, then kills the session. It relies on
+the idle check meaning "the shell is idle", as `Idle` and `Busy` do.
+
+### The browser full screen inside tmux (S to M)
+
+**Use**: running `weave` in a small pane keeps getting in the way.
+Inside tmux, `weave` runs in the pane it was typed in. Three ways, from
+the least code:
+
+- **A binding the user writes**, no code: `bind-key W display-popup -E
+  -w 100% -h 100% weave`. weave already works in a popup (no
+  `$TMUX_PANE`), switching sessions included. Could go in the README.
+- **weave re-running itself in a full-size popup** when inside tmux.
+  It acts on the user's behalf, so it is a setting, off unless set
+  (see [Settings](#2-settings-m)).
+- **The browser in its own tmux session**, weave switching to it and
+  back. Open questions: its name clashes with a project's session (a
+  project named `weaver` has the session `weaver`); it shows in tmux's
+  session list and among the sessions `weave freeze` offers to capture;
+  weaver would start a session that isn't a project's, so *owned
+  session* must leave it out; and whether it is killed or kept once a
+  project opens. Needs a glossary entry first.
 
 ### Secrets read at start (M)
 
-**When**: a config would hold a secret.
+**Use**: a config would hold a secret.
 
 ```yaml
 env:
@@ -165,7 +223,7 @@ output.
 
 ### Live preview (M)
 
-**When**: the exited-command warning isn't enough to tell whether a
+**Use**: the exited-command warning isn't enough to tell whether a
 pane is still doing its job, or a task's output is wanted without
 leaving the browser.
 
@@ -182,7 +240,7 @@ programs.
 
 ### `wait` (M)
 
-**When**: a pane's command must run only once something answers: the
+**Use**: a pane's command must run only once something answers: the
 front end after the API, the migrations after Postgres. Comes after
 setup commands, which cover setup that must finish before the panes
 open; `wait` orders the panes among themselves.
@@ -222,7 +280,7 @@ open; `wait` orders the panes among themselves.
 
 ### Lazy windows (L)
 
-**When**: a project has heavy windows you don't always want (an
+**Use**: a project has heavy windows you don't always want (an
 emulator, a log tail). It wants a second argument to `weave`, which
 takes at most one today (`cmd/weave/root.go`). Deferred on 2026-11-09.
 
@@ -348,11 +406,6 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 - **`weave edit` races.** Edits are lost if the config is deleted while
   the editor is open (`ErrProjectNotFound`), and nothing protects
   against a lost update from a concurrent `weave freeze`.
-- **Config file names that differ only by spaces.** `shop .yml` lists as
-  `shop`, because `NewProjectName` trims; `FindByName` then reads
-  `shop.yml`, and with both files present `Names()` lists `shop` twice.
-  The fix would skip, with a warning, any file whose stem isn't exactly
-  the name.
 - **Freezing a pane with a job.** It is frozen in its shell's directory,
   read from `/proc`, so `make -C sub dev` from the root keeps the root.
   A subshell that changes directory first loses it:
