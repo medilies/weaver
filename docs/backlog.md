@@ -2,9 +2,10 @@
 
 Everything left to do or decide, in the order to do it: the browser
 ideas, the config ideas and what is left of the quality report (review
-of 2026-11-06, revised 2026-11-07), merged on 2026-11-08. Their history
-is in `git log -- docs/ideas.md docs/config-ideas.md
-docs/quality-report.md`.
+of 2026-11-06, revised 2026-11-07), merged on 2026-11-08, then the
+first brief and its later notes, sorted on 2026-11-09. Their history is
+in `git log -- docs/ideas.md docs/config-ideas.md
+docs/quality-report.md specs.md`.
 
 ## How the order is chosen
 
@@ -34,6 +35,8 @@ layers), XL (mostly open questions).
 | # | Task | Kind | Size | Needs |
 | --- | --- | --- | --- | --- |
 | 12 | Replacing a registered project when freezing | form | S | |
+| 13 | Tasks | config, browser | L | |
+| 14 | Tasks in the config form | form | M | 13 |
 
 ## 12. Replacing a registered project when freezing
 
@@ -48,7 +51,62 @@ right config over before it opens: either the form asks for a project's
 config as its name is kept, through a port, or the diff says it is
 against nothing and the question comes after.
 
+## 13. Tasks
+
+Decided on 2026-11-09. A pane offers commands to run on request, its
+tasks (see the glossary):
+
+```yaml
+panes:
+  - name: api
+    dir: back
+    command: php artisan serve
+    tasks:
+      - { name: migrate, command: php artisan migrate }
+      - command: php artisan db:seed      # the name is optional
+```
+
+- Declared on a pane only, as an ordered list; no window or project
+  tasks, nothing inherited. A task needs a command; within a pane, no
+  two tasks share a name, nor two unnamed ones a command.
+- Only in a running session. Picking a task of a project that isn't
+  running is refused, with a notice to open it first.
+- When the pane's shell is idle (`foreground`, as freeze uses), the
+  command is typed into it and run, with the pane's dir, env and before
+  commands already in place.
+- When it is busy, the browser asks "api is busy: run migrate in a
+  throwaway window?". Yes creates a window named after the task, or its
+  command's program, in the pane's dir with its env, runs its before
+  commands then the task, and keeps it open once the task ends. It is
+  tagged so that `Capture` skips it; restoration already ignores windows
+  that aren't configured.
+- Browser: a third column, the task list, shows the selected project's
+  tasks grouped under `window › pane`, in config order, each by its name
+  or else its command. A click runs one; `t` moves the cursor into it,
+  ↑↓ and enter pick, esc goes back. Picking a task selects its window
+  and pane in the drawing. The browser stays open, with a notice such as
+  `migrate running in api`.
+- The warnings check each task's program is on `PATH`.
+- Saving through the config form keeps tasks, being part of the pane;
+  editing them there is #14. Until then, `E`.
+
+## 14. Tasks in the config form
+
+Add, edit, remove and reorder a pane's tasks in its card.
+
 ## By need
+
+### Settings (by item)
+
+**When**: one of these bothers you enough to want it changed. Each is a
+weaver-wide setting, not a project's config, so the first one brings a
+settings file, which needs a glossary entry first.
+
+- After a task starts: switch to where it runs, or stay in the browser
+  (the default).
+- The config form's keys for splitting panes (tmux's `%` and `"` today),
+  or reading them from the user's tmux bindings.
+- The selected colour (cyan), the config form's layout.
 
 Each waits for a config or a user that needs it; the trigger says what
 that looks like. They are listed from the smallest.
@@ -349,16 +407,12 @@ open; `wait` orders the panes among themselves.
   `wait`. Released configs may be, so decide how: a migration message,
   or no new subcommand.
 
-### Lazy windows and tasks (L, L)
+### Lazy windows (L)
 
 **When**: a project has heavy windows you don't always want (an
-emulator, a log tail), or one-off commands you run often in a given dir
-(migrations, seeds, deploys). Both want a second argument to `weave`,
-which takes at most one today (`cmd/weave/root.go`), so design the two
-syntaxes together, even if only one gets built. `weave run` is a new
-subcommand, which reserves `run` as a project name, as `wait` would.
-
-**Lazy windows.**
+emulator, a log tail). It wants a second argument to `weave`, which
+takes at most one today (`cmd/weave/root.go`); design it with
+`weave run` below if both come.
 
 ```yaml
 windows:
@@ -388,38 +442,25 @@ browser, does.
   config it writes: warn, or carry lazy windows over from the existing
   config.
 
-**Tasks.**
+### `weave run` (S)
 
-```yaml
-tasks:
-  migrate:
-    dir: back
-    command: php artisan migrate
-```
-
-Named one-off commands, run with `weave run shop migrate` or from the
-browser, in the right `dir`, with the project's `env` and `before`.
-
-- Inside tmux, in a popup (`display-popup -E -d <dir>`) that stays open
-  on exit to show the result. Outside tmux, in the current terminal.
-- `before` commands are often shell functions (`nvm use`), so run
-  `$SHELL -ic '<before>; <command>'`, not `sh -c`. Startup is slower (rc
-  files are read), and `-i` behaves differently from one shell to
-  another.
-- `domain`: `Task` (name, dir, env, before, command), close to a pane
-  without a split, reusing its value objects. `Project.Tasks()`.
-- `app`: a `RunTask` use case, and a port to run it in a popup or the
-  terminal.
-- CLI: `weave run <project> <task>`, both completed, and
-  `weave run . migrate`.
-- Browser: tasks listed in the summary; `t` to pick one and run it. The
-  warnings check task programs too.
-- Schema: `tasks` maps a name to a task object.
+**When**: running a task from the command line, without the browser,
+comes up. `weave run <project> <task>`, both completed. It reserves
+`run` as a project name, as `wait` would, and shares its second-argument
+syntax with lazy windows.
 
 ## Parked
 
 Against the project's rules as they stand. Each says what would have to
 change to bring it back.
+
+- **Plugins, the long-term goal.** Extraordinary features through
+  plugins, maintained by external maintainers and interested teams,
+  without loading the core with code. That needs a solid pluggable
+  system first; variables and hooks are steps towards it, and the git
+  plugin and worktree variants below wait on it. Deferred on 2026-11-09:
+  tasks come first. *plugin*, *hook* and *variable* need glossary
+  entries before any design.
 
 - **Most recently opened first, in the list.** weaver would keep a
   record of when each project was opened, besides the configs. Back if
@@ -548,11 +589,11 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   preview.
 - `CommandRunner` serves start and teardown commands, and any later
   hook.
-- The idle-shell check (`foreground`) serves the exited-command warning
+- The idle-shell check (`foreground`) serves tasks, the exited-command warning
   and the clean shutdown after teardown.
 - One tmux pane listing serves the exited-command warning and
   `Capture`.
-- A second CLI argument serves lazy windows and tasks: design both
+- A second CLI argument serves lazy windows and `weave run`: design both
   together.
 - The `sh` startup script (`shellCommand`) carries secrets, and maybe
   `wait`.
