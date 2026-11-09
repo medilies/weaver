@@ -27,13 +27,15 @@ import (
 type TeaConfigForm struct {
 	workspace domain.Workspace
 	documents app.ProjectDocuments
+	settings  Settings
 }
 
 // NewTeaConfigForm constructs a TeaConfigForm checking directories in
 // workspace, and showing what saving a new project under a registered
-// name replaces in its config, read from documents.
-func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments) TeaConfigForm {
-	return TeaConfigForm{workspace: workspace, documents: documents}
+// name replaces in its config, read from documents, with the settings'
+// selected colour and drawing keys.
+func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments, settings Settings) TeaConfigForm {
+	return TeaConfigForm{workspace: workspace, documents: documents, settings: settings}
 }
 
 // Fill implements app.ProjectForm. The draft's name stays when it says
@@ -70,7 +72,7 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	}
 	model := configForm{
 		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
-		workspace: f.workspace, documents: f.documents, focus: spot{window: -1, pane: -1, field: fieldRoot},
+		workspace: f.workspace, documents: f.documents, look: f.settings.look(), drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
 	}
 	if !draft.NameStays {
 		model.focus.field = fieldName
@@ -141,6 +143,8 @@ type spot struct {
 // configForm is TeaConfigForm's Bubble Tea model. The project is always
 // valid: a field being typed changes it only once enter keeps it.
 type configForm struct {
+	look          look
+	drawingKeys   DrawingKeys
 	project       domain.Project
 	original      []byte // the project as its config writes it, to tell changes; none when unsaved
 	stored        []byte // the config as stored, which saving replaces
@@ -344,6 +348,17 @@ func (m configForm) typedVar() (spot, bool) {
 		return spot{}, false
 	}
 	return spot{window: at.window, pane: at.pane, field: fieldEnv, item: index}, true
+}
+
+// formKeys are the config form's keys on a row, the drawing's aside,
+// and what they do: the drawing keys can't be any of them. press reads
+// them in this order.
+var formKeys = map[string]string{
+	"up": "move", "down": "move", "left": "change", "right": "change",
+	"k": "move", "j": "move", "h": "change", "l": "change",
+	"enter": "edit", "o": "add", "d": "delete", "J": "reorder", "K": "reorder",
+	"u": "undo", "ctrl+r": "redo", "ctrl+s": "save", "esc": "leave", "ctrl+c": "leave",
+	"tab": "move", "shift+tab": "move",
 }
 
 // press is m after key, pressed on a row.
@@ -715,10 +730,11 @@ func (m configForm) cleared(at spot, c domain.Clearing) (domain.Project, error) 
 	return m.paneChanged(at, func(p domain.Pane) (domain.Pane, error) { return p.WithClearing(c), nil })
 }
 
-// pressedOnDrawing is m after key, pressed on the drawing, with tmux's
-// keys: arrows select the pane next to the selected one, going to the
-// rows above or below at the window's edge, % and " split it right or
-// below, x removes it, and H and L make it smaller or larger. Enter goes
+// pressedOnDrawing is m after key, pressed on the drawing, with the
+// drawing keys, tmux's unless set: arrows select the pane next to the
+// selected one, going to the rows above or below at the window's edge,
+// % and " split it right or below, x removes it, and H and L make it
+// smaller or larger. Enter goes
 // to its card. It is false for the other keys.
 func (m configForm) pressedOnDrawing(key string) (configForm, tea.Cmd, bool) {
 	switch key {
@@ -730,15 +746,15 @@ func (m configForm) pressedOnDrawing(key string) (configForm, tea.Cmd, bool) {
 		return m.selectedNext(-1, 0), nil, true
 	case "right", "l":
 		return m.selectedNext(1, 0), nil, true
-	case "%":
+	case m.drawingKeys.splitRight:
 		return m.split(domain.Right), nil, true
-	case "\"":
+	case m.drawingKeys.splitBelow:
 		return m.split(domain.Below), nil, true
-	case "x":
+	case m.drawingKeys.remove:
 		return m.deleting(), nil, true
-	case "H":
+	case m.drawingKeys.shrink:
 		return m.resized(-1), nil, true
-	case "L":
+	case m.drawingKeys.grow:
 		return m.resized(1), nil, true
 	case "enter":
 		m.focus.field = fieldName
@@ -1663,7 +1679,7 @@ func (m configForm) layout() section {
 	picked := shown.selection()
 	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
 	focused := m.focus == listAt
-	line, spots := formWindowList(shown.project.Windows(), picked.window, width-gutterWidth)
+	line, spots := formWindowList(m.look, shown.project.Windows(), picked.window, width-gutterWidth)
 	page.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	page.boxed("windows", shown.windowsCard(width-4), width, m.focus.window >= 0)
 	return page
@@ -1785,14 +1801,14 @@ func (m configForm) windowsCard(width int) section {
 	// status line.
 	drawWidth := width - gutterWidth
 	height := max(min(drawWidth*(m.height-1)/max(m.width, 1), m.bodyHeight()/3), minDrawingHeight)
-	drawn := drawing(plan, root.String(), nil, picked.pane, focused, m.width, max(m.height-1, 1), drawWidth, height)
+	drawn := drawing(m.look, plan, root.String(), nil, picked.pane, focused, m.width, max(m.height-1, 1), drawWidth, height)
 	for i, line := range drawn {
 		drawn[i] = strings.Repeat(" ", gutterWidth) + line
 	}
 	s.block(drawn, drawingAt, focused)
 	listAt := spot{window: picked.window, pane: picked.pane, field: fieldPaneList}
 	focused = m.focus == listAt
-	line, spots := paneList(window, drawnOrder(plan, m.width, max(m.height-1, 1)), picked.pane, width-gutterWidth)
+	line, spots := paneList(m.look, window, drawnOrder(plan, m.width, max(m.height-1, 1)), picked.pane, width-gutterWidth)
 	s.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
 	s.text("")
 	pane := window.Panes()[picked.pane]
@@ -1806,7 +1822,7 @@ func (m configForm) windowsCard(width int) section {
 // selected one in a cyan block, with the cells each covers, to click it.
 // When they don't fit in width, the first ones make way for the selected
 // one.
-func formWindowList(windows []domain.Window, selected int, width int) (string, []hotspot) {
+func formWindowList(look look, windows []domain.Window, selected int, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(windows)+1)
 	for _, window := range windows {
 		labels = append(labels, " "+window.Name().String()+" ")
@@ -1815,7 +1831,7 @@ func formWindowList(windows []domain.Window, selected int, width int) (string, [
 	for i, label := range labels {
 		switch {
 		case i == selected:
-			labels[i] = selectedStyle.Render(label)
+			labels[i] = look.selected.Render(label)
 		case i == len(windows):
 			labels[i] = keysStyle.Render(label)
 		}
@@ -1827,7 +1843,7 @@ func formWindowList(windows []domain.Window, selected int, width int) (string, [
 // those without, in order, as the drawing places them, the selected one
 // in a cyan block, with the cells each covers, to click it. When they
 // don't fit in width, the first ones make way for the selected one.
-func paneList(window domain.Window, order []int, selected int, width int) (string, []hotspot) {
+func paneList(look look, window domain.Window, order []int, selected int, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(order))
 	for _, i := range order {
 		pane := window.Panes()[i]
@@ -1836,7 +1852,7 @@ func paneList(window domain.Window, order []int, selected int, width int) (strin
 			name = strconv.Itoa(i + 1)
 		}
 		if i == selected {
-			labels = append(labels, selectedStyle.Render(" "+name+" "))
+			labels = append(labels, look.selected.Render(" "+name+" "))
 		} else {
 			labels = append(labels, " "+name+" ")
 		}
@@ -1987,7 +2003,7 @@ func (m configForm) putChoices(s *section, label string, options []string, selec
 	labels := make([]string, len(options))
 	for i, option := range options {
 		if i == selected {
-			labels[i] = selectedStyle.Render(" " + option + " ")
+			labels[i] = m.look.selected.Render(" " + option + " ")
 		} else {
 			labels[i] = keysStyle.Render(" " + option + " ")
 		}
@@ -2100,7 +2116,9 @@ func (m configForm) keys() string {
 	told := "↑↓ move · enter edit · ←→ change · o add · d delete · J/K reorder · u undo · ctrl+r redo · ctrl+s save · esc leave"
 	switch {
 	case m.focus.field == fieldDrawing && !m.editing && m.reviewing == nil:
-		told = "←→↑↓ select · % split right · \" split below · x remove · H/L resize · enter edit · u undo · ctrl+s save · esc leave"
+		k := m.drawingKeys
+		told = "←→↑↓ select · " + k.splitRight + " split right · " + k.splitBelow + " split below · " + k.remove + " remove · " +
+			k.shrink + "/" + k.grow + " resize · enter edit · u undo · ctrl+s save · esc leave"
 		if window, ok := m.windowAt(m.focus.window); ok {
 			if _, gridded := window.Grid(); gridded {
 				told = "←→↑↓ select · enter edit · u undo · ctrl+s save · esc leave · the grid places these panes"

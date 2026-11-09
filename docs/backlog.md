@@ -43,44 +43,6 @@ command; breaking changes are allowed, but none is planned. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-### 2. Settings (M)
-
-Weaver-wide preferences, never a project's config (glossary:
-*settings*, *selected colour*).
-
-```yaml
-# yaml-language-server: $schema=settings.schema.json
-selected-colour: "#5fafd7"     # or an ANSI number, 0-255; cyan unless set
-keys:
-  split-right: "|"
-  split-below: "-"
-  remove: x
-  shrink: H
-  grow: L
-```
-
-- `os.UserConfigDir()/weaver/settings.yml`, beside `projects/`, edited by
-  hand only: no command, no form, no `--raw`. A missing file means the
-  defaults.
-- weave writes `settings.schema.json` wherever it writes
-  `weaver.schema.json`, so it is there before the file is; the docs show
-  the `$schema` line to start the file with. A test checks the defaults
-  only use declared fields.
-- An invalid file stops weave with an error naming the file and the
-  field, as an invalid config is refused. A key already taken in the
-  config form (`u`, `j/k/h/l`, `enter`, …), or two actions on one key,
-  is refused, naming both.
-- `infra` only: an `infra.Settings` loaded by `cmd/weave` and handed to
-  `TeaConfigForm` and the browser. No port: no use case reads it.
-- The keys: the five drawing keys of the config form
-  (`pressedOnDrawing`), never read from the user's tmux bindings (ADR
-  0001). The colour: every `lipgloss.Color("6")` (`pickedStyle`,
-  `selectedStyle` and the drawing's); green, red and yellow stay.
-- "The config form's layout", listed before as a setting, is dropped
-  until someone can say what it would change.
-- Docs: `browser.md` and `config-form.md` say "selected colour" instead
-  of "cyan"; a settings page beside `config.md`.
-
 ### 3. Grid sizes in cells (S)
 
 A fixed-width column or row beside ones that share the rest, such as a
@@ -171,7 +133,7 @@ the least code:
   `$TMUX_PANE`), switching sessions included. Could go in the README.
 - **weave re-running itself in a full-size popup** when inside tmux.
   It acts on the user's behalf, so it is a setting, off unless set
-  (see [Settings](#2-settings-m)).
+  (see [Settings](settings.md)).
 - **The browser in its own tmux session**, weave switching to it and
   back. Open questions: its name clashes with a project's session (a
   project named `weaver` has the session `weaver`); it shows in tmux's

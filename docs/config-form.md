@@ -8,11 +8,12 @@ It shows a project as cards: the project's, then the
 window list and the selected window's card. Freezing starts it on a
 name, the root, and the session's windows if you named one; the name is
 typed there, and stays when editing. The selected window's panes are
-drawn as they open, the selected pane in cyan, heavy when the cursor is
+drawn as they open, the selected pane in the
+[selected colour](settings.md), heavy when the cursor is
 on the drawing; below them are the pane list, then the selected pane's
 card, starting with where the pane is placed. Click a window in the
 window list or a pane in the pane list to select it, or a `starts`, `clear` or `focus` option
-to pick it; the selected ones are cyan blocks. Each field is
+to pick it; the selected ones are blocks of the selected colour. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists; a
 command run that leaves a quote open is marked ⚠, as it would leave the
 shell waiting, but kept. The
@@ -44,7 +45,8 @@ when a config has some. To keep them, use `weave edit --raw` instead.
 
 ## Keys on the drawing
 
-On the drawing, the keys are tmux's. A window laid out by a `grid` only
+On the drawing, the keys are tmux's unless
+[set otherwise](settings.md#keys). A window laid out by a `grid` only
 selects its panes there: its grid places them.
 
 | Key | Does |

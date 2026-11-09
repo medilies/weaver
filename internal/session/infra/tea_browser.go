@@ -23,6 +23,7 @@ import (
 // task selected, and the cursor in the task list.
 type TeaBrowser struct {
 	kept *browserPlace
+	look look
 }
 
 // browserPlace is what the browser had selected when it last ended.
@@ -32,14 +33,15 @@ type browserPlace struct {
 	tasking            bool
 }
 
-// NewTeaBrowser constructs a TeaBrowser.
-func NewTeaBrowser() TeaBrowser {
-	return TeaBrowser{kept: &browserPlace{}}
+// NewTeaBrowser constructs a TeaBrowser showing what is selected in the
+// settings' selected colour.
+func NewTeaBrowser(settings Settings) TeaBrowser {
+	return TeaBrowser{kept: &browserPlace{}, look: settings.look()}
 }
 
 // Browse implements app.ProjectBrowser.
 func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string) (app.Choice, error) {
-	model := browser{projects: projects, notice: notice}
+	model := browser{projects: projects, notice: notice, look: b.look}
 	for i, project := range projects {
 		if project.Name() == selected {
 			model.cursor = i
@@ -82,9 +84,6 @@ var (
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	pickedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
-	// selectedStyle is the selected item of a list or choice: a cyan block.
-	selectedStyle = lipgloss.NewStyle().Background(lipgloss.Color("6")).Foreground(lipgloss.Color("0"))
 )
 
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
@@ -93,6 +92,7 @@ var (
 // drawn, the pane is its selected one, and the task the selected one in
 // the task list.
 type browser struct {
+	look          look
 	projects      []app.ProjectOverview
 	cursor        int
 	top           int
@@ -399,7 +399,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	var spots []hotspot
 	switch y {
 	case windowListRow(laid.top):
-		_, spots = windowList(project, windows, laid.index, width)
+		_, spots = windowList(m.look, project, windows, laid.index, width)
 	case windowListRow(laid.top) + 1 + len(laid.panes):
 		if laid.paneList == "" {
 			return m, nil
@@ -633,7 +633,7 @@ func (m browser) details(width, height int) string {
 	if laid.paneList != "" {
 		panes = append(panes, laid.paneList)
 	}
-	listLine, _ := windowList(project, windows, laid.index, width)
+	listLine, _ := windowList(m.look, project, windows, laid.index, width)
 	return laid.top + "\n\n" + listLine + "\n" + strings.Join(append(panes, laid.levels...), "\n")
 }
 
@@ -696,9 +696,9 @@ func (m browser) panesShown(project app.ProjectOverview, index, width, below, le
 		return undrawnPanes(window, root, alerts(project, window), pane, width, below), "", nil
 	}
 	// A session opens at the browser's size, less tmux's status line.
-	drawn := drawing(window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
+	drawn := drawing(m.look, window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
 		width, max(below-1-levelHeight, minDrawingHeight))
-	line, spots := paneList(project.Project().Windows()[index], drawnOrder(window, m.width, max(m.height-1, 1)), pane, width)
+	line, spots := paneList(m.look, project.Project().Windows()[index], drawnOrder(window, m.width, max(m.height-1, 1)), pane, width)
 	return drawn, line, spots
 }
 
@@ -766,7 +766,7 @@ func detailsTop(project app.ProjectOverview, width int) string {
 // drawn, after ←→ when there are several to switch between; with the
 // cells each window's name and each arrow covers, to click them. When they
 // don't fit in width, the first ones make way for the selected one.
-func windowList(project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) (string, []hotspot) {
+func windowList(look look, project app.ProjectOverview, windows []domain.WindowPlan, selected, width int) (string, []hotspot) {
 	missing := map[domain.WindowName]bool{}
 	for _, name := range project.MissingWindows() {
 		missing[name] = true
@@ -778,7 +778,7 @@ func windowList(project app.ProjectOverview, windows []domain.WindowPlan, select
 			label = " ○" + label
 		}
 		if i == selected {
-			label = selectedStyle.Render(label)
+			label = look.selected.Render(label)
 		}
 		labels[i] = label
 	}

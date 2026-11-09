@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "weaver settings",
+  "description": "Weaver-wide preferences, the same for every project. See https://github.com/medilies/weaver/blob/main/docs/settings.md",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "selected-colour": {
+      "description": "The colour marking what is selected in the browser and the config form: an ANSI colour number, 0-255, or \"#rrggbb\". Cyan (6) unless set.",
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 255 },
+        { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+      ]
+    },
+    "keys": {
+      "description": "The config form's keys on the drawing, tmux's unless set. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c, tab, shift+tab), nor two the same.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "split-right": { "$ref": "#/definitions/key", "description": "Split the selected pane, the new one on the right. % unless set." },
+        "split-below": { "$ref": "#/definitions/key", "description": "Split the selected pane, the new one below. \" unless set." },
+        "remove": { "$ref": "#/definitions/key", "description": "Remove the selected pane. x unless set." },
+        "shrink": { "$ref": "#/definitions/key", "description": "Make the selected pane smaller. H unless set." },
+        "grow": { "$ref": "#/definitions/key", "description": "Make the selected pane larger. L unless set." }
+      }
+    }
+  },
+  "definitions": {
+    "key": {
+      "description": "A key as the terminal sends it: a character such as | or -, or a name such as ctrl+x or alt+s.",
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

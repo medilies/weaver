@@ -108,4 +108,5 @@ nothing, and creates no directories.
 - [Opening, killing and freezing](docs/sessions.md): `setup` and `teardown`, restoring closed windows, capturing a session
 - [The browser](docs/browser.md): summary and warnings, the drawing, tasks, keys
 - [The config form](docs/config-form.md): cards, editing on the drawing, keys
+- [Settings](docs/settings.md): the selected colour and the drawing's keys
 - [Development](docs/development.md): building, testing, architecture

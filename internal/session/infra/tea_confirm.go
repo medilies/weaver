@@ -13,11 +13,14 @@ import (
 )
 
 // TeaConfirmer asks the user yes-or-no questions in a dialog.
-type TeaConfirmer struct{}
+type TeaConfirmer struct {
+	look look
+}
 
-// NewTeaConfirmer constructs TeaConfirmer.
-func NewTeaConfirmer() TeaConfirmer {
-	return TeaConfirmer{}
+// NewTeaConfirmer constructs a TeaConfirmer showing the answer chosen
+// in the settings' selected colour.
+func NewTeaConfirmer(settings Settings) TeaConfirmer {
+	return TeaConfirmer{look: settings.look()}
 }
 
 // Confirm implements app.Confirmer, as a dialog in the middle of the
@@ -25,8 +28,8 @@ func NewTeaConfirmer() TeaConfirmer {
 // question asked this way, No leaves things as they are. Ctrl+C aborts.
 // Declining to replace a registered project ends the freeze, as Ctrl+C
 // would.
-func (TeaConfirmer) Confirm(question string) (bool, error) {
-	final, err := tea.NewProgram(confirmation{question: question}, tea.WithOutput(os.Stderr)).Run()
+func (c TeaConfirmer) Confirm(question string) (bool, error) {
+	final, err := tea.NewProgram(confirmation{question: question, look: c.look}, tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return false, app.ErrAborted
 	}
@@ -39,6 +42,7 @@ func (TeaConfirmer) Confirm(question string) (bool, error) {
 // confirmation is the dialog: the question, the answer chosen, and the
 // terminal's size.
 type confirmation struct {
+	look       look
 	question   string
 	yes        bool
 	cols, rows int
@@ -116,9 +120,9 @@ func (c confirmation) laidOut() (lines []string, spots [][]hotspot, left, top in
 	lines = append(lines, "")
 	yes, no := answerYes, answerNo
 	if c.yes {
-		yes = selectedStyle.Render(yes)
+		yes = c.look.selected.Render(yes)
 	} else {
-		no = selectedStyle.Render(no)
+		no = c.look.selected.Render(no)
 	}
 	from := confirmIndent
 	lines = append(lines, strings.Repeat(" ", from)+yes+answersGap+no)

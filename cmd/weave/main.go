@@ -26,15 +26,21 @@ type application struct {
 	sessions domain.SessionLister
 }
 
-// wire builds the use cases against this machine: configs under the user
-// config directory and the user's tmux server.
+// wire builds the use cases against this machine: settings and configs
+// under the user config directory, and the user's tmux server. Invalid
+// settings stop weave.
 func wire() (application, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return application{}, err
 	}
 
-	projects := infra.NewFileProjectRegistry(filepath.Join(configDir, "weaver", "projects")).WithWarnings(os.Stderr)
+	weaverDir := filepath.Join(configDir, "weaver")
+	settings, err := infra.LoadSettings(weaverDir)
+	if err != nil {
+		return application{}, err
+	}
+	projects := infra.NewFileProjectRegistry(filepath.Join(weaverDir, "projects")).WithWarnings(os.Stderr)
 	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
 	// counts with $TMUX, which names the server it belongs to. A popup or
 	// run-shell has $TMUX but no pane.
@@ -47,7 +53,7 @@ func wire() (application, error) {
 	workspace := infra.NewLocalWorkspace()
 	commands := infra.NewShellRunner(os.Stdin, os.Stdout, os.Stderr)
 
-	confirm, configForm := infra.NewTeaConfirmer(), infra.NewTeaConfigForm(workspace, projects)
+	confirm, configForm := infra.NewTeaConfirmer(settings), infra.NewTeaConfigForm(workspace, projects, settings)
 
 	weaver := application{
 		freezeProject: app.NewFreezeProject(projects, tmux, workspace, configForm, confirm),
@@ -58,7 +64,7 @@ func wire() (application, error) {
 		listProjects:  app.NewListProjects(projects, tmux),
 		documents:     projects,
 	}
-	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(), confirm, projects, projects, workspace, tmux,
+	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(settings), confirm, projects, projects, workspace, tmux,
 		weaver.listProjects, weaver.openProject, weaver.freezeProject, weaver.editProject, weaver.killProject,
 		app.NewRunTask(projects, tmux, confirm), app.NewRerunCommand(projects, tmux))
 	return weaver, nil

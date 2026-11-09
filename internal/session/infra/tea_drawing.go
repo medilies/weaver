@@ -150,7 +150,6 @@ const (
 )
 
 var alertStyles = map[alert]lipgloss.Style{
-	selectedPane: pickedStyle,
 	exitedAlert:  warningStyle,
 	programAlert: warningStyle,
 	dirAlert:     problemStyle,
@@ -164,7 +163,7 @@ var alertStyles = map[alert]lipgloss.Style{
 // set, else with its name in brackets. A pane with an alert, from alerts
 // by its index, gets ⚠ in its top border and a border in the alert's
 // colour, the worst winning on a border boxes share, and over cyan.
-func drawing(window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
+func drawing(look look, window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
 	// rows (the other one), maps to the same drawn line for every box it
@@ -220,7 +219,7 @@ func drawing(window domain.WindowPlan, root string, alerts []alert, selected int
 			grid.alertCell(f.left+2, f.top, a) // the title, if written
 		}
 	}
-	return grid.rows()
+	return grid.rows(look.picked)
 }
 
 // alertOf is the alert of the pane at index, none past the end of alerts.
@@ -442,12 +441,17 @@ func (g grid) alertCell(x, y int, a alert) {
 	}
 }
 
-func (g grid) rows() []string {
+// rows are the drawn rows, the selected pane's border in picked.
+func (g grid) rows(picked lipgloss.Style) []string {
 	rows := make([]string, len(g.cells))
 	for y, row := range g.cells {
 		var b strings.Builder
 		for x, cell := range row {
-			if style, ok := alertStyles[g.alerts[y][x]]; ok && cell != "" {
+			style, ok := alertStyles[g.alerts[y][x]]
+			if g.alerts[y][x] == selectedPane {
+				style, ok = picked, true
+			}
+			if ok && cell != "" {
 				cell = style.Render(cell)
 			}
 			b.WriteString(cell)
