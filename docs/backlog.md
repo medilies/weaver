@@ -43,23 +43,6 @@ command; breaking changes are allowed, but none is planned. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-### 4. Grid windows in the config form (M)
-
-The config form draws a grid window and selects its panes, but refuses
-its keys that split, remove and resize panes (`ErrChangingGridPanes`)
-and shows its areas as text.
-
-- The window's card edits `areas` (one line per row), `columns` and
-  `rows` as text fields, each checked by `NewGrid` as it is typed; the
-  drawing follows. The drawing's keys stay refused on a grid: reshaping
-  it with keys would need `Grid` methods for adding tracks and merging
-  cells, each with its own edge cases.
-- `domain`: a grid window takes a new grid whose names match its panes
-  (a pane renamed or added in the areas is a pane added or renamed,
-  checked there, never in the form).
-- Saving keeps the panes in the config's order, not their creation
-  order, now that the pane list and the diff show it.
-
 ### 5. A grid turned into splits (S)
 
 One explicit action in the config form, never a side effect of another

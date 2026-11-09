@@ -173,7 +173,7 @@ windows:
 		}
 	})
 
-	t.Run("writes a grid back, its panes in creation order and without splits", func(t *testing.T) {
+	t.Run("writes a grid back, its panes in the config's order and without splits", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "grid", gridDoc))
 		want := `# yaml-language-server: $schema=./weaver.schema.json
 root: /srv/grid
@@ -185,10 +185,10 @@ windows:
         - [editor, server]
         - [editor, go test]
     panes:
-      - name: editor
-      - name: server
       - name: go test
         command: go test ./...
+      - name: editor
+      - name: server
 `
 		if got != want {
 			t.Fatalf("got:\n%s\nwant:\n%s", got, want)

@@ -118,6 +118,9 @@ const (
 	fieldWindowList // the window list, the window being the one selected
 	fieldPaneList   // the pane list, the pane being the one selected
 	fieldDrawing    // the window's panes drawn, the pane being the one selected
+	fieldGridAreas  // a grid window's areas: rows separated by " / ", names in a row by commas
+	fieldGridColumns
+	fieldGridRows
 )
 
 // isList reports whether f holds a list, a row per item.
@@ -1129,6 +1132,25 @@ func (m configForm) applied(at spot, text string) (domain.Project, error) {
 		return m.withItems(at, withItem(m.items(at), at.item, text))
 	case isTask(at.field):
 		return m.withTask(at, text)
+	case at.field == fieldGridAreas:
+		return m.regridded(at, func(grid domain.Grid) (domain.Grid, error) {
+			areas, err := parseAreas(text)
+			if err != nil {
+				return domain.Grid{}, err
+			}
+			return grid.WithAreas(areas)
+		})
+	case at.field == fieldGridColumns || at.field == fieldGridRows:
+		return m.regridded(at, func(grid domain.Grid) (domain.Grid, error) {
+			tracks, err := parseTracks(text)
+			if err != nil {
+				return domain.Grid{}, err
+			}
+			if at.field == fieldGridColumns {
+				return domain.NewGrid(grid.Areas(), tracks, grid.Rows())
+			}
+			return domain.NewGrid(grid.Areas(), grid.Columns(), tracks)
+		})
 	case at.window == len(m.project.Windows()):
 		name, err := domain.NewWindowName(text)
 		if err != nil {
@@ -1194,6 +1216,88 @@ func (m configForm) paneChanged(at spot, change func(domain.Pane) (domain.Pane, 
 			return domain.Window{}, err
 		}
 		return window.ReplacingPane(at.pane, changed)
+	})
+}
+
+// areasText is grid's areas as typed: its rows separated by " / ", the
+// panes' names in a row by commas. All rows are typed at once, since
+// adding a column changes every row.
+func areasText(grid domain.Grid) string {
+	var rows []string
+	for _, row := range grid.Areas() {
+		names := make([]string, len(row))
+		for i, name := range row {
+			names[i] = name.String()
+		}
+		rows = append(rows, strings.Join(names, ", "))
+	}
+	return strings.Join(rows, " / ")
+}
+
+// tracksText is tracks as typed, separated by spaces, or "" for equal
+// ones.
+func tracksText(tracks []domain.Track) string {
+	texts := make([]string, len(tracks))
+	for i, t := range tracks {
+		texts[i] = t.String()
+	}
+	return strings.Join(texts, " ")
+}
+
+// tracksShown is tracks as the window card shows them, "equal" dimmed
+// for none.
+func tracksShown(tracks []domain.Track) string {
+	if len(tracks) == 0 {
+		return keysStyle.Render("equal")
+	}
+	return tracksText(tracks)
+}
+
+// parseTracks reads sizes typed separated by spaces or commas, none
+// meaning equal ones.
+func parseTracks(text string) ([]domain.Track, error) {
+	var tracks []domain.Track
+	for _, raw := range strings.Fields(strings.ReplaceAll(text, ",", " ")) {
+		track, err := domain.ParseTrack(raw)
+		if err != nil {
+			return nil, err
+		}
+		tracks = append(tracks, track)
+	}
+	return tracks, nil
+}
+
+// parseAreas reads a grid's areas as areasText writes them.
+func parseAreas(text string) ([][]domain.PaneName, error) {
+	rows := strings.Split(text, "/")
+	areas := make([][]domain.PaneName, 0, len(rows))
+	for i, row := range rows {
+		var names []domain.PaneName
+		for _, raw := range strings.Split(row, ",") {
+			name, err := domain.NewPaneName(raw)
+			if err != nil {
+				return nil, fmt.Errorf("row %d: %w", i+1, err)
+			}
+			names = append(names, name)
+		}
+		areas = append(areas, names)
+	}
+	return areas, nil
+}
+
+// regridded is the project with the grid of the window at's row is in
+// changed.
+func (m configForm) regridded(at spot, change func(domain.Grid) (domain.Grid, error)) (domain.Project, error) {
+	return m.windowChanged(at, func(window domain.Window) (domain.Window, error) {
+		grid, gridded := window.Grid()
+		if !gridded {
+			return domain.Window{}, domain.ErrNotAGrid
+		}
+		changed, err := change(grid)
+		if err != nil {
+			return domain.Window{}, err
+		}
+		return window.LaidOutBy(changed)
 	})
 }
 
@@ -1391,6 +1495,15 @@ func (m configForm) current(at spot) string {
 			return tasks[at.item].Name()
 		}
 		return tasks[at.item].Command().String()
+	case at.field == fieldGridAreas:
+		grid, _ := window.Grid()
+		return areasText(grid)
+	case at.field == fieldGridColumns || at.field == fieldGridRows:
+		grid, _ := window.Grid()
+		if at.field == fieldGridColumns {
+			return tracksText(grid.Columns())
+		}
+		return tracksText(grid.Rows())
 	case !inPane && at.field == fieldName:
 		return window.Name().String()
 	case !inPane:
@@ -1626,7 +1739,8 @@ func (m configForm) list(s *section, label string, items []string, at spot) {
 // shown is the project with what is typed, when it is valid and shows
 // where it is typed, else the project.
 func (m configForm) shown() domain.Project {
-	if m.editing && m.edit.err == nil && !isList(m.edit.at.field) && !isTask(m.edit.at.field) && m.edit.at.field != fieldHigherEnv {
+	if m.editing && m.edit.err == nil && !isList(m.edit.at.field) &&
+		!isTask(m.edit.at.field) && m.edit.at.field != fieldHigherEnv {
 		return m.edit.preview
 	}
 	return m.project
@@ -1777,17 +1891,10 @@ func (m configForm) windowsCard(width int) section {
 	m.list(&s, "before", lines(window.Before()), at(fieldBefore))
 	m.putClear(&s, at(fieldClear))
 	m.envRows(&s, at(fieldEnv))
-	grid, gridded := window.Grid()
-	if gridded {
-		rows := make([]string, 0, len(grid.Areas()))
-		for _, row := range grid.Areas() {
-			names := make([]string, 0, len(row))
-			for _, name := range row {
-				names = append(names, name.String())
-			}
-			rows = append(rows, strings.Join(names, " "))
-		}
-		shownText(&s, "grid", keysStyle.Render(strings.Join(rows, " / ")))
+	if grid, gridded := window.Grid(); gridded {
+		m.put(&s, "areas", areasText(grid), "", at(fieldGridAreas))
+		m.put(&s, "columns", tracksShown(grid.Columns()), "", at(fieldGridColumns))
+		m.put(&s, "rows", tracksShown(grid.Rows()), "", at(fieldGridRows))
 	}
 	s.text("")
 
@@ -2121,7 +2228,7 @@ func (m configForm) keys() string {
 			k.shrink + "/" + k.grow + " resize · enter edit · u undo · ctrl+s save · esc leave"
 		if window, ok := m.windowAt(m.focus.window); ok {
 			if _, gridded := window.Grid(); gridded {
-				told = "←→↑↓ select · enter edit · u undo · ctrl+s save · esc leave · the grid places these panes"
+				told = "←→↑↓ select · enter edit · u undo · ctrl+s save · esc leave · the window's areas place these panes"
 			}
 		}
 	case m.reviewing != nil:

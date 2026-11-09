@@ -325,10 +325,25 @@ func TestChangingGridWindowPanes(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects renaming a pane", func(t *testing.T) {
+	t.Run("renames a pane in its grid's areas", func(t *testing.T) {
 		w := gridWindow(t)
-		if _, err := w.ReplacingPane(1, w.Panes()[1].Named(paneName(t, "c"))); !errors.Is(err, domain.ErrChangingGridPanes) {
-			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		old := w.Panes()[1].Name()
+		renamed, err := w.ReplacingPane(1, w.Panes()[1].Named(paneName(t, "c")))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		grid, _ := renamed.Grid()
+		for _, row := range grid.Areas() {
+			if slices.Contains(row, old) {
+				t.Fatalf("got %v, want %s renamed c", grid.Areas(), old)
+			}
+		}
+	})
+
+	t.Run("rejects renaming a pane to another's name", func(t *testing.T) {
+		w := gridWindow(t)
+		if _, err := w.ReplacingPane(1, w.Panes()[1].Named(w.Panes()[0].Name())); !errors.Is(err, domain.ErrDuplicatePaneName) {
+			t.Fatalf("got %v, want ErrDuplicatePaneName", err)
 		}
 	})
 
@@ -412,6 +427,130 @@ func TestGridTracksInCells(t *testing.T) {
 		g := grid(t, []string{"60%", "40%"}, nil, []string{"a", "b"})
 		if got := sizedSplits(t, g, 100, 30, named(t, "a", "b")...); !slices.Equal(got, []string{"a", "b right of #1 40%"}) {
 			t.Fatalf("got %q, want the split in percent", got)
+		}
+	})
+}
+
+// gridWindow is a window laid out by g with panes.
+func gridWindow(t *testing.T, g domain.Grid, panes ...domain.Pane) domain.Window {
+	t.Helper()
+	w, err := domain.NewGridWindow(windowName(t, "w"), g, panes...)
+	if err != nil {
+		t.Fatalf("NewGridWindow: %v", err)
+	}
+	return w
+}
+
+// listed is the names of the window's panes as its config lists them.
+func listed(w domain.Window) []string {
+	panes := w.Panes()
+	var out []string
+	for _, i := range w.Listing() {
+		out = append(out, panes[i].Name().String())
+	}
+	return out
+}
+
+func TestGridWindowListing(t *testing.T) {
+	t.Run("lists a grid window's panes as they were given", func(t *testing.T) {
+		g := grid(t, nil, nil, []string{"a", "b"}, []string{"a", "c"})
+		w := gridWindow(t, g, named(t, "c", "a", "b")...)
+		if got := listed(w); !slices.Equal(got, []string{"c", "a", "b"}) {
+			t.Fatalf("got %q, want them as given", got)
+		}
+	})
+
+	t.Run("lists a split window's panes in creation order", func(t *testing.T) {
+		w := window(t, "w", domain.NewPane().Named(paneName(t, "a")),
+			domain.NewPane().Named(paneName(t, "b")).Splitting(split(t, 0, domain.Right, "")))
+		if got := listed(w); !slices.Equal(got, []string{"a", "b"}) {
+			t.Fatalf("got %q, want a, b", got)
+		}
+	})
+}
+
+func TestWindowLaidOutBy(t *testing.T) {
+	two := func(t *testing.T) domain.Window {
+		t.Helper()
+		panes := named(t, "editor", "server")
+		panes[1] = panes[1].Running(command(t, "npm run dev"))
+		return gridWindow(t, grid(t, nil, nil, []string{"editor", "server"}), panes...).In(paneDir(t, "app"))
+	}
+	byName := func(w domain.Window, name string) (domain.Pane, bool) {
+		for _, pane := range w.Panes() {
+			if pane.Name().String() == name {
+				return pane, true
+			}
+		}
+		return domain.Pane{}, false
+	}
+
+	t.Run("keeps what a pane the grid still names runs", func(t *testing.T) {
+		w, err := two(t).LaidOutBy(grid(t, nil, nil, []string{"editor"}, []string{"server"}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		server, _ := byName(w, "server")
+		if cmd, ok := server.Startup().Command(); !ok || cmd.String() != "npm run dev" {
+			t.Fatalf("got %q, want npm run dev kept", cmd)
+		}
+	})
+
+	t.Run("adds a name new to the window as a plain pane, listed last", func(t *testing.T) {
+		w, err := two(t).LaidOutBy(grid(t, nil, nil, []string{"logs", "editor", "server"}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := listed(w); !slices.Equal(got, []string{"editor", "server", "logs"}) {
+			t.Fatalf("got %q, want logs last", got)
+		}
+	})
+
+	t.Run("removes a pane the grid no longer names", func(t *testing.T) {
+		w, err := two(t).LaidOutBy(grid(t, nil, nil, []string{"editor"}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, ok := byName(w, "server"); ok {
+			t.Fatal("got server kept, want it removed")
+		}
+	})
+
+	t.Run("keeps the window's own settings", func(t *testing.T) {
+		w, err := two(t).LaidOutBy(grid(t, nil, nil, []string{"server", "editor"}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := w.Dir().String(); got != "app" {
+			t.Fatalf("got dir %q, want app", got)
+		}
+	})
+
+	t.Run("refuses a window laid out by splits", func(t *testing.T) {
+		_, err := window(t, "w").LaidOutBy(grid(t, nil, nil, []string{"a"}))
+		if !errors.Is(err, domain.ErrNotAGrid) {
+			t.Fatalf("got %v, want ErrNotAGrid", err)
+		}
+	})
+}
+
+func TestGridWithAreas(t *testing.T) {
+	sized := func(t *testing.T) domain.Grid {
+		t.Helper()
+		return grid(t, []string{"60%", "40%"}, []string{"70%", "30%"}, []string{"a", "b"}, []string{"a", "c"})
+	}
+
+	t.Run("keeps the sizes of as many columns and rows", func(t *testing.T) {
+		g, err := sized(t).WithAreas(areas(t, []string{"a", "c"}, []string{"a", "b"}))
+		if err != nil || len(g.Columns()) != 2 || len(g.Rows()) != 2 {
+			t.Fatalf("got %v, %v (%v), want both kept", g.Columns(), g.Rows(), err)
+		}
+	})
+
+	t.Run("makes rows equal when their count changes", func(t *testing.T) {
+		g, err := sized(t).WithAreas(areas(t, []string{"a", "b"}, []string{"a", "c"}, []string{"d", "d"}))
+		if err != nil || len(g.Rows()) != 0 || len(g.Columns()) != 2 {
+			t.Fatalf("got columns %v, rows %v (%v), want rows equal, columns kept", g.Columns(), g.Rows(), err)
 		}
 	})
 }

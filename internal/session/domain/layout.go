@@ -549,6 +549,7 @@ type Window struct {
 	clears  Clearing
 	grid    Grid
 	gridded bool
+	listing []int // a grid window's panes, by index, in the order its config lists them
 	focused bool
 }
 
@@ -627,7 +628,53 @@ func NewGridWindow(name WindowName, grid Grid, panes ...Pane) (Window, error) {
 		return Window{}, err
 	}
 	window.grid, window.gridded = grid, true
+	window.listing = make([]int, len(panes))
+	for k, pane := range panes {
+		window.listing[k] = slices.IndexFunc(ordered, func(p Pane) bool { return p.name == pane.name })
+	}
 	return window, nil
+}
+
+// Listing is the indexes of the window's panes in the order its config
+// lists them: for a grid window, as they were given, which needn't be the
+// order tmux creates them in; for any other, that order.
+func (w Window) Listing() []int {
+	if !w.gridded {
+		return seq(len(w.panes))
+	}
+	return slices.Clone(w.listing)
+}
+
+// LaidOutBy is the grid window laid out by grid instead: a pane the grid
+// still names keeps what it runs and its place in the listing, a name new
+// to the window is a new plain pane, listed last, and a pane the grid no
+// longer names is removed. The window keeps its own settings. A window
+// laid out by splits can't take a grid this way.
+func (w Window) LaidOutBy(grid Grid) (Window, error) {
+	if !w.gridded {
+		return Window{}, ErrNotAGrid
+	}
+	var panes []Pane
+	listed := make(map[PaneName]bool, len(w.panes))
+	for _, index := range w.listing {
+		pane := w.panes[index]
+		if slices.Contains(grid.names, pane.name) {
+			pane.split, pane.splits = Split{}, false
+			panes = append(panes, pane)
+			listed[pane.name] = true
+		}
+	}
+	for _, name := range grid.names {
+		if !listed[name] {
+			panes = append(panes, NewPane().Named(name))
+		}
+	}
+	laid, err := NewGridWindow(w.name, grid, panes...)
+	if err != nil {
+		return Window{}, err
+	}
+	w.panes, w.grid, w.listing = laid.panes, laid.grid, laid.listing
+	return w, nil
 }
 
 // checkPlacement enforces the creation order: the first pane fills the
@@ -788,16 +835,25 @@ func (w Window) AddingPane(pane Pane) (Window, error) {
 // ReplacingPane is the window with the pane at index replaced, as when
 // one of its fields changes or it splits differently. Unnamed among
 // several, it gets the first free default name. In a window laid out by
-// a grid, the pane keeps its name and split: the grid gives them.
+// a grid, the pane keeps its split, which the grid gives, and renaming it
+// renames it in the grid's areas.
 func (w Window) ReplacingPane(index int, pane Pane) (Window, error) {
 	if err := w.checkPaneIndex(index); err != nil {
 		return Window{}, err
 	}
-	if old := w.panes[index]; w.gridded && (pane.name != old.name || pane.split != old.split || pane.splits != old.splits) {
+	old := w.panes[index]
+	if w.gridded && (pane.split != old.split || pane.splits != old.splits || pane.name.IsZero()) {
 		return Window{}, ErrChangingGridPanes
 	}
 	panes := slices.Clone(w.panes)
 	panes[index] = pane
+	if w.gridded && pane.name != old.name {
+		grid, err := w.grid.renaming(old.name, pane.name)
+		if err != nil {
+			return Window{}, err
+		}
+		w.grid = grid
+	}
 	return w.withPanes(panes)
 }
 

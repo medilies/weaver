@@ -351,6 +351,38 @@ func cloneAreas(areas [][]PaneName) [][]PaneName {
 	return out
 }
 
+// WithAreas is the grid placing its panes by areas instead, keeping its
+// columns' sizes while it has as many columns, and its rows' while it has
+// as many rows: sizes for another count would refuse it, so changing the
+// count makes them equal.
+func (g Grid) WithAreas(areas [][]PaneName) (Grid, error) {
+	columns, rows := g.columns, g.rows
+	if len(areas) == 0 || len(areas[0]) != len(g.areas[0]) {
+		columns = nil
+	}
+	if len(areas) != len(g.areas) {
+		rows = nil
+	}
+	return NewGrid(areas, columns, rows)
+}
+
+// renaming is the grid with the pane named from named to instead, in
+// every cell it covers. A name another pane has is refused.
+func (g Grid) renaming(from, to PaneName) (Grid, error) {
+	if slices.Contains(g.names, to) {
+		return Grid{}, fmt.Errorf("%w: %q", ErrDuplicatePaneName, to.value)
+	}
+	areas := cloneAreas(g.areas)
+	for _, row := range areas {
+		for i, name := range row {
+			if name == from {
+				row[i] = to
+			}
+		}
+	}
+	return NewGrid(areas, g.columns, g.rows)
+}
+
 // Areas are the grid's rows of pane names.
 func (g Grid) Areas() [][]PaneName {
 	return cloneAreas(g.areas)

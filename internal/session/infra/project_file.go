@@ -572,7 +572,7 @@ func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
 	} else if len(panes) == 1 && isPlain(root, window, panes[0]) {
 		return file
 	}
-	for i := range panes {
+	for _, i := range window.Listing() {
 		pane := paneFileOf(root, window, i)
 		if gridded {
 			pane.Split = nil // the grid's

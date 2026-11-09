@@ -23,8 +23,20 @@ pane the project's and its window's before commands and variables, with
 the level they come from; enter on such a variable sets it for the
 window or pane instead. A window or pane among several has a `focus`:
 whether opening lands in it, or its window selects it. A pane's tasks come last: each
-its command, then its name, left blank to show the task by its command. A window
-laid out by a `grid` keeps its panes' names and places.
+its command, then its name, left blank to show the task by its command.
+
+A window laid out by a `grid` shows its `areas` in its card, its rows
+separated by ` / `, the panes' names in a row by commas
+(`app shell, flutter run / app shell, emulator`), so that adding a column
+changes every row at once, then
+its `columns` and `rows` sizes, separated by spaces (`30 1fr`), blank for
+equal ones. The drawing follows as you type. A name new to the window
+adds a pane, and a pane no longer named is removed with what it runs:
+rename a pane in its card instead, which renames it in the areas too.
+Changing how many columns or rows there are makes them equal. A pane
+name holding a comma or a `/` can't be typed there: use
+`weave edit --raw`. Panes are
+saved in the order the config lists them, new ones last.
 
 Saving rewrites the config, so its comments go: `weave edit` asks first
 when a config has some. To keep them, use `weave edit --raw` instead.
@@ -47,7 +59,7 @@ when a config has some. To keep them, use `weave edit --raw` instead.
 
 On the drawing, the keys are tmux's unless
 [set otherwise](settings.md#keys). A window laid out by a `grid` only
-selects its panes there: its grid places them.
+selects its panes there: its areas place them.
 
 | Key | Does |
 | --- | --- |
