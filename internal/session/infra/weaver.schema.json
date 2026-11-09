@@ -46,7 +46,7 @@
   },
   "definitions": {
     "env": {
-      "description": "Environment variables, set literally. A pane's override its project's.",
+      "description": "Environment variables, set literally. A window's override its project's, and a pane's its window's.",
       "type": "object",
       "propertyNames": {
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
@@ -94,6 +94,9 @@
         "dir": {
           "description": "Where the window's panes start, unless they have their own dir: relative to root, absolute, or starting with ~/.",
           "type": "string"
+        },
+        "env": {
+          "$ref": "#/definitions/env"
         },
         "before": {
           "$ref": "#/definitions/before"

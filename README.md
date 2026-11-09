@@ -292,6 +292,7 @@ windows:
 | `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, a space first so shells ignoring such lines keep it out of their history, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
+| `windows[].env` | Variables for every pane of the window, over the project's, per variable. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
 | `windows[].clear` | Whether the window's panes clear their `before` commands, over the project's `clear`. |
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see below. |
@@ -304,7 +305,7 @@ windows:
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
 | `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. |
-| `env` (pane) | Overrides the project's, per variable. |
+| `env` (pane) | Overrides the window's and the project's, per variable. |
 | `tasks` | Commands the pane offers to run from the browser, in a session weaver started: each a `command` and, optionally, a `name` to show instead. No two share a name, nor two unnamed ones a command. See the browser, in Usage. |
 
 A `grid` lays a window's panes out by naming them in rows and columns,

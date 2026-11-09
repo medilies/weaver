@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -47,18 +49,11 @@ func levels(project domain.Project, window, pane, width int) []string {
 			lines = append(lines, line)
 		}
 	}
-	paneVars := map[string]bool{}
-	for _, v := range p.Env().Vars() {
-		paneVars[v.Name()] = true
-	}
 	label := "env"
-	for _, v := range plan.Env() {
-		level := "project"
-		if paneVars[v.Name()] {
-			level = "pane"
-			if over := overProject(project, v.Name()); over != "" {
-				level += ", " + over
-			}
+	for _, v := range envLevels(project, w, p.Env()) {
+		level := v.level
+		if v.over != "" {
+			level += ", " + v.over
 		}
 		lines = append(lines, levelLine{label: label, value: v.Name() + "=" + shownValue(v.Value()), level: level})
 		label = ""
@@ -75,7 +70,7 @@ func higherBefore(project domain.Project, window domain.Window) []levelLine {
 		lines = append(lines, levelLine{value: cmd.String(), level: "project"})
 	}
 	for _, cmd := range window.Before() {
-		lines = append(lines, levelLine{value: cmd.String(), level: "window " + window.Name().String()})
+		lines = append(lines, levelLine{value: cmd.String(), level: windowLevel(window)})
 	}
 	return lines
 }
@@ -88,7 +83,7 @@ func clearingLine(project domain.Project, w domain.Window, p domain.Pane) (level
 	for _, l := range []struct {
 		clearing domain.Clearing
 		level    string
-	}{{p.Clearing(), "pane"}, {w.Clearing(), "window " + w.Name().String()}, {project.Clearing(), "project"}} {
+	}{{p.Clearing(), "pane"}, {w.Clearing(), windowLevel(w)}, {project.Clearing(), "project"}} {
 		if l.clearing.IsSet() {
 			set = append(set, levelLine{label: "clear", value: clearingText(l.clearing), level: l.level})
 		}
@@ -111,15 +106,46 @@ func clearingText(c domain.Clearing) string {
 	return "no"
 }
 
-// overProject is what a pane's variable named name is over: the
-// project's value, or nothing when the project doesn't set it.
-func overProject(project domain.Project, name string) string {
-	for _, v := range project.Env().Vars() {
-		if v.Name() == name {
-			return "over project's " + shownValue(v.Value())
+// leveledVar is a variable a pane or window gets, with the level setting
+// it and, when it replaces a higher level's, what it is over.
+type leveledVar struct {
+	domain.EnvVar
+	level, over string
+}
+
+// envLevels are the variables window's panes get, by name, each from the
+// lowest level setting it: the project, then window, then the pane, when
+// its own variables are given. Without them, they are what window's
+// panes get from the levels above them.
+func envLevels(project domain.Project, window domain.Window, pane ...domain.Env) []leveledVar {
+	type level struct {
+		env  domain.Env
+		name string
+	}
+	levels := []level{{project.Env(), "project"}, {window.Env(), windowLevel(window)}}
+	for _, env := range pane {
+		levels = append(levels, level{env, "pane"})
+	}
+	byName := map[string]leveledVar{}
+	for _, l := range levels {
+		for _, v := range l.env.Vars() {
+			set := leveledVar{EnvVar: v, level: l.name}
+			if higher, ok := byName[v.Name()]; ok {
+				set.over = "over " + higher.level + "'s " + shownValue(higher.Value())
+			}
+			byName[v.Name()] = set
 		}
 	}
-	return ""
+	vars := make([]leveledVar, 0, len(byName))
+	for _, name := range slices.Sorted(maps.Keys(byName)) {
+		vars = append(vars, byName[name])
+	}
+	return vars
+}
+
+// windowLevel is window as a level: "window" and its name.
+func windowLevel(window domain.Window) string {
+	return "window " + window.Name().String()
 }
 
 // dirLevel is the level the dir p starts in comes from: p's own, over its
@@ -132,7 +158,7 @@ func dirLevel(w domain.Window, p domain.Pane) string {
 	case own:
 		return "pane"
 	case !w.Dir().IsRoot():
-		return "window " + w.Name().String()
+		return windowLevel(w)
 	}
 	return "project"
 }

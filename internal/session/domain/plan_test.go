@@ -65,9 +65,11 @@ func TestProjectPlan(t *testing.T) {
 		Running(command(t, "npm run dev")).
 		WithNote("Usual commands:", "  npm i")
 	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).
-		WithEnv(env(t, map[string]string{"APP_ENV": "local", "TZ": "UTC"})).
+		WithEnv(env(t, map[string]string{"APP_ENV": "local", "LANG": "C", "TZ": "UTC"})).
 		RunningFirst(command(t, "source .env")).
-		WithWindows(window(t, "shop", back, front).RunningFirst(command(t, "git fetch")))
+		WithWindows(window(t, "shop", back, front).
+			RunningFirst(command(t, "git fetch")).
+			WithEnv(env(t, map[string]string{"APP_ENV": "staging", "TZ": "Europe/Paris"})))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,14 +83,14 @@ func TestProjectPlan(t *testing.T) {
 		}
 	})
 
-	t.Run("gives panes their project's env", func(t *testing.T) {
-		if got, want := render(backPlan.Env()), []string{"APP_ENV=local", "TZ=UTC"}; !slices.Equal(got, want) {
+	t.Run("gives panes their project's and window's env, the window's overriding", func(t *testing.T) {
+		if got, want := render(backPlan.Env()), []string{"APP_ENV=staging", "LANG=C", "TZ=Europe/Paris"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
-	t.Run("lets a pane's env override its project's", func(t *testing.T) {
-		if got, want := render(frontPlan.Env()), []string{"APP_ENV=dev", "TZ=UTC"}; !slices.Equal(got, want) {
+	t.Run("lets a pane's env override its window's", func(t *testing.T) {
+		if got, want := render(frontPlan.Env()), []string{"APP_ENV=dev", "LANG=C", "TZ=Europe/Paris"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})

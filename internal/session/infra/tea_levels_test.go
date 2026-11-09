@@ -144,6 +144,23 @@ windows:
 		}
 	})
 
+	t.Run("says which window variable a pane's overrides, and which project one the window's", func(t *testing.T) {
+		got := levelRows(shop(t, `env: { APP_ENV: local, LOG: info }
+windows:
+  - name: main
+    env: { APP_ENV: staging, LOG: debug }
+    panes:
+      - env: { APP_ENV: dev }
+`), 0, 0)
+		want := [][]string{
+			{"env", "APP_ENV=dev", "pane, over window main's staging"},
+			{"LOG=debug", "window main, over project's info"},
+		}
+		if !slices.EqualFunc(got[1:], want, slices.Equal) {
+			t.Fatalf("got %q, want %q", got[1:], want)
+		}
+	})
+
 	t.Run("takes a variable only a pane sets from the pane", func(t *testing.T) {
 		got := levelRows(shop(t, "windows:\n  - name: main\n    panes:\n      - env: { DEBUG: \"1\" }\n"), 0, 0)
 		if want := []string{"env", "DEBUG=1", "pane"}; !slices.Equal(got[1], want) {

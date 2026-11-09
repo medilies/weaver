@@ -103,7 +103,7 @@ const (
 	fieldDir
 	fieldBefore
 	fieldEnv
-	fieldProjectEnv // a variable the project sets, shown in a pane, which enter sets for the pane
+	fieldHigherEnv // a variable a higher level sets, shown in a window or pane, which enter sets there
 	fieldNote
 	fieldStarts
 	fieldClear
@@ -331,7 +331,7 @@ func (m configForm) settledOn(at spot) configForm {
 // in: a project's variable set for a pane, or one renamed, moves.
 func (m configForm) typedVar() (spot, bool) {
 	at := m.edit.at
-	if at.field != fieldEnv && at.field != fieldProjectEnv {
+	if at.field != fieldEnv && at.field != fieldHigherEnv {
 		return spot{}, false
 	}
 	name, _, _ := strings.Cut(m.edit.input.Value(), "=")
@@ -902,9 +902,9 @@ func (m configForm) valueWidth(at spot) int {
 func (m configForm) added() (configForm, tea.Cmd) {
 	at := m.focus
 	switch {
-	case isList(at.field) || at.field == fieldProjectEnv:
+	case isList(at.field) || at.field == fieldHigherEnv:
 		list := spot{window: at.window, pane: at.pane, field: at.field}
-		if list.field == fieldProjectEnv {
+		if list.field == fieldHigherEnv {
 			list.field = fieldEnv
 		}
 		list.item = len(m.items(list))
@@ -938,8 +938,8 @@ func (m configForm) deleting() configForm {
 			at.field = fieldTask // the next task's command, or + add
 			return m.changedAt(project, err, at)
 		}
-	case at.field == fieldProjectEnv:
-		m.problem = "The project sets this variable: change it in the project's card."
+	case at.field == fieldHigherEnv:
+		m.problem = fmt.Sprintf("The %s sets this variable: change it in its card.", m.higherEnv(at)[at.item].level)
 	case inPane:
 		changed, err := window.WithoutPane(at.pane)
 		project, err := replaced(m.project, at.window, changed, err)
@@ -987,7 +987,7 @@ func (m configForm) reordered(by int) configForm {
 	at := m.focus
 	_, inWindow := m.windowAt(at.window)
 	switch {
-	case at.field == fieldEnv || at.field == fieldProjectEnv:
+	case at.field == fieldEnv || at.field == fieldHigherEnv:
 		m.problem = "Variables are listed by name."
 	case isList(at.field):
 		items, to := m.items(at), at.item+by
@@ -1055,7 +1055,7 @@ func (m configForm) applied(at spot, text string) (domain.Project, error) {
 		return m.project.RootedAt(root), nil
 	case at.field == fieldEnv:
 		return m.withVar(at, text)
-	case at.field == fieldProjectEnv:
+	case at.field == fieldHigherEnv:
 		return m.withVar(spot{window: at.window, pane: at.pane, field: fieldEnv, item: len(m.ownEnv(at).Names())}, text)
 	case isList(at.field):
 		return m.withItems(at, withItem(m.items(at), at.item, text))
@@ -1178,17 +1178,24 @@ func (m configForm) withVar(at spot, text string) (domain.Project, error) {
 			return domain.Project{}, err
 		}
 	}
-	if at.window < 0 {
+	switch {
+	case at.window < 0:
 		return m.project.WithEnv(env), nil
+	case at.pane < 0:
+		return m.windowChanged(at, func(window domain.Window) (domain.Window, error) { return window.WithEnv(env), nil })
 	}
 	return m.paneChanged(at, func(pane domain.Pane) (domain.Pane, error) { return pane.WithEnv(env), nil })
 }
 
-// ownEnv is the variables the project sets, for a row of its card, or
-// the pane at's row is in sets itself.
+// ownEnv is the variables the project, the window or the pane at's row
+// is in sets itself.
 func (m configForm) ownEnv(at spot) domain.Env {
 	if at.window < 0 {
 		return m.project.Env()
+	}
+	if at.pane < 0 {
+		window, _ := m.windowAt(at.window)
+		return window.Env()
 	}
 	_, pane, _ := m.paneAt(at)
 	return pane.Env()
@@ -1296,8 +1303,9 @@ func (m configForm) current(at spot) string {
 			return items[at.item]
 		}
 		return ""
-	case at.field == fieldProjectEnv:
-		return envItems(m.projectEnv(at))[at.item]
+	case at.field == fieldHigherEnv:
+		v := m.higherEnv(at)[at.item]
+		return v.Name() + "=" + v.Value()
 	case isTask(at.field):
 		tasks := m.tasksAt(at)
 		switch {
@@ -1320,10 +1328,59 @@ func (m configForm) current(at spot) string {
 	return cmd.String()
 }
 
-// projectEnv are the variables the project sets that the pane at's row
-// is in doesn't set itself.
-func (m configForm) projectEnv(at spot) domain.Env {
-	return m.project.Env().Without(m.ownEnv(at).Names()...)
+// higherEnv are the variables the window or pane at's row is in gets
+// from the levels above it, by name, without those it sets itself.
+func (m configForm) higherEnv(at spot) []leveledVar {
+	own := m.ownEnv(at).Names()
+	var higher []leveledVar
+	for _, v := range m.aboveEnv(at) {
+		if !slices.Contains(own, v.Name()) {
+			higher = append(higher, v)
+		}
+	}
+	return higher
+}
+
+// aboveEnv are the variables the window or pane at's row is in gets from
+// the levels above it, by name, whether or not it sets them itself.
+func (m configForm) aboveEnv(at spot) []leveledVar {
+	if at.window < 0 {
+		return nil
+	}
+	window, _ := m.windowAt(at.window)
+	if at.pane < 0 {
+		window = window.WithEnv(domain.Env{}) // the project's alone
+	}
+	return envLevels(m.project, window)
+}
+
+// overHigher is what the variable named name, set on at's row, is over:
+// the value of the level above setting it, or nothing.
+func (m configForm) overHigher(at spot, name string) string {
+	for _, v := range m.aboveEnv(at) {
+		if v.Name() == name {
+			return "over " + v.level + "'s " + shownValue(v.Value())
+		}
+	}
+	return ""
+}
+
+// envRows adds the variables the project, window or pane at is in sets,
+// each with what it is over, those it gets from higher levels dimmed,
+// then the row adding one.
+func (m configForm) envRows(s *section, at spot) {
+	label := "env"
+	vars := m.ownEnv(at).Vars()
+	for k, v := range vars {
+		m.put(s, label, varText(v), keysStyle.Render(m.overHigher(at, v.Name())), spot{window: at.window, pane: at.pane, field: fieldEnv, item: k})
+		label = ""
+	}
+	for k, v := range m.higherEnv(at) {
+		m.put(s, label, keysStyle.Render(varText(v.EnvVar)), keysStyle.Render(v.level),
+			spot{window: at.window, pane: at.pane, field: fieldHigherEnv, item: k})
+		label = ""
+	}
+	m.put(s, label, keysStyle.Render("+ add"), "", spot{window: at.window, pane: at.pane, field: fieldEnv, item: len(vars)})
 }
 
 // section is lines of the page, the rows the cursor can be on among
@@ -1493,7 +1550,7 @@ func (m configForm) list(s *section, label string, items []string, at spot) {
 // shown is the project with what is typed, when it is valid and shows
 // where it is typed, else the project.
 func (m configForm) shown() domain.Project {
-	if m.editing && m.edit.err == nil && !isList(m.edit.at.field) && !isTask(m.edit.at.field) && m.edit.at.field != fieldProjectEnv {
+	if m.editing && m.edit.err == nil && !isList(m.edit.at.field) && !isTask(m.edit.at.field) && m.edit.at.field != fieldHigherEnv {
 		return m.edit.preview
 	}
 	return m.project
@@ -1609,13 +1666,7 @@ func (m configForm) projectCard() section {
 	m.put(&s, "root", contractHome(p.Root().String()), m.mark(p.Root().String()), spot{window: -1, pane: -1, field: fieldRoot})
 	m.list(&s, "before", lines(p.Before()), spot{window: -1, pane: -1, field: fieldBefore})
 	m.putClear(&s, spot{window: -1, pane: -1, field: fieldClear})
-	label := "env"
-	vars := p.Env().Vars()
-	for k, v := range vars {
-		m.put(&s, label, varText(v), "", spot{window: -1, pane: -1, field: fieldEnv, item: k})
-		label = ""
-	}
-	m.put(&s, label, keysStyle.Render("+ add"), "", spot{window: -1, pane: -1, field: fieldEnv, item: len(vars)})
+	m.envRows(&s, spot{window: -1, pane: -1, field: fieldEnv})
 	return s
 }
 
@@ -1643,6 +1694,7 @@ func (m configForm) windowsCard(width int) section {
 	m.put(&s, "dir", shownDir(root, window.Dir()), m.mark(root.Resolve(window.Dir())), at(fieldDir))
 	m.list(&s, "before", lines(window.Before()), at(fieldBefore))
 	m.putClear(&s, at(fieldClear))
+	m.envRows(&s, at(fieldEnv))
 	grid, gridded := window.Grid()
 	if gridded {
 		rows := make([]string, 0, len(grid.Areas()))
@@ -1800,18 +1852,7 @@ func (m configForm) paneCard(index, j int) section {
 	m.list(&s, label, lines(pane.Before()), at(fieldBefore))
 	m.putClear(&s, at(fieldClear))
 
-	label = "env"
-	vars := pane.Env().Vars()
-	for k, v := range vars {
-		m.put(&s, label, varText(v), keysStyle.Render(overProject(p, v.Name())), spot{window: index, pane: j, field: fieldEnv, item: k})
-		label = ""
-	}
-	for k, v := range m.projectEnv(at(fieldEnv)).Vars() {
-		m.put(&s, label, keysStyle.Render(varText(v)), keysStyle.Render("project"),
-			spot{window: index, pane: j, field: fieldProjectEnv, item: k})
-		label = ""
-	}
-	m.put(&s, label, keysStyle.Render("+ add"), "", spot{window: index, pane: j, field: fieldEnv, item: len(vars)})
+	m.envRows(&s, at(fieldEnv))
 
 	m.list(&s, "note", pane.Note(), at(fieldNote))
 	m.taskRows(&s, pane.Tasks(), at(fieldTask))

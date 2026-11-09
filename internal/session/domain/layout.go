@@ -469,7 +469,8 @@ func (p Pane) WithNote(lines ...string) Pane {
 	return p
 }
 
-// WithEnv sets variables for the pane's shell, over its project's.
+// WithEnv sets variables for the pane's shell, over its window's and its
+// project's.
 func (p Pane) WithEnv(env Env) Pane {
 	p.env = env
 	return p
@@ -517,7 +518,8 @@ func (p Pane) Note() []string {
 	return slices.Clone(p.note)
 }
 
-// Env is the pane's own variables, without its project's.
+// Env is the pane's own variables, without its window's and its
+// project's.
 func (p Pane) Env() Env {
 	return p.env
 }
@@ -535,6 +537,7 @@ type Window struct {
 	dir     PaneDir
 	panes   []Pane
 	before  []Command
+	env     Env
 	clears  Clearing
 	grid    Grid
 	gridded bool
@@ -642,6 +645,13 @@ func (w Window) RunningFirst(cmds ...Command) Window {
 	return w
 }
 
+// WithEnv sets variables for its panes' shells, over its project's and
+// under a pane's own.
+func (w Window) WithEnv(env Env) Window {
+	w.env = env
+	return w
+}
+
 // WithClearing sets whether its panes' before commands are hidden once
 // they ran, over its project's and under a pane's own.
 func (w Window) WithClearing(c Clearing) Window {
@@ -694,6 +704,12 @@ func (w Window) Grid() (Grid, bool) {
 // Before is the window's own commands run first in each of its panes.
 func (w Window) Before() []Command {
 	return slices.Clone(w.before)
+}
+
+// Env is the window's own variables, without its project's and its
+// panes'.
+func (w Window) Env() Env {
+	return w.env
 }
 
 // Clearing is the window's own setting of whether its panes' before
@@ -826,7 +842,7 @@ func (w Window) checkPaneIndex(index int) error {
 }
 
 // withPanes is the window holding panes instead, checked as NewWindow
-// checks them, keeping its dir, before commands and grid. Among several
+// checks them, keeping its dir, before commands, env and grid. Among several
 // panes, the unnamed ones get the first free default names.
 func (w Window) withPanes(panes []Pane) (Window, error) {
 	if len(panes) > 1 {

@@ -236,6 +236,13 @@ func TestFileProjectRegistryReadsEnvironments(t *testing.T) {
 		}
 	})
 
+	t.Run("reads window env", func(t *testing.T) {
+		vars := shop.Windows()[0].Env().Vars()
+		if len(vars) != 1 || vars[0].Name() != "LOG_LEVEL" || vars[0].Value() != "debug" {
+			t.Fatalf("got %v, want LOG_LEVEL=debug", vars)
+		}
+	})
+
 	t.Run("reads pane env", func(t *testing.T) {
 		vars := paneNamed(t, shop, "shop", "front").Env().Vars()
 		if len(vars) != 1 || vars[0].Value() != "dev" {

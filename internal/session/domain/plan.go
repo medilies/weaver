@@ -3,7 +3,7 @@ package domain
 import "slices"
 
 // SessionPlan is a project resolved for tmux: every directory absolute,
-// every pane's environment merged over its project's, and its commands to
+// every pane's environment merged over its window's and project's, and its commands to
 // run first after its project's and window's. Starting a session follows
 // it without decisions.
 type SessionPlan struct {
@@ -64,7 +64,8 @@ func (p PanePlan) Split() (Split, bool) {
 	return p.split, p.splits
 }
 
-// Env is the pane's variables merged over its project's, sorted by name.
+// Env is the pane's variables merged over its window's and its project's,
+// sorted by name.
 func (p PanePlan) Env() []EnvVar {
 	return slices.Clone(p.env)
 }
@@ -121,7 +122,7 @@ func (p Project) planPane(window Window, pane Pane) PanePlan {
 		dir:     p.root.Resolve(window.dirOf(pane)),
 		split:   pane.split,
 		splits:  pane.splits,
-		env:     p.env.Overlay(pane.env).Vars(),
+		env:     p.env.Overlay(window.env).Overlay(pane.env).Vars(),
 		note:    slices.Clone(pane.note),
 		before:  before,
 		clears:  len(before) > 0 && pane.clears.Over(window.clears.Over(p.clears)) == ClearingOn,

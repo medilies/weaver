@@ -42,12 +42,13 @@ type projectFile struct {
 }
 
 type windowFile struct {
-	Name   string     `yaml:"name"`
-	Dir    string     `yaml:"dir,omitempty"`
-	Before []string   `yaml:"before,omitempty"`
-	Clear  *bool      `yaml:"clear,omitempty"`
-	Grid   *gridFile  `yaml:"grid,omitempty"`
-	Panes  []paneFile `yaml:"panes,omitempty"`
+	Name   string            `yaml:"name"`
+	Dir    string            `yaml:"dir,omitempty"`
+	Env    map[string]string `yaml:"env,omitempty"`
+	Before []string          `yaml:"before,omitempty"`
+	Clear  *bool             `yaml:"clear,omitempty"`
+	Grid   *gridFile         `yaml:"grid,omitempty"`
+	Panes  []paneFile        `yaml:"panes,omitempty"`
 }
 
 type gridFile struct {
@@ -292,6 +293,10 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	if err != nil {
 		return domain.Window{}, err
 	}
+	env, err := domain.NewEnv(w.Env)
+	if err != nil {
+		return domain.Window{}, fmt.Errorf("env: %w", err)
+	}
 	var window domain.Window
 	if w.Grid != nil {
 		grid, err := w.Grid.toGrid()
@@ -305,7 +310,7 @@ func (w windowFile) toWindow() (domain.Window, error) {
 	} else if window, err = domain.NewWindow(name, panes...); err != nil {
 		return domain.Window{}, err
 	}
-	return window.In(dir).RunningFirst(before...).WithClearing(toClearing(w.Clear)), nil
+	return window.In(dir).WithEnv(env).RunningFirst(before...).WithClearing(toClearing(w.Clear)), nil
 }
 
 // toDir reads a window or pane dir, "~" expanded.
@@ -532,6 +537,7 @@ func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {
 	file := windowFile{
 		Name:   window.Name().String(),
 		Dir:    dirOf(root, window.Dir()),
+		Env:    envMap(window.Env()),
 		Before: lines(window.Before()),
 		Clear:  clearOf(window.Clearing()),
 	}
@@ -659,7 +665,7 @@ func onlyDefaultWindow(project domain.Project) bool {
 		return false
 	}
 	window := windows[0]
-	if window.Name().String() != project.Name().String() || len(window.Before()) > 0 || window.Clearing().IsSet() ||
+	if window.Name().String() != project.Name().String() || len(window.Before()) > 0 || len(window.Env().Vars()) > 0 || window.Clearing().IsSet() ||
 		project.Root().Resolve(window.Dir()) != project.Root().String() {
 		return false
 	}

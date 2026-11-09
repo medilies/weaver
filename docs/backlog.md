@@ -38,30 +38,6 @@ better, with no new command. Breaking changes are allowed, but none is
 planned. Config and domain first, then the config form, then the
 browser, whose last two items share the idle check.
 
-### 2. Window `env` (S)
-
-**When**: a config sets the same variable in every pane of a window.
-
-```yaml
-windows:
-  - name: api
-    env: { APP_ENV: local }
-```
-
-`before` already applies at three levels; `env` skips the window. Each
-variable is set by the project, then the window, then the pane, the last
-one winning.
-
-- `domain`: `Window` gets an `env` and a `WithEnv`. `planPane`
-  (`domain/plan.go`) becomes
-  `p.env.Overlay(window.env).Overlay(pane.env)`.
-- `infra`: `windowFile.Env`, `windowFileOf`, and
-  `$ref: "#/definitions/env"` in the window's schema.
-- Test: a window's variable overrides the project's, and a pane's
-  overrides the window's.
-- The browser's levels and the config form show the extra level once
-  it exists.
-
 ### 3. Focus (S)
 
 **When**: the pane you work in isn't the first one created, such as a

@@ -12,6 +12,8 @@ before:
 clear: true
 windows:
   - name: shop
+    env:
+      LOG_LEVEL: debug
     before:
       - git fetch --quiet
     panes:
