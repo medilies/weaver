@@ -237,9 +237,9 @@ func TestDrawingAlerts(t *testing.T) {
 	})
 }
 
-func TestPaneList(t *testing.T) {
+func TestUndrawnPanes(t *testing.T) {
 	t.Run("says how many panes don't fit", func(t *testing.T) {
-		got := paneList(firstWindow(t, `      - name: a
+		got := undrawnPanes(firstWindow(t, `      - name: a
       - name: b
         split: { direction: below }
       - name: c
@@ -251,7 +251,7 @@ func TestPaneList(t *testing.T) {
 	})
 
 	t.Run("puts the selected pane's name in brackets", func(t *testing.T) {
-		got := paneList(firstWindow(t, `      - name: a
+		got := undrawnPanes(firstWindow(t, `      - name: a
       - name: b
         split: { direction: below }
 `), "/srv/shop", nil, 1, 40, 2)

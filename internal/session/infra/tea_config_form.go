@@ -17,7 +17,7 @@ import (
 )
 
 // TeaConfigForm is the config form: a project shown full screen as
-// cards, one for the project, then one for its windows, a tab each, the
+// cards, one for the project, then one for its windows, the window list first, the
 // selected one's panes drawn and the selected pane's card below, changed
 // in place. Each field is checked by the domain's constructors
 // as it is typed, and each change is made by the domain's own methods:
@@ -97,8 +97,8 @@ const (
 	fieldNote
 	fieldStarts
 	fieldCommand
-	fieldTabs    // the windows' tabs, the window being the one selected
-	fieldDrawing // the window's panes drawn, the pane being the one selected
+	fieldWindowList // the window list, the window being the one selected
+	fieldDrawing    // the window's panes drawn, the pane being the one selected
 )
 
 // isList reports whether f holds a list, a row per item.
@@ -109,7 +109,7 @@ func isList(f field) bool {
 // spot is a row the cursor can be on: a field of the project (window
 // -1), of a window (pane -1) or of a pane, and in a list, the item, its
 // length for the row adding one. The name of the window after the last
-// is the row adding one, as is its tab.
+// is the row adding one, as is its entry in the window list.
 type spot struct {
 	window, pane int
 	field        field
@@ -533,10 +533,10 @@ func (m configForm) settled(prefer int) configForm {
 }
 
 // stepped is m after ← (by -1) or → (by 1) on a choice: the window
-// shown, its tab after the last adding one, or how the pane starts.
+// shown, the window list's entry after the last adding one, or how the pane starts.
 func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 	switch m.focus.field {
-	case fieldTabs:
+	case fieldWindowList:
 		count := len(m.project.Windows()) + 1
 		m.focus.window = ((m.focus.window+by)%count + count) % count
 		return m, nil
@@ -692,14 +692,14 @@ func (m configForm) started(by int) (configForm, tea.Cmd) {
 }
 
 // entered is m after enter on a row: a choice goes to its next option,
-// a tab types the window's name, or a new one's after the last, and
+// the window list types the window's name, or a new one's after the last, and
 // other rows are typed into.
 func (m configForm) entered() (configForm, tea.Cmd) {
 	at := m.focus
 	switch at.field {
 	case fieldStarts:
 		return m.stepped(1)
-	case fieldTabs:
+	case fieldWindowList:
 		at.field = fieldName
 		if _, ok := m.windowAt(at.window); !ok {
 			return m.typeInto(at, "", true)
@@ -1205,7 +1205,7 @@ func (m configForm) mark(dir string) string {
 	return problemStyle.Render("✗ missing")
 }
 
-// selection is the window shown, the tab after the last when there is
+// selection is the window shown, the entry after the last when there is
 // none or the cursor adds one, and its pane shown: those the cursor is
 // in, else those it was in last.
 func (m configForm) selection() spot {
@@ -1263,21 +1263,21 @@ func (m configForm) projectCard() section {
 	return s
 }
 
-// windowsCard is the windows' tabs, then the selected window's name, dir
+// windowsCard is the window list, then the selected window's name, dir
 // and before commands, its grid, its panes drawn, where the selected
 // pane is placed, then the selected pane's card, all within width cells.
-// On the tab after the last, it is the row typing a new window's name.
+// On the entry after the last, it is the row typing a new window's name.
 func (m configForm) windowsCard(width int) section {
 	picked := m.selection()
 	windows := m.project.Windows()
 	s := newSection()
-	tabsAt := spot{window: picked.window, pane: -1, field: fieldTabs}
-	focused := m.focus == tabsAt
+	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
+	focused := m.focus == listAt
 	gutter := "  "
 	if focused {
 		gutter = "› "
 	}
-	s.row(gutter+windowTabs(windows, picked.window, focused, width-gutterWidth), tabsAt, focused)
+	s.row(gutter+formWindowList(windows, picked.window, focused, width-gutterWidth), listAt, focused)
 	if picked.window == len(windows) {
 		if at := (spot{window: picked.window, pane: -1, field: fieldName}); m.editing && m.edit.at == at {
 			m.put(&s, "name", "", "", at)
@@ -1331,11 +1331,11 @@ func (m configForm) windowsCard(width int) section {
 	return s
 }
 
-// windowTabs are the windows' names, then the tab adding one, the
+// formWindowList is the windows' names, then "+ window" adding one, the
 // selected one highlighted as the cursor when focused, else in bold.
 // When they don't fit in width, the first ones make way for the selected
 // one.
-func windowTabs(windows []domain.Window, selected int, focused bool, width int) string {
+func formWindowList(windows []domain.Window, selected int, focused bool, width int) string {
 	labels := make([]string, 0, len(windows)+1)
 	for _, window := range windows {
 		labels = append(labels, " "+window.Name().String()+" ")

@@ -197,12 +197,12 @@ func alertOf(alerts []alert, index int) alert {
 	return noAlert
 }
 
-// paneList is window's panes one a line, for a space too small to draw
+// undrawnPanes is window's panes one a line, for a space too small to draw
 // them in: "api shell · api/ · $ task dev", each cut to width cells, the
 // selected one's name in brackets, and ⚠ first for a pane with an alert.
 // When they take more than height lines, the last line says how many are
 // left out.
-func paneList(window domain.WindowPlan, root string, alerts []alert, selected, width, height int) []string {
+func undrawnPanes(window domain.WindowPlan, root string, alerts []alert, selected, width, height int) []string {
 	panes := window.Panes()
 	lines := make([]string, 0, len(panes))
 	for i, pane := range panes {

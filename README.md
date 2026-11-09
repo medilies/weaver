@@ -51,7 +51,7 @@ creates (a directory missing, or a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it; aliases and shell functions show as not found); and
 the `before` commands and variables every pane starts with. Below it,
-tabs name the project's windows, ○ marking those enter restores, and the
+the window list names the project's windows, ○ marking those enter restores, and the
 selected window is drawn as it opens: each pane a box in its
 proportions, with its name when the window has several, its `dir`
 unless it is the root, its `note`, and its prompt, showing a `command`
@@ -70,7 +70,7 @@ window's `dir` or a project variable.
 | ↑ ↓ or k j | select a project |
 | ← → | select a window to draw |
 | tab or shift+tab | select the next or previous pane of the selected window |
-| click | select the project clicked in the list, or the window whose tab is clicked; on a key shown at the bottom, or on ← or → beside the tabs, do what the key does; on the kept filter, edit it again as / does |
+| click | select the project clicked in the list, or the window clicked in the window list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
 | f | freeze the current directory, like `weave freeze` |
@@ -85,7 +85,7 @@ unfiltered, with what happened. Since the browser takes the mouse, most
 terminals select text with shift held.
 
 The config form shows a project as cards: the project's, then its
-windows', a tab each. Freezing starts it on a name, the root, and the
+windows', starting with the window list. Freezing starts it on a name, the root, and the
 session's windows if you named one; the name is typed there, and stays
 when editing. The selected window's panes are drawn as they
 open, and the selected pane's card is below the drawing. Each field is
@@ -98,10 +98,10 @@ keeps its panes' names and places.
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a field |
-| enter | type into it, or pick the next choice; on `+ add` or the `+ window` tab, add one |
-| ← → | on the tabs, select a window; on a pane's `starts`, whether it starts a shell, runs a command or prefills it |
+| enter | type into it, or pick the next choice; on `+ add` or `+ window` in the window list, add one |
+| ← → | on the window list, select a window; on a pane's `starts`, whether it starts a shell, runs a command or prefills it |
 | o | add an item to the list selected, split the pane selected right, or add a window |
-| d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields or its tab, the window, after you confirm |
+| d | remove the item selected at once; on a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
 | J K | move the item or window selected down or up |
 | u, ctrl+r | undo the last change, or redo the last change undone |
 | ctrl+s | show what saving changes in the config (↑ ↓ scroll), then y, enter or ctrl+s saves and n or esc goes back; the config is rewritten, without its comments |
