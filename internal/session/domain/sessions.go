@@ -42,6 +42,40 @@ type SessionInspector interface {
 	// finds it; one the session lacks isn't idle. An error wrapping
 	// ErrSessionNotRunning when no session runs.
 	Idle(project ProjectName, windows []WindowPlan) (map[WindowName][]int, error)
+	// RunningCommands are the commands TaskRunner typed for the panes of
+	// windows in the project's running session that still run: in the
+	// pane, or in a throwaway window it ran apart from the pane in. An
+	// error wrapping ErrSessionNotRunning when no session runs.
+	RunningCommands(project ProjectName, windows []WindowPlan) ([]RunningCommand, error)
+}
+
+// RunningCommand is a command weaver typed for a pane of a project's
+// running session, still running there or in a throwaway window.
+type RunningCommand struct {
+	window  WindowName
+	pane    int
+	command string
+}
+
+// NewRunningCommand is command, typed for the pane at index pane of the
+// window named window, running.
+func NewRunningCommand(window WindowName, pane int, command string) RunningCommand {
+	return RunningCommand{window: window, pane: pane, command: command}
+}
+
+// Window is the name of the window of the pane the command was typed for.
+func (r RunningCommand) Window() WindowName {
+	return r.window
+}
+
+// Pane is the index of that pane in its window.
+func (r RunningCommand) Pane() int {
+	return r.pane
+}
+
+// Runs reports whether it is cmd that runs.
+func (r RunningCommand) Runs(cmd Command) bool {
+	return r.command == cmd.String()
 }
 
 // SessionAttacher puts the user in projects' running tmux sessions.
@@ -113,10 +147,11 @@ type TaskRunner interface {
 	// Type types cmd into that pane and runs it, the pane becoming its
 	// session's current one: a task's command, or the pane's own run again.
 	Type(project ProjectName, window WindowPlan, index int, cmd Command) error
-	// RunApart runs task in a throwaway window of the project's running
-	// session, named after it, starting in pane's dir with its env and
-	// before commands, and kept open once the task ends, the window
-	// becoming its session's current one. Capture skips
-	// throwaway windows, and restoration ignores them.
-	RunApart(project ProjectName, pane PanePlan, task Task) error
+	// RunApart runs task, a task of the pane at index of window, in a
+	// throwaway window of the project's running session, named after it,
+	// starting in the pane's dir with its env and before commands, and
+	// kept open once the task ends, the window becoming its session's
+	// current one. Capture skips throwaway windows, and restoration
+	// ignores them.
+	RunApart(project ProjectName, window WindowPlan, index int, task Task) error
 }

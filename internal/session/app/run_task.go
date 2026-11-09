@@ -91,7 +91,7 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 	if !yes {
 		return ErrAborted
 	}
-	return uc.tasks.RunApart(name, pane, task)
+	return uc.tasks.RunApart(name, window, index, task)
 }
 
 // taskOf finds the task at of project, with its pane and that pane's

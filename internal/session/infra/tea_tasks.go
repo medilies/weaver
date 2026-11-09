@@ -81,7 +81,8 @@ func (m browser) taskColumn(width, height int) (string, []int) {
 }
 
 // taskList is the selected project's tasks under their window and pane,
-// the selected one highlighted while the cursor is in the list, kept in
+// ● before those still running, the selected one highlighted while the
+// cursor is in the list, kept in
 // view in height lines cut to width; with the task each line shows, or -1.
 func (m browser) taskList(width, height int) ([]string, []int) {
 	// Cut, as every line is, so that each stays one row, as clicks count them.
@@ -98,10 +99,18 @@ func (m browser) taskList(width, height int) ([]string, []int) {
 			lines = append(lines, keysStyle.Render(ansi.Truncate(group, width, "…")))
 			tasks = append(tasks, -1)
 		}
-		label := ansi.Truncate("  "+task.label, width, "…")
-		if m.tasking && i == m.selectedTask(len(listed)) {
+		indent := "  "
+		runs := m.shown()[m.cursor].TaskRuns(task.at)
+		if runs {
+			indent = "● "
+		}
+		label := ansi.Truncate(indent+task.label, width, "…")
+		switch {
+		case m.tasking && i == m.selectedTask(len(listed)):
 			selected = len(lines)
 			label = cursorStyle.Render(label + strings.Repeat(" ", width-ansi.StringWidth(label)))
+		case runs:
+			label = strings.Replace(label, "●", runningMark, 1)
 		}
 		lines = append(lines, label)
 		tasks = append(tasks, i)

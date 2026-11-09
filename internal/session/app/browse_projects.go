@@ -35,11 +35,18 @@ type ProjectOverview struct {
 	found      bool
 	missing    []domain.WindowName
 	warnings   []Warning
+	running    []TaskAt
 }
 
 // Name is the project's name.
 func (o ProjectOverview) Name() domain.ProjectName {
 	return o.status.Name()
+}
+
+// TaskRuns reports whether the task at still runs in the project's owned
+// session, in its pane or in a throwaway window, as far as tmux can tell.
+func (o ProjectOverview) TaskRuns(at TaskAt) bool {
+	return slices.Contains(o.running, at)
 }
 
 // Running reports whether the project's session runs.
@@ -252,7 +259,36 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	}
 	overview.warnings, overview.problem = uc.warnings(overview, opening, project.Plan().Windows())
 	overview.warnings = append(overview.warnings, uc.exited(overview)...)
+	overview.running = uc.runningTasks(overview)
 	return overview
+}
+
+// runningTasks are the tasks of overview's project still running in its
+// owned session. Like the session, they only add to the browser: if tmux
+// can't tell, there are none.
+func (uc BrowseProjects) runningTasks(overview ProjectOverview) []TaskAt {
+	if !overview.found || !overview.session.Owned() {
+		return nil
+	}
+	windows := overview.project.Plan().Windows()
+	commands, err := uc.sessions.RunningCommands(overview.project.Name(), windows)
+	if err != nil {
+		return nil
+	}
+	var running []TaskAt
+	for _, window := range windows {
+		for p, pane := range window.Panes() {
+			for k, task := range pane.Tasks() {
+				at := TaskAt{Window: window.Name(), Pane: p, Task: k}
+				if slices.ContainsFunc(commands, func(c domain.RunningCommand) bool {
+					return c.Window() == window.Name() && c.Pane() == p && c.Runs(task.Command())
+				}) {
+					running = append(running, at)
+				}
+			}
+		}
+	}
+	return running
 }
 
 // exited are the warnings about the panes of overview's owned session

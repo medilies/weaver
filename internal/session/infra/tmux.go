@@ -419,6 +419,14 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 	return syscall.Exec(path, append(argv, "attach-session", "-t", target), env)
 }
 
+// taskTag is the pane option holding the command Type typed into the
+// pane, or RunApart into a throwaway window's, and taskOfTag the window
+// option holding the ID of the pane a throwaway window's task is of.
+const (
+	taskTag   = "@weaver_task"
+	taskOfTag = "@weaver_task_of"
+)
+
 // throwawayTag is the window option marking a throwaway window, which
 // Capture skips. Untagged as a project window, restoration ignores it.
 const throwawayTag = "@weaver_throwaway"
@@ -464,12 +472,20 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 	if _, err := t.run("send-keys", "-t", id, "C-e", "C-u"); err != nil {
 		return err
 	}
+	if _, err := t.run("set-option", "-p", "-t", id, taskTag, argument(cmd.String())); err != nil {
+		return err
+	}
 	return t.typeCommand(id, cmd.String(), true)
 }
 
 // RunApart implements domain.TaskRunner. The window goes after the
 // session's last, and is selected.
-func (t Tmux) RunApart(project domain.ProjectName, pane domain.PanePlan, task domain.Task) error {
+func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
+	source, _, err := t.paneOf(project, window, index)
+	if err != nil {
+		return err
+	}
+	pane := window.Panes()[index]
 	session := "=" + project.String()
 	defaultCommand, err := t.option(session, "default-command")
 	if absent(err) {
@@ -490,6 +506,12 @@ func (t Tmux) RunApart(project domain.ProjectName, pane domain.PanePlan, task do
 	}
 	if _, err := t.run("set-option", "-w", "-t", ids[0], throwawayTag, "1"); err != nil {
 		_, _ = t.run("kill-window", "-t", ids[0]) // untagged, freeze would capture it
+		return err
+	}
+	if _, err := t.run("set-option", "-w", "-t", ids[0], taskOfTag, source); err != nil {
+		return err
+	}
+	if _, err := t.run("set-option", "-p", "-t", ids[1], taskTag, argument(task.Command().String())); err != nil {
 		return err
 	}
 	for _, cmd := range append(pane.Before(), task.Command()) {
@@ -522,9 +544,7 @@ func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index
 }
 
 // Idle implements domain.SessionInspector. Every pane is checked with one
-// ps: its shell idles when its terminal's foreground process group is its
-// own, and it is still the shell, not a command it was replaced with by
-// exec.
+// ps, as idleShells checks them.
 func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map[domain.WindowName][]int, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
@@ -542,8 +562,90 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 			}
 		}
 	}
+	shells, err := t.idleShells(project, slices.Collect(maps.Keys(found)))
+	if err != nil {
+		return nil, err
+	}
 	idle := map[domain.WindowName][]int{}
-	if len(found) == 0 {
+	for pid := range shells {
+		pane := found[pid]
+		idle[pane.window] = append(idle[pane.window], pane.index)
+	}
+	for window := range idle {
+		slices.Sort(idle[window])
+	}
+	return idle, nil
+}
+
+// RunningCommands implements domain.SessionInspector. A command runs
+// while the pane Type tagged with it, or the pane of the throwaway window
+// RunApart tagged with it and with the pane it ran apart from, isn't idle
+// as idleShells tells: it may be another job by then, which can't be told
+// apart.
+func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.WindowPlan) ([]domain.RunningCommand, error) {
+	listed, err := t.projectPanes(project)
+	if err != nil {
+		return nil, err
+	}
+	type at struct {
+		window domain.WindowName
+		index  int
+	}
+	panes := map[string]at{} // by pane ID
+	for _, window := range windows {
+		for index := range window.Panes() {
+			if pane, ok := pick(listed[window.Name().String()], window, index); ok {
+				panes[pane.id] = at{window: window.Name(), index: index}
+			}
+		}
+	}
+	out, err := t.run("list-panes", "-s", "-t", "="+project.String(), "-F",
+		"#{pane_id} #{pane_pid} #{?"+taskOfTag+",#{"+taskOfTag+"},-} "+sized(taskTag))
+	if absent(err) {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	if err != nil {
+		return nil, err
+	}
+	type typed struct {
+		at      at
+		command string
+	}
+	running := map[string]typed{} // by process
+	for line := range strings.Lines(out) {
+		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
+		if len(fields) != 4 {
+			continue
+		}
+		source := fields[0]
+		if fields[2] != "-" {
+			source = fields[2]
+		}
+		pane, ok := panes[source]
+		if command := verbatim(fields[3]); ok && command != "" {
+			running[fields[1]] = typed{at: pane, command: command}
+		}
+	}
+	idle, err := t.idleShells(project, slices.Collect(maps.Keys(running)))
+	if err != nil {
+		return nil, err
+	}
+	var commands []domain.RunningCommand
+	for pid, run := range running {
+		if !idle[pid] {
+			commands = append(commands, domain.NewRunningCommand(run.at.window, run.at.index, run.command))
+		}
+	}
+	return commands, nil
+}
+
+// idleShells are those of pids, the processes of panes of the project's
+// session, whose shell idles at its prompt, checked with one ps: its
+// terminal's foreground process group is its own, and it is still the
+// shell, not a command it was replaced with by exec.
+func (t Tmux) idleShells(project domain.ProjectName, pids []string) (map[string]bool, error) {
+	idle := map[string]bool{}
+	if len(pids) == 0 {
 		return idle, nil
 	}
 	shells, err := t.shellNames(project)
@@ -551,22 +653,15 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 		return nil, err
 	}
 	// One -o per column: POSIX ps takes all after "=" as the header.
-	out, err := exec.Command("ps", "-o", "pid=", "-o", "tpgid=", "-o", "comm=",
-		"-p", strings.Join(slices.Collect(maps.Keys(found)), ",")).Output()
+	out, err := exec.Command("ps", "-o", "pid=", "-o", "tpgid=", "-o", "comm=", "-p", strings.Join(pids, ",")).Output()
 	if err != nil && len(out) == 0 {
 		return idle, nil // ps fails when every process is gone
 	}
 	for line := range strings.Lines(string(out)) {
 		fields := strings.Fields(line)
-		if len(fields) < 3 || fields[0] != fields[1] || !shells[programName(strings.Join(fields[2:], " "))] {
-			continue
+		if len(fields) >= 3 && fields[0] == fields[1] && shells[programName(strings.Join(fields[2:], " "))] {
+			idle[fields[0]] = true
 		}
-		if pane, ok := found[fields[0]]; ok {
-			idle[pane.window] = append(idle[pane.window], pane.index)
-		}
-	}
-	for window := range idle {
-		slices.Sort(idle[window])
 	}
 	return idle, nil
 }

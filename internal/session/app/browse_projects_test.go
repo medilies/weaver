@@ -78,6 +78,10 @@ func (s unfindableSessions) Idle(domain.ProjectName, []domain.WindowPlan) (map[d
 	return nil, s.err
 }
 
+func (s unfindableSessions) RunningCommands(domain.ProjectName, []domain.WindowPlan) ([]domain.RunningCommand, error) {
+	return nil, s.err
+}
+
 // uninspectableSessions is fakeSessions failing to tell which panes idle.
 type uninspectableSessions struct{ *fakeSessions }
 
@@ -424,6 +428,33 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if got := len(s.browser.shown); got != 1 {
 			t.Fatalf("browser shown %d times, want once", got)
+		}
+	})
+
+	t.Run("tells which tasks still run in an owned session", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		s.sessions.commands = map[string][]domain.RunningCommand{"shop": {
+			domain.NewRunningCommand(windowName(t, "shop"), 1, "npm run build"),
+			domain.NewRunningCommand(windowName(t, "logs"), 0, "vim app.log"),
+		}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		var running []app.TaskAt
+		for _, at := range []app.TaskAt{
+			{Window: windowName(t, "shop"), Pane: 1, Task: 0},
+			{Window: windowName(t, "shop"), Pane: 1, Task: 1},
+			{Window: windowName(t, "logs"), Pane: 0, Task: 0},
+		} {
+			if shop.TaskRuns(at) {
+				running = append(running, at)
+			}
+		}
+		if want := []app.TaskAt{{Window: windowName(t, "shop"), Pane: 1, Task: 1}}; !slices.Equal(running, want) {
+			t.Fatalf("got %v running, want npm run build only", running)
 		}
 	})
 

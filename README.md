@@ -71,10 +71,12 @@ bottom then left to right, the selected one in a cyan block, and
 below it are the selected pane's directory, its `before` commands in the order they
 run, whether they are cleared, and its variables, each with the level it comes from (the project,
 the window or the pane) and what it is over when it replaces the
-window's `dir` or a project variable.
+window's `dir`, or a project or window variable.
 
 Beside the project list, the task list shows the selected project's tasks under
-`window › pane`, in the order its panes are created. Running one needs the project's
+`window › pane`, in the order its panes are created, ● before one still
+running in its pane or its throwaway window (weaver can't tell it from
+another job started there after it ended). Running one needs the project's
 session running, started by weaver: when the pane's shell is idle at its
 prompt, the task's command is typed into it and run, after cutting
 whatever is at the prompt, such as a `prefill` (C-y pastes it back);

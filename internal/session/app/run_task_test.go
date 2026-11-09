@@ -30,8 +30,8 @@ func (f *fakeTasks) Type(_ domain.ProjectName, window domain.WindowPlan, index i
 	return nil
 }
 
-func (f *fakeTasks) RunApart(_ domain.ProjectName, pane domain.PanePlan, task domain.Task) error {
-	f.apart = append(f.apart, task.ThrowawayWindow().String()+" in "+pane.Dir()+": "+task.Command().String())
+func (f *fakeTasks) RunApart(_ domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
+	f.apart = append(f.apart, task.ThrowawayWindow().String()+" in "+window.Panes()[index].Dir()+": "+task.Command().String())
 	return nil
 }
 

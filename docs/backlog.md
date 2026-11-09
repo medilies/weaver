@@ -33,19 +33,11 @@ layers), XL (mostly open questions).
 
 ## Order
 
-v0.5.0, scheduled on 2026-11-09: what makes opening and the browser
-better, with no new command. Breaking changes are allowed, but none is
-planned. Config and domain first, then the config form, then the
-browser, whose last two items share the idle check.
-
-### 8. A mark on a running task (S)
-
-**When**: someone loses track of which tasks still run. The task list
-marks a task whose pane is busy, from the same idle check
-(`SessionInspector.Idle`). A task run apart in a throwaway window isn't
-its pane's, so it needs the window's own pane checked: `RunApart` tags
-the window with the task (a `@weaver_task` window option). The mark is
-●, before the task's name, as for a running project.
+v0.5.0, scheduled on 2026-11-09, is done: window `env`, focus, setup
+and teardown in the config form, the config in the browser, a failed
+teardown seen from inside the session, rerun and a mark on a running
+task. What comes next is picked from [By need](#by-need) when its
+trigger fires.
 
 ## By need
 

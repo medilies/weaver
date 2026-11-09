@@ -19,6 +19,14 @@ type fakeSessions struct {
 	restored []string
 	attached []string
 	idle     map[string]map[domain.WindowName][]int // by project, the panes whose shell idles
+	commands map[string][]domain.RunningCommand     // by project, the commands weaver typed still running
+}
+
+func (s *fakeSessions) RunningCommands(name domain.ProjectName, _ []domain.WindowPlan) ([]domain.RunningCommand, error) {
+	if _, ok := s.running[name.String()]; !ok {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	return s.commands[name.String()], nil
 }
 
 func (s *fakeSessions) Idle(name domain.ProjectName, _ []domain.WindowPlan) (map[domain.WindowName][]int, error) {

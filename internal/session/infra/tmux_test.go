@@ -1223,7 +1223,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("runs a task apart in a throwaway window, in the pane's dir with its env and before commands", func(t *testing.T) {
-		if err := server.tmux().RunApart(project, api.Panes()[1], greet); err != nil {
+		if err := server.tmux().RunApart(project, api, 1, greet); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shown := server.waitFor(t, "=tasks:greet", "hi-before task-42")
@@ -1263,6 +1263,73 @@ func TestTmuxTasks(t *testing.T) {
 		if _, err := server.tmux().Busy(project, logs, 0); !errors.Is(err, domain.ErrPaneNotRunning) {
 			t.Fatalf("got %v, want ErrPaneNotRunning", err)
 		}
+	})
+}
+
+func TestTmuxRunningCommands(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "running", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "api", "panes": [
+			{"name": "shell", "tasks": [{"command": "sleep 300"}, {"command": "true"}]},
+			{"name": "back", "split": {"direction": "right"}, "tasks": [{"command": "sleep 301"}]}
+		]}
+	]}`, t.TempDir()))
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	project, api := plan.Name(), plan.Windows()[0]
+	server.waitFor(t, server.paneLabelled(t, "running", "shell"), "$")
+	server.waitFor(t, server.paneLabelled(t, "running", "back"), "$")
+
+	// running waits until want is what runs, as "pane: command" lines.
+	running := func(t *testing.T, want ...string) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			commands, err := server.tmux().RunningCommands(project, plan.Windows())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			var got []string
+			for _, c := range commands {
+				for _, task := range api.Panes()[c.Pane()].Tasks() {
+					if c.Runs(task.Command()) {
+						got = append(got, fmt.Sprintf("%s/%d: %s", c.Window(), c.Pane(), task.Command()))
+					}
+				}
+			}
+			slices.Sort(got)
+			if slices.Equal(got, want) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("got %q running, want %q", got, want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	t.Run("finds nothing weaver typed running at first", func(t *testing.T) {
+		running(t)
+	})
+
+	t.Run("finds a command typed into a pane running", func(t *testing.T) {
+		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		running(t, "api/0: sleep 300")
+	})
+
+	t.Run("finds a task run apart running, as its pane's", func(t *testing.T) {
+		if err := server.tmux().RunApart(project, api, 1, api.Panes()[1].Tasks()[0]); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		running(t, "api/0: sleep 300", "api/1: sleep 301")
+	})
+
+	t.Run("no longer finds a command once it ended", func(t *testing.T) {
+		server.query(t, "send-keys", "-t", server.paneLabelled(t, "running", "shell"), "C-c")
+		running(t, "api/1: sleep 301")
 	})
 }
 
