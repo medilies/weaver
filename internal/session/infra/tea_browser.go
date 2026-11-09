@@ -487,16 +487,12 @@ func (m browser) keys() (string, []hotspot) {
 	if m.tasking {
 		line, spots, told = "", nil, taskingKeys
 	}
-	for i, k := range told {
-		if i > 0 {
-			line += keysStyle.Render(" · ")
-		}
-		text := k.key + " " + k.does
-		from := ansi.StringWidth(line)
-		spots = append(spots, hotspot{from: from, to: from + ansi.StringWidth(text), key: k.key})
-		line += keysStyle.Render(text)
+	keys, keySpots := toldKeys(told)
+	offset := ansi.StringWidth(line)
+	for _, spot := range keySpots {
+		spots = append(spots, hotspot{from: offset + spot.from, to: offset + spot.to, key: spot.key})
 	}
-	return cut(line, spots, m.width)
+	return cut(line+keys, spots, m.width)
 }
 
 // list is the shown projects' names and dimmed roots, the selected one
