@@ -215,14 +215,14 @@
           }
         },
         "columns": {
-          "description": "Column widths, one per column: percentages of the window (60%), or weights sharing out what percentages leave (2fr). Default: equal.",
+          "description": "Column widths, one per column: percentages of the window (60%), cells (30), or weights sharing out what the others leave (2fr). Columns in cells need one in fr. Default: equal.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/track"
           }
         },
         "rows": {
-          "description": "Row heights, one per row: percentages of the window (70%), or weights sharing out what percentages leave (1fr). Default: equal.",
+          "description": "Row heights, one per row: percentages of the window (70%), cells (8), or weights sharing out what the others leave (1fr). Rows in cells need one in fr. Default: equal.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/track"
@@ -231,8 +231,10 @@
       }
     },
     "track": {
-      "type": "string",
-      "pattern": "^([1-9][0-9]?%|100%|[1-9][0-9]*fr)$"
+      "oneOf": [
+        { "type": "string", "pattern": "^([1-9][0-9]?%|100%|[1-9][0-9]*fr)$" },
+        { "type": "integer", "minimum": 1 }
+      ]
     },
     "split": {
       "description": "How the pane is made from an earlier one. Every pane but the first has one, unless the window has a grid.",

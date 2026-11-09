@@ -88,7 +88,8 @@ var (
 
 var (
 	// ErrInvalidTrack is returned for a grid column or row size that is
-	// neither a percentage from 1% to 100% nor a positive weight (2fr).
+	// neither a percentage from 1% to 100%, a positive number of cells,
+	// nor a positive weight (2fr).
 	ErrInvalidTrack = errors.New("invalid grid size")
 	// ErrEmptyGrid is returned when a grid names no pane, or has an empty
 	// row, or is missing.
@@ -98,8 +99,9 @@ var (
 	// ErrTrackCount is returned when a grid has more or fewer sizes than
 	// columns or rows.
 	ErrTrackCount = errors.New("a grid needs one size per column and per row")
-	// ErrTrackShares is returned when a grid's percentages don't share out
-	// the whole window: 100% without weights, less with some.
+	// ErrTrackShares is returned when a grid's sizes don't share out the
+	// whole window: 100% without weights, less with some, and cells only
+	// beside a weight.
 	ErrTrackShares = errors.New("grid sizes must share out the whole window")
 	// ErrPaneNotRectangle is returned when a pane's cells in a grid don't
 	// form one rectangle.

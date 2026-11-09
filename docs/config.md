@@ -94,7 +94,19 @@ window is the `app` window of the README's nimbus example:
 | Field | Meaning |
 | --- | --- |
 | `areas` | Rows of pane names, one per column. A pane covers the rectangle of cells holding its name. Every pane is named, and none has a `split`. |
-| `columns`, `rows` | One size per column or row: a percentage of the window (`60%`), or a weight sharing out what the percentages leave (`2fr`). Default: equal. |
+| `columns`, `rows` | One size per column or row: a percentage of the window (`60%`), a number of cells (`30`), or a weight sharing out what the others leave (`2fr`). Columns or rows in cells need one in `fr` to take the rest. Default: equal. |
+
+A size in cells is exact when the window opens, such as a 30-cell file
+tree beside an editor taking the rest:
+
+```yaml
+    grid:
+      columns: [30, 1fr]
+      areas:
+        - [tree, editor]
+```
+
+Like every pane in tmux, it then grows or shrinks with the terminal.
 
 tmux only cuts a window in straight lines, each piece cut again, so a
 grid whose panes no straight line across separates is refused, such as

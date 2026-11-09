@@ -195,6 +195,23 @@ windows:
 		}
 	})
 
+	t.Run("writes a grid's sizes in cells as numbers", func(t *testing.T) {
+		_, got := save(t, mustLoad(t, "cells", `root: /srv/cells
+windows:
+  - name: code
+    grid:
+      columns: [30, 1fr]
+      areas:
+        - [tree, editor]
+    panes:
+      - name: tree
+      - name: editor
+`))
+		if !strings.Contains(got, "columns: [30, 1fr]") {
+			t.Fatalf("got:\n%s\nwant columns: [30, 1fr]", got)
+		}
+	})
+
 	t.Run("keeps a grid through a save and reload", func(t *testing.T) {
 		saved, _ := save(t, mustLoad(t, "grid", gridDoc))
 

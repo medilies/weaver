@@ -57,6 +57,13 @@ func (p CarvedPane) Split() (Split, bool) {
 // cells k to the last cover. Sibling cells are split before their
 // insides, which then split the panes they start as.
 func (c LayoutCell) CreationOrder() []CarvedPane {
+	return c.creationOrder(false)
+}
+
+// creationOrder is CreationOrder, its splits sized in cells when inCells
+// is set, the cells' sizes then being cells: a split pane covering
+// several cells takes their sizes and the borders between them.
+func (c LayoutCell) creationOrder(inCells bool) []CarvedPane {
 	order := []CarvedPane{{pane: c.firstPane()}}
 	index := func(pane int) int {
 		for i, p := range order {
@@ -78,13 +85,16 @@ func (c LayoutCell) CreationOrder() []CarvedPane {
 			remaining[k] = remaining[k+1] + children[k].size
 		}
 		for k := 1; k < len(children); k++ {
-			percent := int(math.Round(100 * remaining[k] / remaining[k-1]))
+			size := Size{amount: min(max(int(math.Round(100*remaining[k]/remaining[k-1])), 1), 99), percent: true}
+			if inCells {
+				size = Size{amount: max(int(math.Round(remaining[k]))+len(children)-k-1, 1)}
+			}
 			order = append(order, CarvedPane{
 				pane: children[k].firstPane(),
 				split: Split{
 					of:        index(children[k-1].firstPane()),
 					direction: direction,
-					size:      Size{amount: min(max(percent, 1), 99), percent: true},
+					size:      size,
 				},
 				splits: true,
 			})

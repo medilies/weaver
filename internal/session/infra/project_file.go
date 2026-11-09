@@ -53,9 +53,9 @@ type windowFile struct {
 }
 
 type gridFile struct {
-	Columns []string  `yaml:"columns,omitempty,flow"`
-	Rows    []string  `yaml:"rows,omitempty,flow"`
-	Areas   []areaRow `yaml:"areas"`
+	Columns []trackText `yaml:"columns,omitempty,flow"`
+	Rows    []trackText `yaml:"rows,omitempty,flow"`
+	Areas   []areaRow   `yaml:"areas"`
 }
 
 // areaRow is a row of a grid's pane names, written on one line so the
@@ -354,10 +354,23 @@ func (g gridFile) toGrid() (domain.Grid, error) {
 	return domain.NewGrid(areas, columns, rows)
 }
 
-func toTracks(raw []string) ([]domain.Track, error) {
+// trackText is a grid column's or row's size as the config writes it: a
+// number of cells is written bare, as YAML's integer, the rest as text.
+type trackText string
+
+// MarshalYAML writes a size in cells as a number, so it reads back as
+// written: columns: [30, 1fr].
+func (t trackText) MarshalYAML() (any, error) {
+	if n, err := strconv.Atoi(string(t)); err == nil {
+		return n, nil
+	}
+	return string(t), nil
+}
+
+func toTracks(raw []trackText) ([]domain.Track, error) {
 	tracks := make([]domain.Track, 0, len(raw))
 	for _, r := range raw {
-		track, err := domain.ParseTrack(r)
+		track, err := domain.ParseTrack(string(r))
 		if err != nil {
 			return nil, err
 		}
@@ -582,13 +595,13 @@ func gridFileOf(grid domain.Grid) *gridFile {
 }
 
 // trackTexts is the tracks' text, or nil for none.
-func trackTexts(tracks []domain.Track) []string {
+func trackTexts(tracks []domain.Track) []trackText {
 	if len(tracks) == 0 {
 		return nil
 	}
-	out := make([]string, len(tracks))
+	out := make([]trackText, len(tracks))
 	for i, t := range tracks {
-		out[i] = t.String()
+		out[i] = trackText(t.String())
 	}
 	return out
 }

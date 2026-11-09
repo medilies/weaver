@@ -855,6 +855,19 @@ func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defau
 	if _, err := t.run("set-option", "-w", "-t", windowID, "@weaver_window", argument(window.Name().String())); err != nil {
 		return err
 	}
+	if window.NeedsSize() {
+		// A grid with a column or row in cells: its splits depend on the
+		// window's size, which the session's terminal set.
+		size, err := t.run("display-message", "-p", "-t", windowID, "#{window_width} #{window_height}")
+		if err != nil {
+			return err
+		}
+		var cols, rows int
+		if _, err := fmt.Sscan(size, &cols, &rows); err != nil {
+			return fmt.Errorf("tmux window size: unexpected output %q", size)
+		}
+		window = window.SizedTo(cols, rows)
+	}
 	panes := window.Panes()
 	ids := []string{firstPaneID}
 	for _, pane := range panes[1:] {

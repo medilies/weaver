@@ -45,9 +45,10 @@ type box struct {
 // layOut places window's panes in a window of cols×rows cells as tmux
 // splits them: the first pane fills the window, and each later one cuts
 // the pane it splits, taking its size of it, half by default, past one
-// cell of border.
+// cell of border. A grid sizing a column or row in cells is sized to
+// cols×rows first, as tmux makes it.
 func layOut(window domain.WindowPlan, cols, rows int) []box {
-	panes := window.Panes()
+	panes := window.SizedTo(cols, rows).Panes()
 	boxes := make([]box, 0, len(panes))
 	for i, pane := range panes {
 		split, splits := pane.Split()

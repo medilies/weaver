@@ -43,31 +43,6 @@ command; breaking changes are allowed, but none is planned. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-### 3. Grid sizes in cells (S)
-
-A fixed-width column or row beside ones that share the rest, such as a
-30-cell file tree:
-
-```yaml
-grid:
-  areas:
-    - [tree, editor]
-  columns: [30, 1fr]
-```
-
-- A bare number is cells, as for splits and tmux's `-l`. An axis with a
-  cell track needs a `%` or `fr` track to take the rest; all cells is
-  refused (a new error), as the first pane takes what splits leave.
-- How tmux gets them: a split's `-l` is the new pane's size, so a cell
-  size on a leading track depends on the window's width. Spike first:
-  apply a `select-layout` string with tmux's checksum, serialised from
-  the grid's `LayoutCell`, and check what tmux does to a fixed track
-  when the window's size differs from the string's. If it rescales it,
-  fall back to sizing the splits from the terminal's size
-  (`TmuxOptions.Size`).
-- Schema: the track pattern takes a bare number. Freeze still writes
-  splits.
-
 ### 4. Grid windows in the config form (M)
 
 The config form draws a grid window and selects its panes, but refuses

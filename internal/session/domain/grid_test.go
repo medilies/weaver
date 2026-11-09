@@ -69,7 +69,7 @@ func splits(window domain.Window) []string {
 }
 
 func TestParseTrack(t *testing.T) {
-	for _, raw := range []string{"40%", "100%", "2fr", " 1fr "} {
+	for _, raw := range []string{"40%", "100%", "2fr", " 1fr ", "30"} {
 		t.Run("reads "+raw, func(t *testing.T) {
 			track, err := domain.ParseTrack(raw)
 			if err != nil {
@@ -81,7 +81,7 @@ func TestParseTrack(t *testing.T) {
 		})
 	}
 
-	for _, raw := range []string{"", "0%", "101%", "0fr", "1.5fr", "40", "fr"} {
+	for _, raw := range []string{"", "0%", "101%", "0fr", "1.5fr", "0", "-5", "+5", "fr"} {
 		t.Run("rejects "+`"`+raw+`"`, func(t *testing.T) {
 			if _, err := domain.ParseTrack(raw); !errors.Is(err, domain.ErrInvalidTrack) {
 				t.Fatalf("got %v, want ErrInvalidTrack", err)
@@ -348,6 +348,70 @@ func TestChangingGridWindowPanes(t *testing.T) {
 	t.Run("rejects removing a pane", func(t *testing.T) {
 		if _, err := gridWindow(t).WithoutPane(1); !errors.Is(err, domain.ErrChangingGridPanes) {
 			t.Fatalf("got %v, want ErrChangingGridPanes", err)
+		}
+	})
+}
+
+// sizedSplits is the splits of a grid window's panes as tmux makes them
+// in a window of cols×rows, written as splits writes them.
+func sizedSplits(t *testing.T, g domain.Grid, cols, rows int, panes ...domain.Pane) []string {
+	t.Helper()
+	w, err := domain.NewGridWindow(windowName(t, "w"), g, panes...)
+	if err != nil {
+		t.Fatalf("NewGridWindow: %v", err)
+	}
+	project, err := domain.NewProject(projectName(t, "shop"), projectRoot(t, "/srv/shop")).WithWindows(w)
+	if err != nil {
+		t.Fatalf("WithWindows: %v", err)
+	}
+	plan := project.Plan().Windows()[0].SizedTo(cols, rows)
+	out := make([]string, 0, len(plan.Panes()))
+	for _, pane := range plan.Panes() {
+		line := pane.Name().String()
+		if split, ok := pane.Split(); ok {
+			line += fmt.Sprintf(" %s of #%d %s", split.Direction(), split.Of()+1, split.Size())
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func TestGridTracksInCells(t *testing.T) {
+	t.Run("refuses cells without a track in fr to take the rest", func(t *testing.T) {
+		_, err := domain.NewGrid(areas(t, []string{"tree", "editor"}), tracks(t, "30", "70%"), nil)
+		if !errors.Is(err, domain.ErrTrackShares) {
+			t.Fatalf("got %v, want ErrTrackShares", err)
+		}
+	})
+
+	t.Run("gives a leading column its cells, the fr column the rest", func(t *testing.T) {
+		g := grid(t, []string{"30", "1fr"}, nil, []string{"tree", "editor"})
+		got := sizedSplits(t, g, 100, 30, named(t, "tree", "editor")...)
+		if want := []string{"tree", "editor right of #1 69"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("gives a trailing row its cells", func(t *testing.T) {
+		g := grid(t, nil, []string{"1fr", "8"}, []string{"editor"}, []string{"logs"})
+		got := sizedSplits(t, g, 100, 30, named(t, "editor", "logs")...)
+		if want := []string{"editor", "logs below of #1 8"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("counts the borders a split pane covers", func(t *testing.T) {
+		g := grid(t, []string{"30", "1fr", "20"}, nil, []string{"tree", "editor", "logs"})
+		got := sizedSplits(t, g, 100, 30, named(t, "tree", "editor", "logs")...)
+		if want := []string{"tree", "editor right of #1 69", "logs right of #2 20"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("leaves a grid without cells in percentages", func(t *testing.T) {
+		g := grid(t, []string{"60%", "40%"}, nil, []string{"a", "b"})
+		if got := sizedSplits(t, g, 100, 30, named(t, "a", "b")...); !slices.Equal(got, []string{"a", "b right of #1 40%"}) {
+			t.Fatalf("got %q, want the split in percent", got)
 		}
 	})
 }

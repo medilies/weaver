@@ -33,6 +33,31 @@ type WindowPlan struct {
 	name    WindowName
 	panes   []PanePlan
 	focused int
+	grid    Grid
+	gridded bool
+}
+
+// SizedTo is the window as tmux makes it in cols×rows: a grid with a
+// column or row in cells has its splits sized in cells for that size;
+// any other window is as it is, its splits in percentages.
+func (w WindowPlan) SizedTo(cols, rows int) WindowPlan {
+	if !w.gridded || !w.grid.inCells {
+		return w
+	}
+	carved := w.grid.carvedIn(cols, rows)
+	w.panes = slices.Clone(w.panes)
+	for i := range min(len(w.panes), len(carved)) {
+		if split, ok := carved[i].Split(); ok {
+			w.panes[i].split = split
+		}
+	}
+	return w
+}
+
+// NeedsSize says whether SizedTo changes the window: whether a grid sizes
+// a column or row in cells.
+func (w WindowPlan) NeedsSize() bool {
+	return w.gridded && w.grid.inCells
 }
 
 func (w WindowPlan) Name() WindowName {
@@ -125,7 +150,7 @@ func (p Project) planWindow(window Window) WindowPlan {
 	for _, pane := range window.panes {
 		panes = append(panes, p.planPane(window, pane))
 	}
-	return WindowPlan{name: window.name, panes: panes, focused: window.FocusedPane()}
+	return WindowPlan{name: window.name, panes: panes, focused: window.FocusedPane(), grid: window.grid, gridded: window.gridded}
 }
 
 func (p Project) planPane(window Window, pane Pane) PanePlan {

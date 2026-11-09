@@ -315,6 +315,23 @@ func TestTmuxFocus(t *testing.T) {
 	})
 }
 
+func TestTmuxStartSizesGridTracksInCells(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "cells", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "code", "grid": {"columns": [30, "1fr"], "areas": [["tree", "editor"]]},
+		 "panes": [{"name": "tree"}, {"name": "editor"}]}
+	]}`, t.TempDir()))
+
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tree := server.paneLabelled(t, "cells", "tree")
+	if got := server.query(t, "display-message", "-p", "-t", tree, "#{pane_width}"); got != "30" {
+		t.Fatalf("got %s columns, want 30", got)
+	}
+}
+
 func TestTmuxStartClearing(t *testing.T) {
 	server := newTmuxServer(t)
 	plan := planOf(t, "cleared", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
