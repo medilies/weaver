@@ -28,11 +28,11 @@ The agent's shell usually runs inside the user's tmux, with `$TMUX` set, and `tm
 2. **A config and a socket directory of its own.** tmux refuses a socket directory it didn't create unless it is the user's and mode 700:
 
    ```sh
-   mkdir -p /tmp/wvt/tmux/tmux-$(id -u) /tmp/wvt/cfg/weaver/projects /tmp/wvt/shop/back /tmp/wvt/blog
+   mkdir -p /tmp/wvt/tmux/tmux-$(id -u) /tmp/wvt/cfg/weaver/projects /tmp/wvt/shop/back /tmp/wvt/blog /tmp/wvt/notes
    chmod 700 /tmp/wvt/tmux/tmux-$(id -u)
    ```
 
-   Write the two projects under [Sample projects](#sample-projects) into `/tmp/wvt/cfg/weaver/projects/`.
+   Write the three projects under [Sample projects](#sample-projects) into `/tmp/wvt/cfg/weaver/projects/`.
 
 3. **A visible terminal.** A terminal emulator window, kitty here, attached to a session `term` of the throwaway server, so that attaching and switching clients run for real and the user can watch. Find the emulator with `command -v`; don't write its path here:
 
@@ -73,8 +73,14 @@ Each with what must hold. A failure is a bug in weave only once the keys sent ar
 | 8 | `y`, then `y` again | The YAML shows as stored, then the drawing comes back. |
 | 9 | `r` on `logs` | `sleep 3` is typed into `logs` again and the client moves there. |
 | 10 | `weave edit shop`, the `shell` window's `focus` row, Enter, Ctrl-S, `y` | The diff removes `focus: true` from `api` and keeps the pane's. `Saved shop.` The file has a single `focus: true`, on `back`. |
-| 11 | `weave freeze blog`, Enter on the name, type a new one, Enter, Ctrl-S, `y` | Before renaming, keeping `blog` asks `blog is already registered. Replace it?`. The saved config has `focus: true` on `preview`, and no window but `write`. |
+| 11 | `weave freeze blog`, Ctrl-S, `y`, then `n`, Ctrl-U, type a new name, Enter, Ctrl-S, `y` | Saving under `blog` asks `blog is already registered. Replace it?`; `n` opens the form again typing the name. The saved config has `focus: true` on `preview`, and no window but `write`. |
 | 12 | In `shop`'s `shell` window, `weave`, select `shop`, `x`, `y` | `tearing down`, then `teardown: false: command failed`, `shop's session will be killed anyway, with this pane.` and `Press Enter to go on.` One Enter kills `shop`. |
+| 13 | Killing `shop` ended the terminal's client: attach it to `term` again (`tmux attach -t term` in the terminal command of [Setup](#setup)). `weave notes` in `term` | The client switches to `notes`, window `code`. `files` is exactly 30 columns wide and `edit` takes the rest (`#{pane_width}`), the window being the client's size less the status line. |
+| 14 | `T switch-client -t term`, `weave`, select `notes` | Under the window list, `code` and `shell` are drawn small, each under its name, `code`'s with its narrow `files` column. In a terminal too short for them, only the names show. |
+| 15 | Esc. Write `settings.yml` beside `projects` with `selected-colour: 214` and `keys: { split-right: "\|", split-below: "-" }`. `weave edit notes`, go to `shell`'s drawing, `\|` | `settings.schema.json` is beside it. The key line reads `\| split right · - split below`, `\|` splits the pane right, and `T capture-pane -e` shows the selected pane in colour 214 (`38;5;214`). `u` then Esc leave with `Nothing saved.` |
+| 16 | Set `keys: { remove: u }` in `settings.yml`, `weave list` | `Error: …/settings.yml: keys.remove: key taken: "u" already does undo`, and nothing else runs. Remove `settings.yml` afterwards. |
+| 17 | `weave edit notes`, `code`'s `areas` row, Enter, Ctrl-U, type `files, edit / files, logs`, Enter, Ctrl-S, `y` | The drawing adds `logs` under `edit` as it is typed. The diff adds the row and a pane `logs`, last. The saved config keeps `columns: [30, 1fr]` and lists `files`, `edit`, `logs`. |
+| 18 | `weave edit notes`, `code`'s `layout` row, →, Ctrl-S, `y` | The `areas`, `columns` and `rows` rows go, and the drawing is unchanged: `files` keeps its width, `edit`'s split being its share of the terminal (about 86% at 213 columns), not of tmux's default 80. The diff removes the grid and adds a `split` to `edit` and `logs`. |
 
 ## Sample projects
 
@@ -120,9 +126,27 @@ windows:
       - name: shell
 ```
 
+`notes.yml`: a grid with a column in cells, beside a second window, to
+check cell sizes, miniatures, settings, and editing a grid in the config
+form.
+
+```yaml
+root: /tmp/wvt/notes
+windows:
+  - name: code
+    grid:
+      columns: [30, 1fr]
+      areas:
+        - [files, edit]
+    panes:
+      - name: files
+      - name: edit
+  - name: shell
+```
+
 ## Adding scenarios
 
-The list grows. Add a row whenever a case it misses turns up: a new feature or a changed behaviour, a bug found by hand, by a review or by a user, or anything a run shows that no row checks. Add what its sample needs to the two projects above, and keep the rows in the order they run, each starting where the one before leaves off.
+The list grows. Add a row whenever a case it misses turns up: a new feature or a changed behaviour, a bug found by hand, by a review or by a user, or anything a run shows that no row checks. Add what its sample needs to the projects above, and keep the rows in the order they run, each starting where the one before leaves off.
 
 This file is public, in the repository. Keep everything in it generic:
 

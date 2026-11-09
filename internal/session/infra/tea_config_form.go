@@ -633,7 +633,9 @@ func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 		return m.changedTo(m.refocused(m.focus, !m.focusedAt(m.focus))), nil
 	case fieldLayout:
 		// Only a grid window has the row: either way, it becomes splits.
-		return m.changedTo(m.windowChanged(m.focus, func(w domain.Window) (domain.Window, error) { return w.InSplits(), nil })), nil
+		// At the size the drawing shows, so that it doesn't change.
+		cols, rows := m.width, max(m.height-1, 1)
+		return m.changedTo(m.windowChanged(m.focus, func(w domain.Window) (domain.Window, error) { return w.InSplits(cols, rows), nil })), nil
 	}
 	return m, nil
 }

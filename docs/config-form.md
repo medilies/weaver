@@ -28,7 +28,8 @@ its command, then its name, left blank to show the task by its command.
 A window laid out by a `grid` shows its `layout` in its card: pick
 `splits` to turn the grid into the splits it makes, the panes then
 split, removed and resized on the drawing like any other (a column or
-row in cells becoming its share of tmux's default 80×24 window); `u`
+row in cells becoming its share of the window as the drawing shows it,
+so the drawing doesn't change); `u`
 undoes it. Below are its `areas`, its rows
 separated by ` / `, the panes' names in a row by commas
 (`app shell, flutter run / app shell, emulator`), so that adding a column

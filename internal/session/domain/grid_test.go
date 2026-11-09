@@ -605,21 +605,29 @@ func TestWindowInSplits(t *testing.T) {
 
 	t.Run("keeps the splits its grid made", func(t *testing.T) {
 		w := gridWindow(t, g, named(t, "b", "a")...)
-		if got, want := splits(w.InSplits()), splits(w); !slices.Equal(got, want) {
+		if got, want := splits(w.InSplits(80, 24)), splits(w); !slices.Equal(got, want) {
 			t.Fatalf("got %q, want the grid's %q", got, want)
 		}
 	})
 
 	t.Run("drops the grid", func(t *testing.T) {
-		if _, gridded := gridWindow(t, g, named(t, "a", "b")...).InSplits().Grid(); gridded {
+		if _, gridded := gridWindow(t, g, named(t, "a", "b")...).InSplits(80, 24).Grid(); gridded {
 			t.Fatal("got a grid, want splits")
 		}
 	})
 
 	t.Run("lets its panes be split again", func(t *testing.T) {
-		w := gridWindow(t, g, named(t, "a", "b")...).InSplits()
+		w := gridWindow(t, g, named(t, "a", "b")...).InSplits(80, 24)
 		if _, err := w.AddingPane(named(t, "c")[0].Splitting(split(t, 1, domain.Below, ""))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+}
+
+func TestWindowInSplitsSharesCellsOutAtItsSize(t *testing.T) {
+	w := gridWindow(t, grid(t, []string{"30", "1fr"}, nil, []string{"tree", "edit"}), named(t, "tree", "edit")...)
+	// 200 columns less a border: tree 30, edit 169, 85% of what is split.
+	if got := splits(w.InSplits(200, 50)); !slices.Equal(got, []string{"tree", "edit right of #1 85%"}) {
+		t.Fatalf("got %q, want edit at 85%%", got)
+	}
 }

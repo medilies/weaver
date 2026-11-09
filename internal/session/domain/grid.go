@@ -410,6 +410,17 @@ func (g Grid) Rows() []Track {
 	return slices.Clone(g.rows)
 }
 
+// carvedSharesIn is how the grid's panes are created in a window of
+// cols×rows, splits sized in percentages of the panes they split, as
+// CreationOrder orders them. Its grid has a track in cells.
+func (g Grid) carvedSharesIn(cols, rows int) []CarvedPane {
+	cell, err := g.cutIn(cols, rows)
+	if err != nil {
+		return g.cell.CreationOrder() // NewGrid cut it already: sizes don't change the cut.
+	}
+	return cell.CreationOrder()
+}
+
 // carvedIn is how the grid's panes are created in a window of cols×rows,
 // splits sized in cells, as CreationOrder orders them: it differs from
 // the nominal cut in sizes only. Its grid has a track in cells.

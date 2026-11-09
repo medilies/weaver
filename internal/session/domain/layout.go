@@ -645,14 +645,22 @@ func (w Window) Listing() []int {
 	return slices.Clone(w.listing)
 }
 
-// InSplits is the grid window laid out by the splits its grid makes
-// instead, its panes in the order they are created, each splitting an
-// earlier one as the grid did, sized in percentages: a column or row in
-// cells becomes its share of a window of tmux's default size. A window
-// laid out by splits already is as it is.
-func (w Window) InSplits() Window {
+// InSplits is the grid window laid out by the splits its grid makes in
+// a window of cols×rows instead, its panes in the order they are
+// created, each splitting an earlier one as the grid did, sized in
+// percentages: a column or row in cells becomes its share of that
+// window. A window laid out by splits already is as it is.
+func (w Window) InSplits(cols, rows int) Window {
 	if !w.gridded {
 		return w
+	}
+	if w.grid.inCells {
+		w.panes = slices.Clone(w.panes)
+		for i, carved := range w.grid.carvedSharesIn(cols, rows) {
+			if split, ok := carved.Split(); ok && i < len(w.panes) {
+				w.panes[i].split = split
+			}
+		}
 	}
 	w.grid, w.gridded, w.listing = Grid{}, false, nil
 	return w
