@@ -159,10 +159,12 @@ var alertStyles = map[alert]lipgloss.Style{
 // proportions they take in a window of cols×rows. Each box shows what
 // its pane looks like the moment it opens: its name in the top border,
 // its dir when it isn't root, its note, then its prompt. The selected
-// pane, by its index, has a cyan border and title, heavy when heavy is
+// pane, by its index, has a border and title in the selected colour,
+// look's picked, heavy when heavy is
 // set, else with its name in brackets. A pane with an alert, from alerts
 // by its index, gets ⚠ in its top border and a border in the alert's
-// colour, the worst winning on a border boxes share, and over cyan.
+// colour, the worst winning on a border boxes share, and over the
+// selected colour.
 func drawing(look look, window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or

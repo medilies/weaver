@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
 	"go.yaml.in/yaml/v3"
@@ -49,10 +50,12 @@ func DefaultSettings() Settings {
 // LoadSettings reads the settings file in dir, the defaults when there
 // is none. An invalid file is an error naming the file and the field. It
 // saves the settings' JSON Schema in dir, when dir exists, so it is
-// there before the file is.
-func LoadSettings(dir string) (Settings, error) {
+// there before the file is; failing to only warns, on warnings, since
+// weave works without it.
+func LoadSettings(dir string, warnings io.Writer) (Settings, error) {
 	if err := writeSettingsSchema(dir); err != nil {
-		return Settings{}, err
+		// A warning that can't be written changes nothing worth failing for.
+		_, _ = fmt.Fprintf(warnings, "warning: %v\n", err)
 	}
 	path := filepath.Join(dir, settingsFileName)
 	raw, err := os.ReadFile(path)
@@ -86,16 +89,28 @@ func writeSettingsSchema(dir string) error {
 // settingsFile is the settings file's format.
 type settingsFile struct {
 	SelectedColour yaml.Node `yaml:"selected-colour"`
-	Keys           struct {
-		SplitRight *string `yaml:"split-right"`
-		SplitBelow *string `yaml:"split-below"`
-		Remove     *string `yaml:"remove"`
-		Shrink     *string `yaml:"shrink"`
-		Grow       *string `yaml:"grow"`
-	} `yaml:"keys"`
+	Keys           keysFile  `yaml:"keys"`
 }
 
-var hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+// keysFile is the format of the settings' keys.
+type keysFile struct {
+	SplitRight *string `yaml:"split-right"`
+	SplitBelow *string `yaml:"split-below"`
+	Remove     *string `yaml:"remove"`
+	Shrink     *string `yaml:"shrink"`
+	Grow       *string `yaml:"grow"`
+}
+
+// settingsTypes names the file's shapes in YAML's errors as the file
+// does.
+var settingsTypes = strings.NewReplacer("infra.settingsFile", "settings", "infra.keysFile", "keys")
+
+var (
+	hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+	// keyName is a key as Bubble Tea names it: one character, or a name
+	// such as space or f5, after any modifiers.
+	keyName = regexp.MustCompile(`^((ctrl|alt|shift|super|hyper|meta)\+)*([^\s+]|\+|[a-z][a-z0-9]+)$`)
+)
 
 var (
 	// ErrInvalidColour is returned for a selected colour that is neither
@@ -103,6 +118,12 @@ var (
 	ErrInvalidColour = errors.New("invalid colour")
 	// ErrEmptyKey is returned for a key set to nothing.
 	ErrEmptyKey = errors.New("a key can't be empty")
+	// ErrInvalidKey is returned for a key no terminal sends as written,
+	// such as " " for space or ctrl-x for ctrl+x.
+	ErrInvalidKey = errors.New("invalid key")
+	// ErrTrailingSettings is returned when the settings file holds a
+	// second document.
+	ErrTrailingSettings = errors.New("unexpected data after the settings object")
 	// ErrKeyTaken is returned for a drawing key the config form already
 	// uses, or one two drawing keys share.
 	ErrKeyTaken = errors.New("key taken")
@@ -115,10 +136,10 @@ func decodeSettings(raw []byte) (Settings, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
-		return Settings{}, err
+		return Settings{}, errors.New(settingsTypes.Replace(err.Error()))
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-		return Settings{}, ErrTrailingData
+		return Settings{}, ErrTrailingSettings
 	}
 	settings := DefaultSettings()
 	if node := &file.SelectedColour; node.Kind != 0 {
@@ -146,6 +167,9 @@ func decodeSettings(raw []byte) (Settings, error) {
 		if *key.value == "" {
 			return Settings{}, fmt.Errorf("keys.%s: %w", key.field, ErrEmptyKey)
 		}
+		if !keyName.MatchString(*key.value) {
+			return Settings{}, fmt.Errorf("keys.%s: %w: %q (want a character, or a name such as space or ctrl+x)", key.field, ErrInvalidKey, *key.value)
+		}
 		*key.into = *key.value
 	}
 	if err := keys.free(); err != nil {
@@ -158,8 +182,9 @@ func decodeSettings(raw []byte) (Settings, error) {
 func parseColour(node *yaml.Node) (color.Color, error) {
 	value := node.Value
 	if node.Kind == yaml.ScalarNode {
-		if n, err := strconv.Atoi(value); node.Tag == "!!int" && err == nil && n >= 0 && n <= 255 {
-			return lipgloss.Color(strconv.Itoa(n)), nil
+		// Base 0 reads YAML's 0x10 and 0o20 as the schema's integers.
+		if n, err := strconv.ParseInt(value, 0, 0); node.Tag == "!!int" && err == nil && n >= 0 && n <= 255 {
+			return lipgloss.Color(strconv.FormatInt(n, 10)), nil
 		}
 		if node.Tag == "!!str" && hexColour.MatchString(value) {
 			return lipgloss.Color(value), nil

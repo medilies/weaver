@@ -350,15 +350,13 @@ func (m configForm) typedVar() (spot, bool) {
 	return spot{window: at.window, pane: at.pane, field: fieldEnv, item: index}, true
 }
 
-// formKeys are the config form's keys on a row, the drawing's aside,
-// and what they do: the drawing keys can't be any of them. press reads
-// them in this order.
+// formKeys are the keys press reads on a row, the drawing's aside, and
+// what they do: the drawing keys can't be any of them.
 var formKeys = map[string]string{
 	"up": "move", "down": "move", "left": "change", "right": "change",
 	"k": "move", "j": "move", "h": "change", "l": "change",
 	"enter": "edit", "o": "add", "d": "delete", "J": "reorder", "K": "reorder",
 	"u": "undo", "ctrl+r": "redo", "ctrl+s": "save", "esc": "leave", "ctrl+c": "leave",
-	"tab": "move", "shift+tab": "move",
 }
 
 // press is m after key, pressed on a row.
@@ -1819,7 +1817,8 @@ func (m configForm) windowsCard(width int) section {
 }
 
 // formWindowList is the windows' names, then "+ window" adding one, the
-// selected one in a cyan block, with the cells each covers, to click it.
+// selected one in a block of the selected colour, with the cells each
+// covers, to click it.
 // When they don't fit in width, the first ones make way for the selected
 // one.
 func formWindowList(look look, windows []domain.Window, selected int, width int) (string, []hotspot) {
@@ -1841,7 +1840,8 @@ func formWindowList(look look, windows []domain.Window, selected int, width int)
 
 // paneList is the names of window's panes, or their numbers for
 // those without, in order, as the drawing places them, the selected one
-// in a cyan block, with the cells each covers, to click it. When they
+// in a block of the selected colour, with the cells each covers, to
+// click it. When they
 // don't fit in width, the first ones make way for the selected one.
 func paneList(look look, window domain.Window, order []int, selected int, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(order))

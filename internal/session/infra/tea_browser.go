@@ -761,7 +761,8 @@ func detailsTop(project app.ProjectOverview, width int) string {
 	return lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
 }
 
-// windowList is the names of windows, the selected one in a cyan block, ○ marking
+// windowList is the names of windows, the selected one in a block of the
+// selected colour, ○ marking
 // those the project's owned session lacks, and which one of how many is
 // drawn, after ←→ when there are several to switch between; with the
 // cells each window's name and each arrow covers, to click them. When they

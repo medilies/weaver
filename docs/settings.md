@@ -16,7 +16,8 @@ keys:
 weave saves `settings.schema.json` beside it once that folder exists, so
 an editor with a YAML language server completes and checks the file.
 weave refuses to start while the file is invalid, naming the file and
-the field.
+the field. Failing to save the schema, in a folder weave can't write
+to, only warns.
 
 ## `selected-colour`
 
@@ -30,7 +31,8 @@ quotes. Cyan (`6`) unless set. Warnings keep their own colours.
 
 The config form's keys on the drawing, tmux's unless set. Write a key
 as the terminal sends it: a character (`|`, `-`), or a name such as
-`ctrl+x` or `alt+s`.
+`space`, `f5`, `ctrl+x` or `alt+s`. A key written otherwise (`" "`,
+`ctrl-x`) is refused.
 
 | Setting | Does | Default |
 | --- | --- | --- |
@@ -41,7 +43,7 @@ as the terminal sends it: a character (`|`, `-`), or a name such as
 | `grow` | make the selected pane larger | `L` |
 
 A key the config form already uses (the arrows, `h` `j` `k` `l`,
-`enter`, `o`, `d`, `J`, `K`, `u`, `ctrl+r`, `ctrl+s`, `esc`, `ctrl+c`,
-`tab`, `shift+tab`) is refused, as are two settings on the same key.
+`enter`, `o`, `d`, `J`, `K`, `u`, `ctrl+r`, `ctrl+s`, `esc`, `ctrl+c`)
+is refused, as are two settings on the same key.
 weave reads only this file, never your tmux bindings: see
 [ADR 0001](adr/0001-drawing-keys-are-a-setting-not-read-from-tmux.md).

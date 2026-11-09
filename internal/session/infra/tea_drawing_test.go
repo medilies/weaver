@@ -147,7 +147,7 @@ func TestDrawing(t *testing.T) {
 		}
 	})
 
-	t.Run("colours the selected pane's border cyan", func(t *testing.T) {
+	t.Run("colours the selected pane's border in the selected colour", func(t *testing.T) {
 		row := drawing(defaultLook, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
@@ -157,7 +157,7 @@ func TestDrawing(t *testing.T) {
 		}
 	})
 
-	t.Run("colours the selected pane's name cyan", func(t *testing.T) {
+	t.Run("colours the selected pane's name in the selected colour", func(t *testing.T) {
 		row := drawing(defaultLook, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }

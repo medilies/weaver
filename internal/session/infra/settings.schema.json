@@ -13,7 +13,7 @@
       ]
     },
     "keys": {
-      "description": "The config form's keys on the drawing, tmux's unless set. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c, tab, shift+tab), nor two the same.",
+      "description": "The config form's keys on the drawing, tmux's unless set. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c), nor two the same.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -27,9 +27,9 @@
   },
   "definitions": {
     "key": {
-      "description": "A key as the terminal sends it: a character such as | or -, or a name such as ctrl+x or alt+s.",
+      "description": "A key as the terminal sends it: a character such as | or -, or a name such as space, f5, ctrl+x or alt+s.",
       "type": "string",
-      "minLength": 1
+      "pattern": "^((ctrl|alt|shift|super|hyper|meta)\\+)*([^\\s+]|\\+|[a-z][a-z0-9]+)$"
     }
   }
 }

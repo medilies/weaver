@@ -36,7 +36,7 @@ func wire() (application, error) {
 	}
 
 	weaverDir := filepath.Join(configDir, "weaver")
-	settings, err := infra.LoadSettings(weaverDir)
+	settings, err := infra.LoadSettings(weaverDir, os.Stderr)
 	if err != nil {
 		return application{}, err
 	}

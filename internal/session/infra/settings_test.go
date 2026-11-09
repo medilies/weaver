@@ -3,6 +3,7 @@ package infra
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -21,12 +22,12 @@ func settingsIn(t *testing.T, content string) (Settings, error) {
 	if err := os.WriteFile(filepath.Join(dir, settingsFileName), []byte(content), 0o600); err != nil {
 		t.Fatalf("writing fixture: %v", err)
 	}
-	return LoadSettings(dir)
+	return LoadSettings(dir, io.Discard)
 }
 
 func TestLoadSettings(t *testing.T) {
 	t.Run("are the defaults without a settings file", func(t *testing.T) {
-		got, err := LoadSettings(t.TempDir())
+		got, err := LoadSettings(t.TempDir(), io.Discard)
 		if err != nil || !reflect.DeepEqual(got, DefaultSettings()) {
 			t.Fatalf("got %+v (%v), want the defaults", got, err)
 		}
@@ -36,6 +37,13 @@ func TestLoadSettings(t *testing.T) {
 		got, err := settingsIn(t, "selected-colour: 214\n")
 		if err != nil || got.colour != lipgloss.Color("214") {
 			t.Fatalf("got %v (%v), want colour 214", got.colour, err)
+		}
+	})
+
+	t.Run("read an ANSI colour number written in hex", func(t *testing.T) {
+		got, err := settingsIn(t, "selected-colour: 0x10\n")
+		if err != nil || got.colour != lipgloss.Color("16") {
+			t.Fatalf("got %v (%v), want colour 16", got.colour, err)
 		}
 	})
 
@@ -81,6 +89,34 @@ func TestLoadSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("refuse a key no terminal sends as written", func(t *testing.T) {
+		for _, key := range []string{`" "`, "ctrl-x", "Space", "ctrl+"} {
+			if _, err := settingsIn(t, "keys:\n  remove: "+key+"\n"); !errors.Is(err, ErrInvalidKey) {
+				t.Errorf("%s: got %v, want ErrInvalidKey", key, err)
+			}
+		}
+	})
+
+	t.Run("read a key by its name", func(t *testing.T) {
+		got, err := settingsIn(t, "keys:\n  remove: ctrl+x\n  grow: space\n  shrink: \"+\"\n")
+		if err != nil || got.keys.remove != "ctrl+x" || got.keys.grow != "space" || got.keys.shrink != "+" {
+			t.Fatalf("got %+v (%v), want ctrl+x, space and +", got.keys, err)
+		}
+	})
+
+	t.Run("refuse a second document", func(t *testing.T) {
+		if _, err := settingsIn(t, "selected-colour: 6\n---\nselected-colour: 2\n"); !errors.Is(err, ErrTrailingSettings) {
+			t.Fatalf("got %v, want ErrTrailingSettings", err)
+		}
+	})
+
+	t.Run("name an unknown field without Go's types", func(t *testing.T) {
+		_, err := settingsIn(t, "keys:\n  split: x\n")
+		if err == nil || strings.Contains(err.Error(), "infra.") || strings.Contains(err.Error(), "SplitRight") {
+			t.Fatalf("got %v, want the unknown field named in the file's words", err)
+		}
+	})
+
 	t.Run("refuse a key the config form already uses, saying what it does", func(t *testing.T) {
 		_, err := settingsIn(t, "keys:\n  remove: u\n")
 		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.remove: key taken: "u" already does undo`) {
@@ -99,7 +135,7 @@ func TestLoadSettings(t *testing.T) {
 func TestLoadSettingsSavesTheSchema(t *testing.T) {
 	t.Run("in a folder that exists", func(t *testing.T) {
 		dir := t.TempDir()
-		if _, err := LoadSettings(dir); err != nil {
+		if _, err := LoadSettings(dir, io.Discard); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got, err := os.ReadFile(filepath.Join(dir, settingsSchemaFileName)); err != nil || !slices.Equal(got, settingsSchema) {
@@ -109,7 +145,7 @@ func TestLoadSettingsSavesTheSchema(t *testing.T) {
 
 	t.Run("without making the folder", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), "weaver")
-		if _, err := LoadSettings(dir); err != nil {
+		if _, err := LoadSettings(dir, io.Discard); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
