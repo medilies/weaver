@@ -242,15 +242,12 @@ func (t Tmux) capturePanes(order []domain.CarvedPane, shells map[string]bool) ([
 			return nil, err
 		}
 		label = verbatim(label)
-		pid, err := t.run("display-message", "-p", "-t", target, "#{pane_pid}")
+		activePid, err := t.run("display-message", "-p", "-t", target, "#{pane_active} #{pane_pid}")
 		if err != nil {
 			return nil, err
 		}
+		active, pid, _ := strings.Cut(activePid, " ")
 		start, err := t.run("display-message", "-p", "-t", target, sized("pane_start_command"))
-		if err != nil {
-			return nil, err
-		}
-		active, err := t.run("display-message", "-p", "-t", target, "#{pane_active}")
 		if err != nil {
 			return nil, err
 		}
