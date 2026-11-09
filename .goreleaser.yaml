@@ -21,6 +21,5 @@ changelog:
   use: github
   filters:
     exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
+      - '^(docs|test|chore|ci|build)(\(.+\))?!?:'
+      - "^Merge"
