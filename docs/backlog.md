@@ -43,13 +43,6 @@ command; breaking changes are allowed, but none is planned. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-### 5. A grid turned into splits (S)
-
-One explicit action in the config form, never a side effect of another
-key: the grid's cut (`LayoutCell`, `CarvedPane`) becomes the window's
-splits, as capture does. Not the other way round: not every split tree
-has a tidy grid, and freeze already writes splits.
-
 ### 6. Window miniatures (S)
 
 The browser's window list becomes small drawings of every window, the

@@ -121,6 +121,7 @@ const (
 	fieldGridAreas  // a grid window's areas: rows separated by " / ", names in a row by commas
 	fieldGridColumns
 	fieldGridRows
+	fieldLayout // a grid window's layout, turned into splits by picking them
 )
 
 // isList reports whether f holds a list, a row per item.
@@ -630,9 +631,16 @@ func (m configForm) stepped(by int) (configForm, tea.Cmd) {
 		return m.changedTo(m.cleared(m.focus, clearings[next])), nil
 	case fieldFocus:
 		return m.changedTo(m.refocused(m.focus, !m.focusedAt(m.focus))), nil
+	case fieldLayout:
+		// Only a grid window has the row: either way, it becomes splits.
+		return m.changedTo(m.windowChanged(m.focus, func(w domain.Window) (domain.Window, error) { return w.InSplits(), nil })), nil
 	}
 	return m, nil
 }
+
+// layoutOptions are the options of a grid window's layout row: picking
+// splits turns the grid into them.
+var layoutOptions = []string{"grid", "splits"}
 
 // focusOptions are the options of a focus row, false then true.
 var focusOptions = []string{"no", "yes"}
@@ -924,7 +932,7 @@ func (m configForm) entered() (configForm, tea.Cmd) {
 			m.problem = "A pane's name holds a comma or a /, which separate the areas typed here: change them with weave edit --raw."
 			return m, nil
 		}
-	case fieldStarts, fieldClear, fieldFocus:
+	case fieldStarts, fieldClear, fieldFocus, fieldLayout:
 		return m.stepped(1)
 	case fieldWindowList:
 		at.field = fieldName
@@ -1908,6 +1916,7 @@ func (m configForm) windowsCard(width int) section {
 	m.putClear(&s, at(fieldClear))
 	m.envRows(&s, at(fieldEnv))
 	if grid, gridded := window.Grid(); gridded {
+		m.putChoices(&s, "layout", layoutOptions, 0, at(fieldLayout))
 		m.put(&s, "areas", areasText(grid), "", at(fieldGridAreas))
 		m.put(&s, "columns", tracksShown(grid.Columns()), "", at(fieldGridColumns))
 		m.put(&s, "rows", tracksShown(grid.Rows()), "", at(fieldGridRows))

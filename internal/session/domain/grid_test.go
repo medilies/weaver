@@ -599,3 +599,27 @@ func TestGridWithAreas(t *testing.T) {
 		}
 	})
 }
+
+func TestWindowInSplits(t *testing.T) {
+	g := grid(t, []string{"60%", "40%"}, nil, []string{"a", "b"})
+
+	t.Run("keeps the splits its grid made", func(t *testing.T) {
+		w := gridWindow(t, g, named(t, "b", "a")...)
+		if got, want := splits(w.InSplits()), splits(w); !slices.Equal(got, want) {
+			t.Fatalf("got %q, want the grid's %q", got, want)
+		}
+	})
+
+	t.Run("drops the grid", func(t *testing.T) {
+		if _, gridded := gridWindow(t, g, named(t, "a", "b")...).InSplits().Grid(); gridded {
+			t.Fatal("got a grid, want splits")
+		}
+	})
+
+	t.Run("lets its panes be split again", func(t *testing.T) {
+		w := gridWindow(t, g, named(t, "a", "b")...).InSplits()
+		if _, err := w.AddingPane(named(t, "c")[0].Splitting(split(t, 1, domain.Below, ""))); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}

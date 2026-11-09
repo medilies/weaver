@@ -645,6 +645,19 @@ func (w Window) Listing() []int {
 	return slices.Clone(w.listing)
 }
 
+// InSplits is the grid window laid out by the splits its grid makes
+// instead, its panes in the order they are created, each splitting an
+// earlier one as the grid did, sized in percentages: a column or row in
+// cells becomes its share of a window of tmux's default size. A window
+// laid out by splits already is as it is.
+func (w Window) InSplits() Window {
+	if !w.gridded {
+		return w
+	}
+	w.grid, w.gridded, w.listing = Grid{}, false, nil
+	return w
+}
+
 // LaidOutBy is the grid window laid out by grid instead: a pane the grid
 // still names keeps what it runs and its place in the listing, a name new
 // to the window is a new plain pane, listed last, and a pane the grid no

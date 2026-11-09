@@ -25,7 +25,11 @@ window or pane instead. A window or pane among several has a `focus`:
 whether opening lands in it, or its window selects it. A pane's tasks come last: each
 its command, then its name, left blank to show the task by its command.
 
-A window laid out by a `grid` shows its `areas` in its card, its rows
+A window laid out by a `grid` shows its `layout` in its card: pick
+`splits` to turn the grid into the splits it makes, the panes then
+split, removed and resized on the drawing like any other (a column or
+row in cells becoming its share of tmux's default 80×24 window); `u`
+undoes it. Below are its `areas`, its rows
 separated by ` / `, the panes' names in a row by commas
 (`app shell, flutter run / app shell, emulator`), so that adding a column
 changes every row at once, then
