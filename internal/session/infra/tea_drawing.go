@@ -144,12 +144,14 @@ type alert int
 const (
 	noAlert alert = iota
 	selectedPane
+	exitedAlert
 	programAlert
 	dirAlert
 )
 
 var alertStyles = map[alert]lipgloss.Style{
 	selectedPane: pickedStyle,
+	exitedAlert:  warningStyle,
 	programAlert: warningStyle,
 	dirAlert:     problemStyle,
 }

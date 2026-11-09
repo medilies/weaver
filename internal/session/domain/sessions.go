@@ -32,6 +32,18 @@ type SessionFinder interface {
 	Find(name ProjectName) (RunningSession, bool, error)
 }
 
+// SessionInspector finds projects' running tmux sessions and looks into
+// their panes. Infrastructure provides the implementation.
+type SessionInspector interface {
+	SessionFinder
+	// Idle is, by window, the indexes of the panes of windows whose shell
+	// idles at its prompt in the project's running session, nothing
+	// running in its terminal's foreground. A pane is found as TaskRunner
+	// finds it; one the session lacks isn't idle. An error wrapping
+	// ErrSessionNotRunning when no session runs.
+	Idle(project ProjectName, windows []WindowPlan) (map[WindowName][]int, error)
+}
+
 // SessionAttacher puts the user in projects' running tmux sessions.
 // Infrastructure provides the implementation.
 type SessionAttacher interface {

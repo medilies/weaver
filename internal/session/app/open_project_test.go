@@ -18,6 +18,14 @@ type fakeSessions struct {
 	started  []string
 	restored []string
 	attached []string
+	idle     map[string]map[domain.WindowName][]int // by project, the panes whose shell idles
+}
+
+func (s *fakeSessions) Idle(name domain.ProjectName, _ []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+	if _, ok := s.running[name.String()]; !ok {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	return s.idle[name.String()], nil
 }
 
 func (s *fakeSessions) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {

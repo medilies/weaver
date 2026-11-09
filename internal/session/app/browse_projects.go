@@ -17,6 +17,11 @@ var ErrMissingProgram = errors.New("program not found")
 // quote open, so the shell waits for the rest of it instead of running it.
 var ErrUnclosedQuote = errors.New("unclosed quote")
 
+// ErrCommandExited is warned about when a pane's command, in a session
+// weaver started, has left its shell back at its prompt: it crashed, was
+// interrupted or finished.
+var ErrCommandExited = errors.New("command exited")
+
 // ProjectOverview is a registered project as the browser shows it: its
 // config as written and, when the config is valid, the project, where it
 // stands on disk and how its running session differs from it.
@@ -84,15 +89,16 @@ func (o ProjectOverview) MissingWindows() []domain.WindowName {
 // found, wrapping ErrMissingProgram, or a command run that leaves a quote
 // open, wrapping ErrUnclosedQuote; and in any pane, a task whose program
 // can't be found or that leaves a quote open; each once, however many
-// panes it concerns. Opening a project that
+// panes it concerns. In an owned session, each pane whose command exited,
+// wrapping ErrCommandExited, is warned about too. Opening a project that
 // isn't running creates every pane, an owned session the missing windows'
 // panes, and a session weaver didn't start none.
 func (o ProjectOverview) Warnings() []Warning {
 	return slices.Clone(o.warnings)
 }
 
-// Warning is something opening a project would likely fail on, and the
-// panes it concerns. Its message names the first of them.
+// Warning is something opening a project would likely fail on, or a
+// pane's command that exited, and the panes it concerns. Its message names the first of them.
 type Warning struct {
 	err   error
 	panes []paneAt
@@ -111,7 +117,8 @@ func (w Warning) Error() string {
 	return w.err.Error()
 }
 
-// Unwrap is ErrMissingDirectory, ErrMissingProgram or ErrUnclosedQuote.
+// Unwrap is ErrMissingDirectory, ErrMissingProgram, ErrUnclosedQuote or
+// ErrCommandExited.
 func (w Warning) Unwrap() error {
 	return errors.Unwrap(w.err)
 }
@@ -142,7 +149,7 @@ type BrowseProjects struct {
 	projects  domain.ProjectRegistry
 	documents ProjectDocuments
 	workspace domain.Workspace
-	sessions  domain.SessionFinder
+	sessions  domain.SessionInspector
 	list      ListProjects
 	open      OpenProject
 	freeze    FreezeProject
@@ -159,7 +166,7 @@ func NewBrowseProjects(
 	projects domain.ProjectRegistry,
 	documents ProjectDocuments,
 	workspace domain.Workspace,
-	sessions domain.SessionFinder,
+	sessions domain.SessionInspector,
 	list ListProjects,
 	open OpenProject,
 	freeze FreezeProject,
@@ -241,7 +248,40 @@ func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 		opening = uc.restoration(&overview)
 	}
 	overview.warnings, overview.problem = uc.warnings(overview, opening, project.Plan().Windows())
+	overview.warnings = append(overview.warnings, uc.exited(overview)...)
 	return overview
+}
+
+// exited are the warnings about the panes of overview's owned session
+// whose command exited: panes typing a command, not a prefill, whose
+// shell idles again. Like the session, they only add to the summary: if
+// tmux can't tell, there are none.
+func (uc BrowseProjects) exited(overview ProjectOverview) []Warning {
+	if !overview.found || !overview.session.Owned() {
+		return nil
+	}
+	windows := overview.project.Plan().Windows()
+	idle, err := uc.sessions.Idle(overview.project.Name(), windows)
+	if err != nil {
+		return nil
+	}
+	var warnings []Warning
+	for _, window := range windows {
+		panes := window.Panes()
+		for _, index := range idle[window.Name()] {
+			if index < 0 || index >= len(panes) {
+				continue
+			}
+			pane := panes[index]
+			if cmd, ok := pane.Startup().Command(); ok && pane.Startup().Submits() {
+				warnings = append(warnings, Warning{
+					err:   fmt.Errorf("%s: %w: %s", where(window, pane), ErrCommandExited, cmd),
+					panes: []paneAt{{window: window.Name(), pane: index}},
+				})
+			}
+		}
+	}
+	return warnings
 }
 
 // restoration finds the running session of overview's project and the

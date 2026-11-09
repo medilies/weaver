@@ -74,6 +74,17 @@ func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, boo
 	return domain.RunningSession{}, false, s.err
 }
 
+func (s unfindableSessions) Idle(domain.ProjectName, []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+	return nil, s.err
+}
+
+// uninspectableSessions is fakeSessions failing to tell which panes idle.
+type uninspectableSessions struct{ *fakeSessions }
+
+func (s uninspectableSessions) Idle(domain.ProjectName, []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+	return nil, errors.New("ps gone")
+}
+
 // unkillableSessions is a domain.SessionKiller that finds a session
 // weaver didn't start, and fails to kill it.
 type unkillableSessions struct {
@@ -536,6 +547,77 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if shop, _ := s.browser.last().overview("shop"); len(shop.Warnings()) > 0 {
 			t.Fatalf("got %v, want no warnings", shop.Warnings())
+		}
+	})
+
+	t.Run("warns about a pane whose command exited in a session weaver started", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		got := blog.Warnings()
+		if len(got) != 1 || !errors.Is(got[0], app.ErrCommandExited) || !strings.Contains(got[0].Error(), "hugo server") ||
+			!got[0].Concerns(windowName(t, "blog"), 0) {
+			t.Fatalf("got %v, want hugo server exited in the blog pane", got)
+		}
+	})
+
+	t.Run("doesn't warn about an idle pane that prefills its command", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		window, err := domain.NewWindow(windowName(t, "blog"), domain.NewPane().Prefilling(command(t, "hugo server")))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, err := project(t, "blog").WithWindows(window)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.configs.projects["blog"] = blog
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if overview, _ := s.browser.last().overview("blog"); len(overview.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", overview.Warnings())
+		}
+	})
+
+	t.Run("doesn't warn about an idle pane in a session weaver didn't start", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = domain.NewRunningSession(false, windowName(t, "blog"))
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if overview, _ := s.browser.last().overview("blog"); len(overview.Warnings()) > 0 {
+			t.Fatalf("got %v, want no warnings", overview.Warnings())
+		}
+	})
+
+	t.Run("keeps the summary when tmux can't tell which panes idle", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		err := app.NewBrowseProjects(s.browser, answer(true), s.configs, s.documents, s.workspace,
+			uninspectableSessions{s.sessions},
+			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.FreezeProject{}, app.EditProject{}, app.KillProject{}, app.RunTask{},
+		).Handle("/srv/new")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		if _, ok := blog.Session(); !ok || blog.Problem() != nil || len(blog.Warnings()) > 0 {
+			t.Fatalf("got session %v, problem %v, warnings %v; want the session, no problem and no warnings", ok, blog.Problem(), blog.Warnings())
 		}
 	})
 

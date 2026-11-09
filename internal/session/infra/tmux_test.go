@@ -3,6 +3,7 @@ package infra_test
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -1184,6 +1185,61 @@ func TestTmuxTasks(t *testing.T) {
 		server.query(t, "kill-window", "-t", "=tasks:logs")
 		if _, err := server.tmux().Busy(project, logs, 0); !errors.Is(err, domain.ErrPaneNotRunning) {
 			t.Fatalf("got %v, want ErrPaneNotRunning", err)
+		}
+	})
+}
+
+func TestTmuxIdle(t *testing.T) {
+	server := newTmuxServer(t)
+	root := t.TempDir()
+	plan := planOf(t, "idle", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "api", "panes": [
+			{"name": "shell"},
+			{"name": "server", "command": "sleep 300", "split": {"direction": "right"}}
+		]},
+		{"name": "jobs", "panes": [{"command": "true"}]}
+	]}`, root))
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	project := plan.Name()
+	api, jobs := plan.Windows()[0], plan.Windows()[1]
+
+	t.Run("finds the panes whose shell idles, not one running a command", func(t *testing.T) {
+		want := map[domain.WindowName][]int{api.Name(): {0}, jobs.Name(): {0}}
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			got, err := server.tmux().Idle(project, plan.Windows())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if maps.EqualFunc(got, want, slices.Equal[[]int]) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("got %v, want %v", got, want)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	})
+
+	t.Run("finds no pane the session lacks idle", func(t *testing.T) {
+		renamed := planOf(t, "idle", fmt.Sprintf(`{"root": %q, "windows": [
+			{"name": "api", "panes": [{"name": "gone"}, {"name": "server", "split": {"direction": "right"}}]}
+		]}`, root)).Windows()
+		got, err := server.tmux().Idle(project, renamed)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 0 {
+			t.Fatalf("got %v, want no idle pane", got)
+		}
+	})
+
+	t.Run("reports a session that isn't running", func(t *testing.T) {
+		other := planOf(t, "other", fmt.Sprintf(`{"root": %q}`, root))
+		if _, err := server.tmux().Idle(other.Name(), other.Windows()); !errors.Is(err, domain.ErrSessionNotRunning) {
+			t.Fatalf("got %v, want ErrSessionNotRunning", err)
 		}
 	})
 }

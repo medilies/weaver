@@ -657,13 +657,17 @@ func windowListRow(top string) int {
 }
 
 // alerts are, by pane, the worst of project's warnings about window's
-// panes: a directory missing before a program not found.
+// panes: a directory missing before a program not found, and both before
+// a command that exited.
 func alerts(project app.ProjectOverview, window domain.WindowPlan) []alert {
 	panes := make([]alert, len(window.Panes()))
 	for _, warning := range project.Warnings() {
 		a := programAlert
-		if errors.Is(warning, app.ErrMissingDirectory) {
+		switch {
+		case errors.Is(warning, app.ErrMissingDirectory):
 			a = dirAlert
+		case errors.Is(warning, app.ErrCommandExited):
+			a = exitedAlert
 		}
 		for i := range panes {
 			if warning.Concerns(window.Name(), i) {

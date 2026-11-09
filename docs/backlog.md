@@ -33,48 +33,8 @@ layers), XL (mostly open questions).
 
 ## Order
 
-### 1. Exited-command warning (M)
-
-**Why now**: `bicyclette`'s `task dev` and `bicyclette app` run for
-hours and can crash unseen. The live preview, under [By need](#by-need),
-is the second answer, if this one isn't enough.
-
-No config. In the browser summary, and on its pane, as a `Warning`
-concerning it:
-
-```text
- ⚠ api › task dev: back at the prompt, its command exited
-```
-
-weaver knows which panes it typed a command into (`Startup.Submits()`).
-In an owned session, such a pane whose shell is idle again means the
-server crashed or was interrupted.
-
-- `infra`: `foreground(pid)` already tells whether a pane's shell is
-  idle; freeze uses it. A new tmux method lists a session's panes with
-  their window tag (`@weaver_window`), label (`@label`) and pid.
-- That listing also fixes `Capture`'s four or five `display-message`
-  calls per pane, where one `list-panes -F` would do. Not worth changing
-  on its own: freeze is interactive, and splitting free-text paths and
-  labels out of one line of output adds parsing risk. Keep `foreground`
-  meaning "the shell is idle": this and the clean shutdown above rely on
-  it.
-- `domain`: a method on a session port (`SessionFinder` or a new one)
-  returning, per window, the panes whose shell is idle.
-- `app`: `ProjectOverview` gets the panes whose command exited. Only
-  panes with a `command`, not `prefill` or a plain shell, and only in
-  owned sessions.
-- Don't compare the command line: `ps` loses quotes, pipes and
-  variables (see `Capture`). A shell idle when it should be running
-  something is enough.
-- Caveat: a command interrupted on purpose (Ctrl-C) warns too. It is a
-  hint, not an error.
-- Later: a browser key that types the pane's command again, and a
-  mark in the task list on a task still running, from the same idle
-  check.
-- Then, optional: a clean shutdown when killing, sending Ctrl-C to
-  every pane after the teardown commands and waiting, with a timeout,
-  until its shell is idle, so dev servers stop cleanly before the kill.
+Nothing scheduled. The exited-command warning is done (v0.4.0); what comes next
+is picked from [By need](#by-need) when its trigger fires.
 
 ## By need
 
@@ -90,6 +50,28 @@ settings file, which needs a glossary entry first.
 
 Each waits for a config or a user that needs it; the trigger says what
 that looks like. They are listed from the smallest.
+
+### Typing an exited command again (S)
+
+**When**: a crashed dev server is restarted by hand often enough that
+reaching its pane is the slow part. A browser key on a pane with the
+exited-command warning types its command into it again, as a task is
+typed: through `TaskRunner.Type`, after `Busy` says the shell is idle.
+
+### A mark on a running task (S)
+
+**When**: someone loses track of which tasks still run. The task list
+marks a task whose pane is busy, from the same idle check
+(`SessionInspector.Idle`). A task run apart in a throwaway window isn't
+its pane's, so it needs the window's own pane checked.
+
+### A clean shutdown when killing (M)
+
+**When**: a dev server leaves state behind (a lock file, a stale PID,
+an unflushed log) when its session is killed. After the teardown
+commands, the kill sends Ctrl-C to every pane and waits, with a
+timeout, until each shell is idle, then kills the session. It relies on
+the idle check meaning "the shell is idle", as `Idle` and `Busy` do.
 
 ### A failed teardown seen from inside the session (XS)
 
@@ -506,10 +488,13 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   preview.
 - `CommandRunner` (`infra.ShellRunner`) serves setup and teardown
   commands, and any later hook.
-- The idle-shell check (`foreground`) serves tasks, the exited-command warning
-  and the clean shutdown after teardown.
-- One tmux pane listing serves the exited-command warning and
-  `Capture`.
+- The idle-shell check serves tasks (`Busy`), the exited-command
+  warning (`Idle`) and the clean shutdown after teardown.
+- One tmux pane listing (`projectPanes`) serves the exited-command
+  warning and tasks; `Capture` could use it too, but still asks tmux four
+  or five times per pane: not worth changing while freeze is
+  interactive, since splitting free-text paths and labels out of one
+  line adds parsing risk.
 - A second CLI argument serves lazy windows and `weave run`: design both
   together.
 - The `sh` startup script (`shellCommand`) carries secrets, and maybe

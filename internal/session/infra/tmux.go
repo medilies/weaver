@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -476,50 +477,133 @@ func (t Tmux) RunApart(project domain.ProjectName, pane domain.PanePlan, task do
 }
 
 // paneOf is the ID and process of the pane at index of window in the
-// project's running session: in the window tagged with its name, the one
-// labelled with its name or, for a window's only pane, the first unlabelled
-// one created, which panes split off it by hand leave in place.
+// project's running session, found as pick finds it.
 func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index int) (id, pid string, err error) {
-	out, err := t.run("list-windows", "-t", "="+project.String(), "-F", "#{window_id} "+sized("@weaver_window"))
-	if absent(err) {
-		return "", "", fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
-	}
+	windows, err := t.projectPanes(project)
 	if err != nil {
 		return "", "", err
 	}
-	windowID := ""
-	for line := range strings.Lines(out) {
-		id, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
-		if verbatim(tag) == window.Name().String() {
-			windowID = id
-			break
-		}
-	}
-	if windowID == "" {
+	panes, ok := windows[window.Name().String()]
+	if !ok {
 		return "", "", fmt.Errorf("%w: its window is closed, open the project to restore it", domain.ErrPaneNotRunning)
 	}
-	out, err = t.run("list-panes", "-t", windowID, "-F", "#{pane_id} #{pane_pid} "+sized("@label"))
-	if err != nil {
-		return "", "", err
+	pane, ok := pick(panes, window, index)
+	if !ok {
+		return "", "", fmt.Errorf("%w: no pane labelled %q in its window", domain.ErrPaneNotRunning, window.Panes()[index].Name())
 	}
+	return pane.id, pane.pid, nil
+}
+
+// Idle implements domain.SessionInspector. Every pane is checked with one
+// ps.
+func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+	listed, err := t.projectPanes(project)
+	if err != nil {
+		return nil, err
+	}
+	type at struct {
+		window domain.WindowName
+		index  int
+	}
+	found := map[string]at{} // by process
+	for _, window := range windows {
+		for index := range window.Panes() {
+			if pane, ok := pick(listed[window.Name().String()], window, index); ok {
+				found[pane.pid] = at{window: window.Name(), index: index}
+			}
+		}
+	}
+	idle := map[domain.WindowName][]int{}
+	if len(found) == 0 {
+		return idle, nil
+	}
+	// The shell idles when its terminal's foreground process group is its own.
+	out, err := exec.Command("ps", "-o", "pid=,tpgid=", "-p", strings.Join(slices.Collect(maps.Keys(found)), ",")).Output()
+	if err != nil && len(out) == 0 {
+		return idle, nil // ps fails when every process is gone
+	}
+	for line := range strings.Lines(string(out)) {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != fields[1] {
+			continue
+		}
+		if pane, ok := found[fields[0]]; ok {
+			idle[pane.window] = append(idle[pane.window], pane.index)
+		}
+	}
+	for window := range idle {
+		slices.Sort(idle[window])
+	}
+	return idle, nil
+}
+
+// listedPane is a pane of a running session: its ID, its number in the
+// server, its process and its label.
+type listedPane struct {
+	id, pid, label string
+	number         int
+}
+
+// projectPanes are the panes of the project's running session, by the
+// name each window is tagged with: the first window tagged with it, in
+// order, which may have no pane listed if it closes meanwhile.
+func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane, error) {
+	session := "=" + project.String()
+	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} "+sized("@weaver_window"))
+	if absent(err) {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	if err != nil {
+		return nil, err
+	}
+	tags := map[string]string{} // by window ID
+	windows := map[string][]listedPane{}
+	for line := range strings.Lines(out) {
+		id, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		tag = verbatim(tag)
+		if _, taken := windows[tag]; tag != "" && !taken {
+			tags[id] = tag
+			windows[tag] = nil
+		}
+	}
+	out, err = t.run("list-panes", "-s", "-t", session, "-F", "#{window_id} #{pane_id} #{pane_pid} "+sized("@label"))
+	if absent(err) {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	if err != nil {
+		return nil, err
+	}
+	for line := range strings.Lines(out) {
+		windowID, rest, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		paneID, rest, _ := strings.Cut(rest, " ")
+		pid, label, _ := strings.Cut(rest, " ")
+		tag, ok := tags[windowID]
+		n, err := strconv.Atoi(strings.TrimPrefix(paneID, "%"))
+		if !ok || err != nil {
+			continue
+		}
+		windows[tag] = append(windows[tag], listedPane{id: paneID, pid: pid, label: verbatim(label), number: n})
+	}
+	return windows, nil
+}
+
+// pick is the pane at index of window among panes, its window's in a
+// running session: the one labelled with its name or, for a window's only
+// pane, the first unlabelled one created, which panes split off it by
+// hand leave in place.
+func pick(panes []listedPane, window domain.WindowPlan, index int) (listedPane, bool) {
 	name := window.Panes()[index].Name().String()
 	if len(window.Panes()) == 1 {
 		name = ""
 	}
-	found := -1
-	for line := range strings.Lines(out) {
-		paneID, rest, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
-		panePID, label, _ := strings.Cut(rest, " ")
-		n, err := strconv.Atoi(strings.TrimPrefix(paneID, "%"))
-		if err != nil || verbatim(label) != name || found >= 0 && n >= found {
-			continue
+	var picked listedPane
+	found := false
+	for _, pane := range panes {
+		if pane.label == name && (!found || pane.number < picked.number) {
+			picked, found = pane, true
 		}
-		found, id, pid = n, paneID, panePID
 	}
-	if found < 0 {
-		return "", "", fmt.Errorf("%w: no pane labelled %q in its window", domain.ErrPaneNotRunning, name)
-	}
-	return id, pid, nil
+	return picked, found
 }
 
 // newSession starts the session with window's first pane, and returns

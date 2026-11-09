@@ -51,7 +51,10 @@ creates (a directory missing, a command whose program isn't on your `PATH`,
 unchecked in panes with `before` commands or an `env` setting `PATH`,
 which may provide it, aliases and shell functions showing as not found,
 or a command run, `before` ones included, that leaves a quote open, so
-the shell would wait for the rest of it instead of running it); and
+the shell would wait for the rest of it instead of running it); in a
+session weaver started, each pane whose `command` exited, its shell back
+at its prompt, which means it crashed, was interrupted (Ctrl-C warns
+too) or finished; and
 the `before` commands and variables every pane starts with. Below it,
 the window list names the project's windows, ○ marking those enter restores, and the
 selected window is drawn as it opens: each pane a box in its
@@ -60,7 +63,7 @@ unless it is the root, its `note`, and its prompt, showing a `command`
 as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
 neither (`$ █`). A pane with a warning has ⚠ in its top border, and
 the border is red when its directory is missing, yellow when its
-program isn't found. In a small terminal the panes are listed instead.
+program isn't found or its command exited. In a small terminal the panes are listed instead.
 The selected pane is cyan, its name in brackets. Below the drawing, the
 pane list names the window's panes as the drawing places them, top to
 bottom then left to right, the selected one in a cyan block, and
