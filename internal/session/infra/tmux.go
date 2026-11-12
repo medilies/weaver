@@ -477,8 +477,8 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 	return t.typeCommand(id, cmd.String(), true)
 }
 
-// RunApart implements domain.TaskRunner. The window goes after the
-// session's last, and is selected.
+// RunApart implements domain.TaskRunner. The window takes the
+// session's first free index, so it may sit between others, and is selected.
 func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
 	source, _, err := t.paneOf(project, window, index)
 	if err != nil {

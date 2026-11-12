@@ -26,8 +26,8 @@ func NewTeaConfirmer(settings Settings) TeaConfirmer {
 // Confirm implements app.Confirmer, as a dialog in the middle of the
 // screen, No chosen until the user picks Yes. Esc answers No: for every
 // question asked this way, No leaves things as they are. Ctrl+C aborts.
-// Declining to replace a registered project ends the freeze, as Ctrl+C
-// would.
+// Declining to replace a registered project opens the config form again,
+// to type another name.
 func (c TeaConfirmer) Confirm(question string) (bool, error) {
 	final, err := tea.NewProgram(confirmation{question: question, look: c.look}, tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
