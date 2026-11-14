@@ -119,8 +119,9 @@ type browser struct {
 	previewAnswered int          // the last ask answered
 	running         tasksRunning // the tasks last found running, if hasRunning
 	hasRunning      bool
-	tasksAsked      int // the asks for the running tasks
-	tasksAnswered   int // the last ask answered
+	tasksStarted    bool // asked, or found there is nothing to ask
+	tasksAsked      int  // the asks for the running tasks
+	tasksAnswered   int  // the last ask answered
 	notice          string
 	width, height   int
 	choice          app.Choice
@@ -240,7 +241,8 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, fetch = next.fetch()
 		cmd = tea.Batch(cmd, fetch)
 	}
-	if next.tasksAsked == 0 || next.selectedName() != m.selectedName() {
+	if !next.tasksStarted || next.selectedName() != m.selectedName() {
+		next.tasksStarted = true // the first ask, once the browser shows
 		var fetch tea.Cmd
 		next, fetch = next.fetchTasks()
 		cmd = tea.Batch(cmd, fetch)
@@ -610,6 +612,7 @@ func (m browser) keys() (string, []hotspot) {
 		line, told = "/"+m.filter+keysStyle.Render(" · "), filteredKeys
 	}
 	preview, previewing := m.shownPreview()
+	_, _, wanted := m.previewKey()
 	if windows := m.windowsShown(); !m.filtering && len(windows) > 0 &&
 		(previewing && len(preview.Panes()) > 1 || !previewing && len(windows[m.drawn(windows)].Panes()) > 1) {
 		told = slices.Insert(slices.Clone(told), len(told)-2, paneKey)
@@ -622,7 +625,7 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if !m.filtering && len(m.shown()) > 0 && m.shown()[m.cursor].Previewable() && !m.config {
 		key := previewKey
-		if previewing {
+		if wanted && m.previewFailure == "" {
 			key = previewDrawingKey
 		}
 		told = slices.Insert(slices.Clone(told), len(told)-2, key)
@@ -651,13 +654,7 @@ func (m browser) keys() (string, []hotspot) {
 // and keeps its width when the filter shows no project.
 func (m browser) list(height int) string {
 	shown := m.shown()
-	nameWidth, rootWidth := 0, 0 // of all projects, so filtering keeps the column still
-	for _, project := range m.projects {
-		nameWidth = max(nameWidth, len(project.Name().String()))
-		rootWidth = max(rootWidth, ansi.StringWidth(root(project)))
-	}
-	// "● name root " and the card fit in half the width.
-	rootWidth = min(rootWidth, max(m.width/2-nameWidth-4-cardSides, 0))
+	nameWidth, rootWidth := m.listColumns()
 	first := m.firstShown(height)
 	lines := make([]string, 0, len(shown)-first)
 	for i, project := range shown[first:] {
@@ -677,6 +674,31 @@ func (m browser) list(height int) string {
 		return ""
 	}
 	return lipgloss.NewStyle().Width(nameWidth + rootWidth + 4).Render(strings.Join(lines, "\n"))
+}
+
+// listColumns are the widths of the list's names and roots: of all
+// projects, so filtering keeps the column still, the roots cut so that
+// "● name root " and the card fit in half the width.
+func (m browser) listColumns() (nameWidth, rootWidth int) {
+	for _, project := range m.projects {
+		nameWidth = max(nameWidth, len(project.Name().String()))
+		rootWidth = max(rootWidth, ansi.StringWidth(root(project)))
+	}
+	return nameWidth, min(rootWidth, max(m.width/2-nameWidth-4-cardSides, 0))
+}
+
+// cardsBeside is the width the project list's card and the task list's
+// take left of the details, as frame lays them out.
+func (m browser) cardsBeside() int {
+	width := 0
+	if len(m.projects) > 0 {
+		nameWidth, rootWidth := m.listColumns()
+		width += nameWidth + rootWidth + 4 + cardSides
+	}
+	if tasks := taskListWidth(m.projects, m.width); tasks > 0 {
+		width += tasks + cardSides
+	}
+	return width
 }
 
 // firstShown is the first project the list shows in height lines: top,

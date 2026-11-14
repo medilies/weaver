@@ -392,8 +392,25 @@ func (t Tmux) Running() ([]string, error) {
 }
 
 // Kill implements domain.SessionKiller.
+// Its zoomed windows are unzoomed first: tmux 3.4 crashes, ending every
+// session, when it kills a session with a zoomed window.
 func (t Tmux) Kill(name domain.ProjectName) error {
-	_, err := t.run("kill-session", "-t", "="+name.String())
+	session := "=" + name.String()
+	out, err := t.run("list-windows", "-t", session, "-F", "#{window_zoomed_flag} #{window_id}")
+	if absent(err) {
+		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	if err != nil {
+		return err
+	}
+	for line := range strings.Lines(out) {
+		if id, zoomed := strings.CutPrefix(strings.TrimSuffix(line, "\n"), "1 "); zoomed {
+			if _, err := t.run("resize-pane", "-Z", "-t", id); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = t.run("kill-session", "-t", session)
 	if absent(err) {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
 	}
@@ -778,6 +795,19 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 // pane weaver runs in isn't captured. A zoomed window shows its zoomed
 // pane alone, as tmux draws it.
 func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
+	preview, err := t.preview(project, window)
+	if lost(err) { // a pane closed while it was read: read the window again
+		preview, err = t.preview(project, window)
+	}
+	if lost(err) {
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
+	}
+	return preview, err
+}
+
+// preview is Preview, read once: an error lost reports is a pane or
+// window closed meanwhile.
+func (t Tmux) preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
 		return domain.WindowPreview{}, err
@@ -793,11 +823,8 @@ func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (dom
 		}
 	}
 	gone := func(err error) error {
-		switch {
-		case absent(err):
+		if absent(err) {
 			return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
-		case lost(err):
-			return fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
 		}
 		return err
 	}
@@ -815,21 +842,28 @@ func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (dom
 	var zoomed bool
 	var rows []paneRow
 	for line := range strings.Lines(out) {
+		// A line that doesn't parse, as the rest of a label holding a
+		// newline set by hand, is skipped.
 		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 10)
 		if len(fields) != 10 {
-			return domain.WindowPreview{}, fmt.Errorf("tmux list-panes: unexpected line %q", line)
+			continue
 		}
 		var numbers [8]int // the window's width, height and zoom, the pane's activity, left, top, width and height
+		parsed := true
 		for i, field := range slices.Concat(fields[:4], fields[5:9]) {
 			if numbers[i], err = strconv.Atoi(field); err != nil {
-				return domain.WindowPreview{}, fmt.Errorf("tmux list-panes: unexpected line %q", line)
+				parsed = false
 			}
+		}
+		if !parsed {
+			continue
 		}
 		width, height, zoomed = numbers[0], numbers[1], numbers[2] == 1
 		rows = append(rows, paneRow{id: fields[4], label: verbatim(fields[9]), active: numbers[3] == 1,
 			place: [4]int{numbers[4], numbers[5], numbers[6], numbers[7]}})
 	}
-	if zoomed { // the zoomed pane covers the others, still listed where they were
+	active := func(row paneRow) bool { return row.active }
+	if zoomed && slices.ContainsFunc(rows, active) { // the zoomed pane covers the others, still listed where they were
 		rows = slices.DeleteFunc(rows, func(row paneRow) bool { return !row.active })
 	}
 	previews := make([]domain.PanePreview, 0, len(rows))
@@ -864,7 +898,13 @@ func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (dom
 // since weaver found it.
 func lost(err error) bool {
 	failed, ok := errors.AsType[*tmuxError](err)
-	return ok && (strings.HasPrefix(failed.stderr, "can't find pane") || strings.HasPrefix(failed.stderr, "can't find window"))
+	if !ok {
+		return false
+	}
+	if _, exited := errors.AsType[*exec.ExitError](failed.err); !exited {
+		return false
+	}
+	return strings.HasPrefix(failed.stderr, "can't find pane") || strings.HasPrefix(failed.stderr, "can't find window")
 }
 
 // labelOf is the label the pane at index of window has in a running

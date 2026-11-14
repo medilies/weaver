@@ -45,7 +45,9 @@ does the same and keeps the browser open, the notice saying it.
 `weave kill <project>` runs the config's `teardown` commands in the root
 before killing an owned session, and kills it even when one fails,
 reporting the failure. Anything a pane started that left it, such as
-containers, keeps running unless teardown stops it.
+containers, keeps running unless teardown stops it. A zoomed window is
+unzoomed first: tmux 3.4 crashes killing a session with one, ending
+every other session too.
 
 ## Bind
 

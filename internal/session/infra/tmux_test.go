@@ -635,6 +635,23 @@ func TestTmuxKill(t *testing.T) {
 			t.Fatal("got the session running, want it gone")
 		}
 	})
+
+	t.Run("kills a session with a zoomed window, leaving the others", func(t *testing.T) {
+		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q, "windows": [{"name": "w", "panes": [
+			{"name": "a"}, {"name": "b", "split": {"direction": "right"}}]}]}`, t.TempDir()))); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		server.query(t, "new-session", "-d", "-s", "bystander", "/bin/sh")
+		server.query(t, "resize-pane", "-Z", "-t", "=doomed:w")
+
+		if err := server.tmux().Kill(name); err != nil {
+			t.Fatalf("unexpected error: %v", err) // tmux 3.4 would crash, ending every session
+		}
+		bystander, _ := domain.NewProjectName("bystander")
+		if server.running(t, name) || !server.running(t, bystander) {
+			t.Fatal("want doomed gone and bystander still running")
+		}
+	})
 }
 
 func TestTmuxRunning(t *testing.T) {
@@ -1621,8 +1638,9 @@ func TestTmuxPreview(t *testing.T) {
 		if len(preview.Panes()) != 1 {
 			t.Fatalf("got %d panes, want the zoomed one alone", len(preview.Panes()))
 		}
-		if pane := preview.Panes()[0]; pane.Name() != "server" {
-			t.Fatalf("got %q, want server", pane.Name())
+		pane := preview.Panes()[0]
+		if _, _, width, _ := pane.Place(); pane.Name() != "server" || width != 200 {
+			t.Fatalf("got %q %d cells wide, want server filling the window's 200", pane.Name(), width)
 		}
 	})
 

@@ -83,14 +83,17 @@ func (m browser) shownPreview() (domain.WindowPreview, bool) {
 }
 
 // roomToDraw reports whether the details have the room to draw the
-// selected project's window, rather than list its panes. Miniatures don't
-// change it: they are drawn only with room to spare.
+// selected project's window, rather than list its panes, as frame lays
+// them out with a notice of one line: a longer one, as a failure's, mustn't
+// stop the preview it tells about. Miniatures don't change it: they are
+// drawn only with room to spare.
 func (m browser) roomToDraw() bool {
 	shown := m.shown()
 	if len(shown) == 0 {
 		return false
 	}
-	_, _, _, height, width := m.frame()
+	height := m.height - 1 - 1 - 2 // the notice, the keys and the cards' borders
+	width := m.width - m.cardsBeside() - cardSides
 	below := height - windowListRow(detailsTop(shown[m.cursor], width)) - 1
 	return width >= minDrawingWidth && below-1 >= minDrawingHeight
 }
@@ -125,6 +128,9 @@ func (m browser) withPreview(msg previewed) browser {
 		return m
 	}
 	before, wasShown := m.shownPreview()
+	if m.previewFailure != "" && m.notice == m.previewFailure {
+		m.notice = "" // the failure is over
+	}
 	m.preview, m.hasPreview, m.previewFailure = msg, true, ""
 	if wasShown && m.previewPane < len(before.Panes()) {
 		if _, inConfig := before.Panes()[m.previewPane].InConfig(); !inConfig {
@@ -136,19 +142,20 @@ func (m browser) withPreview(msg previewed) browser {
 }
 
 // previewFollowing is m with the preview's pane selected that is the
-// drawing's selected pane, or its first when the session lacks it.
+// drawing's selected pane or, when the preview lacks it, as a zoomed
+// window does, the preview's first, which the drawing then selects too.
 func (m browser) previewFollowing() browser {
 	preview, ok := m.shownPreview()
 	if !ok {
 		return m
 	}
-	m.previewPane = 0
 	for i, pane := range preview.Panes() {
 		if index, inConfig := pane.InConfig(); inConfig && index == m.pane {
 			m.previewPane = i
+			return m
 		}
 	}
-	return m
+	return m.previewPaneSelected(0)
 }
 
 // previewPaneSelected is m with the preview's pane at index selected, and
@@ -165,14 +172,15 @@ func (m browser) previewPaneSelected(index int) browser {
 	return m
 }
 
-// switchedView is m after p: the drawing instead of the preview, or the
-// preview instead of the drawing, saying why when the selected project has
-// none. While the config is shown, p does nothing.
+// switchedView is m after p: the drawing instead of the preview wanted,
+// even before it arrives, or the preview instead of the drawing, or of a
+// preview failing, saying why when the selected project has none. While
+// the config is shown, p does nothing.
 func (m browser) switchedView() browser {
 	if m.config {
 		return m
 	}
-	if _, ok := m.shownPreview(); ok {
+	if _, _, wanted := m.previewKey(); wanted && m.previewFailure == "" {
 		m.drawings = true
 		return m
 	}
