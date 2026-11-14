@@ -510,6 +510,9 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 	switch choice.Action {
 	case ActionOpen:
 		return name, "", uc.open.Handle(name.String())
+	case ActionOpenDetached:
+		notice, err := uc.open.HandleDetached(name.String())
+		return name, notice, err
 	case ActionBind:
 		project, err := uc.bind.Handle(BindRequest{WorkingDir: workingDir})
 		if err != nil {

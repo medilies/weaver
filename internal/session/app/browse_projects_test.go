@@ -1103,3 +1103,17 @@ func TestBrowseProjectsPreview(t *testing.T) {
 		}
 	})
 }
+
+func TestBrowseProjectsOpensDetached(t *testing.T) {
+	s := newBrowseSetup(t, choose(t, app.ActionOpenDetached, "blog"))
+	if err := s.browse(answer(true)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.browser.shown) != 2 || s.browser.last().notice != "Started blog." || len(s.sessions.attached) != 0 {
+		t.Fatalf("got %d views, notice %q, attached %q; want the browser back with blog started",
+			len(s.browser.shown), s.browser.last().notice, s.sessions.attached)
+	}
+	if !slices.Equal(s.sessions.started, []string{"blog"}) {
+		t.Fatalf("got %q started, want blog", s.sessions.started)
+	}
+}

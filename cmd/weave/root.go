@@ -1,12 +1,15 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 )
 
 func newRootCommand(weaver application) *cobra.Command {
+	var detached bool
 	root := &cobra.Command{
 		Use:   "weave [project | .]",
 		Short: "Open a project's tmux session",
@@ -17,13 +20,19 @@ stopping if one fails. Inside tmux, it switches to the session instead.
 
 weave . opens the project whose root contains the current directory.
 
+With --detached, weave starts the session, or restores the windows it
+lacks, without attaching or switching, and says what it did.
+
 Without a project, weave lists the projects and the selected one's
 summary and config, to open, bind, edit, kill or delete them, or run
 their tasks.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		SilenceUsage:      true,
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if detached {
+				return openDetached(cmd, weaver, args)
+			}
 			// "." can't be a project name, which starts with a letter or digit.
 			if len(args) == 1 && args[0] != "." {
 				return weaver.openProject.Handle(args[0])
@@ -43,6 +52,7 @@ their tasks.`,
 			return weaver.openProject.HandleDir(dir)
 		},
 	}
+	root.Flags().BoolVarP(&detached, "detached", "d", false, "start the session without attaching or switching to it")
 	root.AddCommand(
 		newBindCommand(weaver),
 		newEditCommand(weaver),
@@ -51,4 +61,28 @@ their tasks.`,
 		newShowCommand(weaver),
 	)
 	return root
+}
+
+// openDetached opens the project args name, or whose root contains the
+// current directory for ".", detached, and prints what it did.
+func openDetached(cmd *cobra.Command, weaver application, args []string) error {
+	if len(args) == 0 {
+		return errors.New("--detached needs a project, or . for the current directory's")
+	}
+	var done string
+	var err error
+	if args[0] == "." {
+		dir, dirErr := os.Getwd()
+		if dirErr != nil {
+			return dirErr
+		}
+		done, err = weaver.openProject.HandleDirDetached(dir)
+	} else {
+		done, err = weaver.openProject.HandleDetached(args[0])
+	}
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), done)
+	return err
 }

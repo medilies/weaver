@@ -32,6 +32,14 @@ directories exist; a window that fails to build is removed again.
 Windows you opened yourself stay as they are, and a session weaver
 didn't start is only attached. Neither runs the `setup` commands.
 
+## Detached
+
+`weave --detached <project>` (`-d`, `.` too) does all of the above but
+attach: the session starts, or its missing windows come back, and you
+stay where you are, told what was done: `Started shop.`, `Restored
+"logs" in shop.` or `shop is already running.` In the browser, `o`
+does the same and keeps the browser open, the notice saying it.
+
 ## Kill
 
 `weave kill <project>` runs the config's `teardown` commands in the root

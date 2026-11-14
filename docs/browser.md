@@ -104,6 +104,7 @@ or that leaves a quote open, marks its pane.
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
+| o | open it detached, like `weave -d <project>`: the browser stays, saying what was started |
 | b | bind the current directory, like `weave bind` |
 | e | change its config in the [config form](config-form.md), like `weave edit <project>` |
 | E | edit its config in your editor, like `weave edit --raw <project>` |
@@ -111,7 +112,7 @@ or that leaves a quote open, marks its pane.
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc hides the config, then clears the filter, first) |
 
-After binding, editing, killing, deleting or running a task, the list
+After opening detached, binding, editing, killing, deleting or running a task, the list
 comes back, unfiltered, with what happened. Since the browser and the config form take
 the mouse, most terminals select text with shift held, and the wheel
 doesn't scroll them.

@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
@@ -21,7 +22,8 @@ var (
 
 // OpenProject puts the user in a project's tmux session, starting it
 // first, after its setup commands, when it isn't running, or re-creating
-// the windows it lacks when weaver started it.
+// the windows it lacks when weaver started it. Opened detached, it does
+// the same but leaves the user where they are.
 type OpenProject struct {
 	projects  domain.ProjectRegistry
 	sessions  domain.SessionLauncher
@@ -52,6 +54,31 @@ func (uc OpenProject) Handle(rawName string) error {
 	return uc.open(project)
 }
 
+// HandleDetached opens the project named rawName detached, and says what
+// it did: "Started shop.", "Restored "logs" in shop." or "shop is already
+// running."
+func (uc OpenProject) HandleDetached(rawName string) (string, error) {
+	name, err := domain.NewProjectName(rawName)
+	if err != nil {
+		return "", err
+	}
+	project, err := uc.projects.FindByName(name)
+	if err != nil {
+		return "", err
+	}
+	return uc.ready(project)
+}
+
+// HandleDirDetached opens detached the project HandleDir opens, and says
+// what it did, as HandleDetached does.
+func (uc OpenProject) HandleDirDetached(dir string) (string, error) {
+	project, err := uc.containing(dir)
+	if err != nil {
+		return "", err
+	}
+	return uc.ready(project)
+}
+
 // HandleDir opens the project whose root contains dir; when roots nest,
 // the innermost one. Roots and dir are compared with their symlinks
 // resolved, as they are on disk, and as written only when no root
@@ -61,9 +88,19 @@ func (uc OpenProject) Handle(rawName string) error {
 // broken project doesn't block the others, and named only when no
 // project matches.
 func (uc OpenProject) HandleDir(dir string) error {
-	names, err := uc.projects.Names()
+	project, err := uc.containing(dir)
 	if err != nil {
 		return err
+	}
+	return uc.open(project)
+}
+
+// containing is the project whose root contains dir, as HandleDir finds
+// it.
+func (uc OpenProject) containing(dir string) (domain.Project, error) {
+	names, err := uc.projects.Names()
+	if err != nil {
+		return domain.Project{}, err
 	}
 	realDir := uc.workspace.RealPath(dir)
 	var resolved, written []rootMatch
@@ -75,7 +112,7 @@ func (uc OpenProject) HandleDir(dir string) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return domain.Project{}, err
 		}
 		root := project.Root()
 		resolvedRoot, err := domain.NewProjectRoot(uc.workspace.RealPath(root.String()))
@@ -96,16 +133,16 @@ func (uc OpenProject) HandleDir(dir string) error {
 		if len(invalid) > 0 {
 			err = fmt.Errorf("%w; skipped invalid configs:\n%w", err, errors.Join(invalid...))
 		}
-		return err
+		return domain.Project{}, err
 	case 1:
-		return uc.open(found[0].project)
+		return found[0].project, nil
 	}
 	first, second := found[0].project, found[1].project
 	if first.Root().String() != second.Root().String() {
-		return fmt.Errorf("%w: %s, rooted at %s, and %s, rooted at %s, share a root", ErrAmbiguousProject,
+		return domain.Project{}, fmt.Errorf("%w: %s, rooted at %s, and %s, rooted at %s, share a root", ErrAmbiguousProject,
 			first.Name(), first.Root(), second.Name(), second.Root())
 	}
-	return fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject, first.Name(), second.Name(), first.Root())
+	return domain.Project{}, fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject, first.Name(), second.Name(), first.Root())
 }
 
 // rootMatch is a project whose root, in one form, contains a directory.
@@ -131,20 +168,33 @@ func innermost(matches []rootMatch) []rootMatch {
 }
 
 func (uc OpenProject) open(project domain.Project) error {
-	session, running, err := uc.sessions.Find(project.Name())
-	if err != nil {
-		return err
-	}
-	switch {
-	case !running:
-		err = uc.start(project)
-	case session.Owned():
-		err = uc.restore(project, session)
-	}
-	if err != nil {
+	if _, err := uc.ready(project); err != nil {
 		return err
 	}
 	return uc.sessions.Attach(project.Name())
+}
+
+// ready starts the project's session, or restores the windows its owned
+// session lacks, and says what it did.
+func (uc OpenProject) ready(project domain.Project) (string, error) {
+	name := project.Name()
+	session, running, err := uc.sessions.Find(name)
+	switch {
+	case err != nil:
+		return "", err
+	case !running:
+		if err := uc.start(project); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("Started %s.", name), nil
+	case session.Owned():
+		restored, err := uc.restore(project, session)
+		if err != nil || len(restored) == 0 {
+			return fmt.Sprintf("%s is already running.", name), err
+		}
+		return fmt.Sprintf("Restored %s in %s.", strings.Join(restored, ", "), name), nil
+	}
+	return fmt.Sprintf("%s is already running.", name), nil
 }
 
 // start runs the setup commands in the root, which must exist, then
@@ -184,17 +234,20 @@ func (uc OpenProject) start(project domain.Project) error {
 // restore re-creates the project windows missing from a session weaver
 // started, usually because they were closed. Sessions started otherwise
 // are left as they are: their windows aren't weaver's to complete.
-func (uc OpenProject) restore(project domain.Project, session domain.RunningSession) error {
+// It returns the restored windows' names, quoted.
+func (uc OpenProject) restore(project domain.Project, session domain.RunningSession) ([]string, error) {
 	placements := project.Restoration(session.Windows())
 	if len(placements) == 0 {
-		return nil
+		return nil, nil
 	}
+	names := make([]string, 0, len(placements))
 	for _, placement := range placements {
 		if err := uc.checkWindowDirs(project.Name(), placement.Window()); err != nil {
-			return err
+			return nil, err
 		}
+		names = append(names, fmt.Sprintf("%q", placement.Window().Name().String()))
 	}
-	return uc.sessions.Restore(project.Name(), placements)
+	return names, uc.sessions.Restore(project.Name(), placements)
 }
 
 func (uc OpenProject) checkDirs(project domain.ProjectName, plan domain.SessionPlan) error {

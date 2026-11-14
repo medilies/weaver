@@ -100,6 +100,9 @@ const (
 	// ActionRerun types the chosen pane's exited command into it again,
 	// then puts the user in that pane.
 	ActionRerun
+	// ActionOpenDetached opens the chosen project detached, the browser
+	// staying.
+	ActionOpenDetached
 )
 
 // Choice is what the user picked in the project browser: an action, and
