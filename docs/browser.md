@@ -6,6 +6,7 @@ selected project's windows drawn as they open.
 ## Summary
 
 The browser lists the projects, a ● and a green name marking those whose session runs,
+the selected one bold after a › in the [selected colour](settings.md),
 beside a summary of the selected one: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a
@@ -28,13 +29,15 @@ selected window is drawn as it opens: each pane a box in its
 proportions, with its name when the window has several, its `dir`
 unless it is the root, its `note`, and its prompt, showing a `command`
 as run (`$ task dev`), a `prefill` as typed (`$ nimbus emulator█`) or
-neither (`$ █`). A pane with a warning has ⚠ in its top border, and
-the border is red when its directory is missing, yellow when its
-program isn't found or its command exited. In a small terminal the panes are listed instead.
+neither (`$ █`). A pane with a warning has ✗ in its top border and a red border when its
+directory is missing, or ⚠ and a yellow border when its program isn't
+found or its command exited. In a small terminal the panes are listed instead.
 The selected pane is in the [selected colour](settings.md), cyan unless
 set, its name in brackets. Below the drawing, the
 pane list names the window's panes as the drawing places them, top to
-bottom then left to right, the selected one in a block of the selected colour, and
+bottom then left to right, each after the ✗ or ⚠ of its warning, the
+selected one underlined, in the selected colour while the cursor is in
+the project list, and
 below it are the selected pane's directory, its `before` commands in the order they
 run, whether they are cleared, and its variables, each with the level it comes from (the project,
 the window or the pane) and what it is over when it replaces the

@@ -31,7 +31,7 @@ func shop(t *testing.T, config string) domain.Project {
 // of two spaces or more.
 func levelRows(project domain.Project, window, pane int) [][]string {
 	var rows [][]string
-	for _, line := range levels(project, window, pane, 200) {
+	for _, line := range levels(defaultTheme, project, window, pane, 200) {
 		var cells []string
 		for cell := range strings.SplitSeq(ansi.Strip(line), "  ") {
 			if cell = strings.TrimSpace(cell); cell != "" {
@@ -196,7 +196,7 @@ windows:
 
 	t.Run("cuts a long value to keep its level in view", func(t *testing.T) {
 		project := shop(t, "windows:\n  - name: main\n    panes:\n      - before: [\""+strings.Repeat("x", 60)+"\"]\n")
-		got := ansi.Strip(levels(project, 0, 0, 40)[1])
+		got := ansi.Strip(levels(defaultTheme, project, 0, 0, 40)[1])
 		if !strings.HasSuffix(got, "  pane") || ansi.StringWidth(got) > 40 {
 			t.Fatalf("got %q, want it within 40 cells and ending with its level", got)
 		}

@@ -192,13 +192,3 @@ func TestSettingsSchemaDeclaresEveryField(t *testing.T) {
 		t.Errorf("schema's keys have %q, the file %q", got, want)
 	}
 }
-
-func TestSelectedBlockText(t *testing.T) {
-	for colour, want := range map[string]string{"6": "0", "#ffd75f": "0", "4": "15", "#000080": "15"} {
-		t.Run("on "+colour, func(t *testing.T) {
-			if got := textOn(lipgloss.Color(colour)); got != lipgloss.Color(want) {
-				t.Fatalf("got %v, want colour %s", got, want)
-			}
-		})
-	}
-}

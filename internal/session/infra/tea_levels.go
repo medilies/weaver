@@ -28,7 +28,7 @@ const minLevelValueWidth = 12
 // they ran when a level sets it, then its env, each with the
 // level it comes from, and what it is over when it replaces a higher
 // level's.
-func levels(project domain.Project, window, pane, width int) []string {
+func levels(theme theme, project domain.Project, window, pane, width int) []string {
 	w := project.Windows()[window]
 	p := w.Panes()[pane]
 	plan := project.Plan().Windows()[window].Panes()[pane]
@@ -58,7 +58,7 @@ func levels(project domain.Project, window, pane, width int) []string {
 		lines = append(lines, levelLine{label: label, value: v.Name() + "=" + shownValue(v.Value()), level: level})
 		label = ""
 	}
-	return levelTable(lines, width)
+	return levelTable(theme, lines, width)
 }
 
 // higherBefore are the before commands a pane of window runs ahead of
@@ -173,10 +173,10 @@ func shownValue(value string) string {
 	return value
 }
 
-// levelTable lines up lines in columns, the levels dimmed, values cut
+// levelTable lines up lines in columns, the levels muted, values cut
 // short so the levels fit in width while they keep minLevelValueWidth
 // cells, and every line cut to width.
-func levelTable(lines []levelLine, width int) []string {
+func levelTable(theme theme, lines []levelLine, width int) []string {
 	labelWidth, valueWidth, levelWidth := 0, 0, 0
 	for _, line := range lines {
 		labelWidth = max(labelWidth, ansi.StringWidth(line.label))
@@ -191,7 +191,7 @@ func levelTable(lines []levelLine, width int) []string {
 	table := make([]string, 0, len(lines))
 	for _, line := range lines {
 		value := ansi.Truncate(line.value, valueWidth, "…")
-		text := padded(line.label, labelWidth) + padded(value, valueWidth) + gap + keysStyle.Render(line.level)
+		text := padded(line.label, labelWidth) + padded(value, valueWidth) + gap + theme.muted.Render(line.level)
 		table = append(table, ansi.Truncate(text, width, "…"))
 	}
 	return table

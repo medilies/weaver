@@ -14,20 +14,20 @@ import (
 
 // TeaConfirmer asks the user yes-or-no questions in a dialog.
 type TeaConfirmer struct {
-	look look
+	theme theme
 }
 
-// NewTeaConfirmer constructs a TeaConfirmer showing the answer chosen
-// in the settings' selected colour.
+// NewTeaConfirmer constructs a TeaConfirmer styled by the settings'
+// theme.
 func NewTeaConfirmer(settings Settings) TeaConfirmer {
-	return TeaConfirmer{look: settings.look()}
+	return TeaConfirmer{theme: settings.theme()}
 }
 
 // Confirm implements app.Confirmer, as a dialog in the middle of the
 // screen, No chosen until the user picks Yes. Esc answers No: for every
 // question asked this way, No leaves things as they are. Ctrl+C aborts.
 func (c TeaConfirmer) Confirm(question string) (bool, error) {
-	final, err := tea.NewProgram(confirmation{question: question, look: c.look}, tea.WithOutput(os.Stderr)).Run()
+	final, err := tea.NewProgram(confirmation{question: question, theme: c.theme}, tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return false, app.ErrAborted
 	}
@@ -40,7 +40,7 @@ func (c TeaConfirmer) Confirm(question string) (bool, error) {
 // confirmation is the dialog: the question, the answer chosen, and the
 // terminal's size.
 type confirmation struct {
-	look       look
+	theme      theme
 	question   string
 	yes        bool
 	cols, rows int
@@ -50,8 +50,8 @@ type confirmation struct {
 var confirmingKeys = []keyTold{{"←/→", "toggle"}, {"enter", "submit"}, {"y", "Yes"}, {"n", "No"}}
 
 const (
-	answerYes, answerNo = "  Yes  ", "  No  "
-	answersGap          = "  "
+	answerYes, answerNo = "Yes", "No"
+	answersGap          = "    "
 	confirmIndent       = 2 // the question's border and padding, which the buttons line up with
 )
 
@@ -113,14 +113,12 @@ func (c confirmation) laidOut() (lines []string, spots [][]hotspot, left, top in
 	width := max(c.cols, 1)
 	question := lipgloss.NewStyle().Width(max(width-confirmIndent, 1)).Render(c.question)
 	for line := range strings.SplitSeq(question, "\n") {
-		lines = append(lines, keysStyle.Render("┃ ")+titleStyle.Render(strings.TrimRight(line, " ")))
+		lines = append(lines, c.theme.muted.Render("┃ ")+c.theme.bright.Render(strings.TrimRight(line, " ")))
 	}
 	lines = append(lines, "")
-	yes, no := answerYes, answerNo
+	yes, no := c.theme.muted.Render(answerYes), c.theme.chosen(answerNo, true)
 	if c.yes {
-		yes = c.look.selected.Render(yes)
-	} else {
-		no = c.look.selected.Render(no)
+		yes, no = c.theme.chosen(answerYes, true), c.theme.muted.Render(answerNo)
 	}
 	from := confirmIndent
 	lines = append(lines, strings.Repeat(" ", from)+yes+answersGap+no)
@@ -128,7 +126,7 @@ func (c confirmation) laidOut() (lines []string, spots [][]hotspot, left, top in
 	noFrom := yesTo + len(answersGap)
 	answers := []hotspot{{from: from, to: yesTo, key: "y"}, {from: noFrom, to: noFrom + ansi.StringWidth(answerNo), key: "n"}}
 	lines = append(lines, "")
-	keys, keySpots := toldKeys(confirmingKeys)
+	keys, keySpots := c.theme.keys(confirmingKeys)
 	keys, keySpots = cut(keys, keySpots, width)
 	lines = append(lines, keys)
 

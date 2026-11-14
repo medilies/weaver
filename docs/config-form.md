@@ -13,12 +13,13 @@ drawn as they open, the selected pane in the
 on the drawing; below them are the pane list, then the selected pane's
 card, starting with where the pane is placed. Click a window in the
 window list or a pane in the pane list to select it, or a `starts`, `clear` or `focus` option
-to pick it; the selected ones are blocks of the selected colour. Each field is
+to pick it; the selected ones are underlined, and in the selected colour on
+the row the cursor is on, marked › in the selected colour. Each field is
 checked as you type it, and a root or dir is marked ✓ when it exists; a
 command run that leaves a quote open is marked ⚠, as it would leave the
 shell waiting, but kept. The
 project's card lists its setup and teardown commands, edited like its
-before commands. A window lists the project's variables dimmed, and a
+before commands. A window lists the project's variables muted, and a
 pane the project's and its window's before commands and variables, with
 the level they come from; enter on such a variable sets it for the
 window or pane instead. A window or pane among several has a `focus`:

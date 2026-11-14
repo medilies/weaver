@@ -515,7 +515,7 @@ s15() {
 		shows '┏' && break
 		step Down || return
 	done
-	wait_for '| split right · - split below' || return
+	wait_for '| split right  - split below' || return
 	keys '|'
 	wait_for 'pane 1   pane 2' || return
 	T capture-pane -p -e -t "$AT" | grep -qF '38;5;214' || fail "nothing in colour 214" || return

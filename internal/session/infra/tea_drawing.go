@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/medilies/weaver/internal/session/domain"
@@ -154,23 +153,16 @@ const (
 	dirAlert
 )
 
-var alertStyles = map[alert]lipgloss.Style{
-	exitedAlert:  warningStyle,
-	programAlert: warningStyle,
-	dirAlert:     problemStyle,
-}
-
 // drawing is window's panes drawn as boxes in width×height cells, in the
 // proportions they take in a window of cols×rows. Each box shows what
 // its pane looks like the moment it opens: its name in the top border,
 // its dir when it isn't root, its note, then its prompt. The selected
 // pane, by its index, has a border and title in the selected colour,
-// look's picked, heavy when heavy is
-// set, else with its name in brackets. A pane with an alert, from alerts
-// by its index, gets ⚠ in its top border and a border in the alert's
-// colour, the worst winning on a border boxes share, and over the
-// selected colour.
-func drawing(look look, window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
+// heavy when heavy is set, else with its name in brackets. A pane with an
+// alert, from alerts by its index, gets the alert's glyph in its top
+// border and a border in the alert's colour, the worst winning on a
+// border boxes share, and over the selected colour.
+func drawing(theme theme, window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	panes := window.Panes()
 	titles := make([]string, len(panes))
 	contents := make([][]string, len(panes))
@@ -178,7 +170,7 @@ func drawing(look look, window domain.WindowPlan, root string, alerts []alert, s
 		titles[i] = paneTitle(pane, len(panes))
 		contents[i] = paneLines(pane, root)
 	}
-	return drawnBoxes(look, layOut(window, cols, rows), titles, contents, false, alerts, selected, heavy, cols, rows, width, height)
+	return drawnBoxes(theme, layOut(window, cols, rows), titles, contents, false, alerts, selected, heavy, cols, rows, width, height)
 }
 
 // previewDrawing is a window's preview drawn as boxes in width×height
@@ -187,7 +179,7 @@ func drawing(look look, window domain.WindowPlan, root string, alerts []alert, s
 // window has several; the pane the browser runs in says so instead. The
 // rows above the topmost pane, which tmux gives to the top border showing
 // the panes' names, are left out.
-func previewDrawing(look look, preview domain.WindowPreview, names []string, alerts []alert, selected, width, height int) []string {
+func previewDrawing(theme theme, preview domain.WindowPreview, names []string, alerts []alert, selected, width, height int) []string {
 	cols, rows := preview.Size()
 	panes := preview.Panes()
 	boxes := previewBoxes(preview)
@@ -206,10 +198,10 @@ func previewDrawing(look look, preview domain.WindowPreview, names []string, ale
 		}
 		contents[i] = pane.Lines()
 		if pane.RunsWeaver() {
-			contents[i] = []string{keysStyle.Render("this browser")}
+			contents[i] = []string{theme.muted.Render("this browser")}
 		}
 	}
-	return drawnBoxes(look, boxes, titles, contents, true, alerts, selected, false, cols, rows, width, height)
+	return drawnBoxes(theme, boxes, titles, contents, true, alerts, selected, false, cols, rows, width, height)
 }
 
 // previewBoxes are the cells each pane of preview covers.
@@ -232,7 +224,7 @@ func previewOrder(preview domain.WindowPreview) []int {
 // drawnBoxes draws boxes, of a window of cols×rows cells, in width×height
 // cells, as drawing describes, each titled by titles and showing the lines
 // of contents: its first ones that fit, or its last when fromBottom is set.
-func drawnBoxes(look look, boxes []box, titles []string, contents [][]string, fromBottom bool,
+func drawnBoxes(theme theme, boxes []box, titles []string, contents [][]string, fromBottom bool,
 	alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
@@ -256,8 +248,8 @@ func drawnBoxes(look look, boxes []box, titles []string, contents [][]string, fr
 
 	for i, f := range frames {
 		title := titles[i]
-		if alertOf(alerts, i) != noAlert {
-			title = strings.TrimSpace("⚠ " + title)
+		if glyph := alertGlyph(alertOf(alerts, i)); glyph != "" {
+			title = strings.TrimSpace(glyph + " " + title)
 		}
 		room := f.right - f.left - 3
 		open, closing := " ", " "
@@ -290,7 +282,7 @@ func drawnBoxes(look look, boxes []box, titles []string, contents [][]string, fr
 			grid.alertCell(f.left+2, f.top, a) // the title, if written
 		}
 	}
-	return grid.rows(look.picked)
+	return grid.rows(theme)
 }
 
 // alertOf is the alert of the pane at index, none past the end of alerts.
@@ -303,7 +295,8 @@ func alertOf(alerts []alert, index int) alert {
 
 // undrawnPanes is window's panes one a line, for a space too small to draw
 // them in: "api shell · api/ · $ task dev", each cut to width cells, the
-// selected one's name in brackets, and ⚠ first for a pane with an alert.
+// selected one's name in brackets, and its alert's glyph first for a pane
+// with an alert.
 // When they take more than height lines, the last line says how many are
 // left out.
 func undrawnPanes(window domain.WindowPlan, root string, alerts []alert, selected, width, height int) []string {
@@ -317,8 +310,8 @@ func undrawnPanes(window domain.WindowPlan, root string, alerts []alert, selecte
 			}
 			parts = append([]string{title}, parts...)
 		}
-		if alertOf(alerts, i) != noAlert {
-			parts = append([]string{"⚠"}, parts...)
+		if glyph := alertGlyph(alertOf(alerts, i)); glyph != "" {
+			parts = append([]string{glyph}, parts...)
 		}
 		lines = append(lines, ansi.Truncate(strings.Join(parts, " · "), width, "…"))
 	}
@@ -515,15 +508,16 @@ func (g grid) alertCell(x, y int, a alert) {
 	}
 }
 
-// rows are the drawn rows, the selected pane's border in picked.
-func (g grid) rows(picked lipgloss.Style) []string {
+// rows are the drawn rows, each alert's border in its colour and the
+// selected pane's in the selected colour.
+func (g grid) rows(theme theme) []string {
 	rows := make([]string, len(g.cells))
 	for y, row := range g.cells {
 		var b strings.Builder
 		for x, cell := range row {
-			style, ok := alertStyles[g.alerts[y][x]]
+			style, ok := theme.alertStyle(g.alerts[y][x])
 			if g.alerts[y][x] == selectedPane {
-				style, ok = picked, true
+				style, ok = theme.picked, true
 			}
 			if ok && cell != "" {
 				cell = style.Render(cell)

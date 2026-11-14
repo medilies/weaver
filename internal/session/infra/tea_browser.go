@@ -24,8 +24,8 @@ import (
 // and the cursor in the task list; shown again at all, the drawing when it
 // was switched to.
 type TeaBrowser struct {
-	kept *browserPlace
-	look look
+	kept  *browserPlace
+	theme theme
 }
 
 // browserPlace is what the browser had selected when it last ended.
@@ -36,15 +36,14 @@ type browserPlace struct {
 	drawings           bool // the drawing switched to in place of the preview
 }
 
-// NewTeaBrowser constructs a TeaBrowser showing what is selected in the
-// settings' selected colour.
+// NewTeaBrowser constructs a TeaBrowser styled by the settings' theme.
 func NewTeaBrowser(settings Settings) TeaBrowser {
-	return TeaBrowser{kept: &browserPlace{}, look: settings.look()}
+	return TeaBrowser{kept: &browserPlace{}, theme: settings.theme()}
 }
 
 // Browse implements app.ProjectBrowser.
 func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, live app.LiveSessions) (app.Choice, error) {
-	model := browser{projects: projects, notice: notice, look: b.look, live: live, drawings: b.kept.drawings}
+	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings}
 	for i, project := range projects {
 		if project.Name() == selected {
 			model.cursor = i
@@ -80,23 +79,13 @@ var browserKeys = map[string]app.Action{
 	"x": app.ActionKill, "d": app.ActionDelete,
 }
 
-var (
-	runningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	runningMark  = runningStyle.Render("●")
-	cursorStyle  = lipgloss.NewStyle().Reverse(true)
-	titleStyle   = lipgloss.NewStyle().Bold(true)
-	keysStyle    = lipgloss.NewStyle().Faint(true)
-	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-)
-
 // browser is TeaBrowser's Bubble Tea model. The cursor is in the
 // projects the filter shows, or in the task list when tasking, top is the
 // first project the list shows, the window is the selected project's one
 // drawn, the pane is its selected one, and the task the selected one in
 // the task list.
 type browser struct {
-	look       look
+	theme      theme
 	projects   []app.ProjectOverview
 	cursor     int
 	top        int
@@ -469,10 +458,10 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	var spots []hotspot
 	switch row := y - windowListRow(laid.top); {
 	case row == 0:
-		_, spots = windowList(m.look, project, windows, laid.index, width, laid.miniWidth())
+		_, spots = windowList(m.theme, project, windows, laid.index, width, laid.miniWidth(), !m.tasking)
 	case row > 0 && row <= len(laid.miniatures):
 		// A miniature is clicked as the name above it.
-		_, spots = windowList(m.look, project, windows, laid.index, width, laid.miniWidth())
+		_, spots = windowList(m.theme, project, windows, laid.index, width, laid.miniWidth(), !m.tasking)
 		spots = slices.DeleteFunc(spots, func(s hotspot) bool { return s.key != "" })
 	case row == 1+len(laid.miniatures)+len(laid.panes):
 		if laid.paneList == "" {
@@ -515,7 +504,7 @@ func (m browser) render() string {
 	}
 	notice, list, tasks, height, width := m.frame()
 	keysLine, _ := m.keys()
-	details := column(m.detailsTitle(), m.details(width, height), width+cardSides, height, m.look.edge(false))
+	details := column(m.detailsTitle(), m.details(width, height), width+cardSides, height, m.theme.edge(false))
 	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, tasks, details), notice, keysLine)
 }
 
@@ -528,7 +517,7 @@ func (m browser) frame() (notice, list, tasks string, height, width int) {
 	height = max(m.height-lipgloss.Height(notice)-1-2, 1)
 	if len(m.projects) > 0 {
 		projects := m.list(height)
-		list = column(projectListTitle, projects, lipgloss.Width(projects)+cardSides, height, m.look.edge(!m.tasking))
+		list = column(projectListTitle, projects, lipgloss.Width(projects)+cardSides, height, m.theme.edge(!m.tasking))
 	}
 	tasks, _ = m.taskColumn(taskListWidth(m.projects, m.width), height)
 	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-lipgloss.Width(tasks)-cardSides, 1)
@@ -545,35 +534,14 @@ func (m browser) noticeLine() string {
 const cardSides = 4
 
 // column is content in a card titled title, width cells wide, its lines
-// cut or filled to height, its border drawn in edge.
-func column(title, content string, width, height int, edge lipgloss.Style) string {
+// cut or filled to height, its border and title as shown says.
+func column(title, content string, width, height int, shown edge) string {
 	lines := strings.Split(content, "\n")
 	lines = lines[:min(len(lines), height)]
 	for len(lines) < height {
 		lines = append(lines, "")
 	}
-	return strings.Join(card(title, lines, width, edge), "\n")
-}
-
-// keyTold is a key the keys line tells, and what it does.
-type keyTold struct {
-	key, does string
-}
-
-// toldKeys is keys told side by side, faint, with the cells each covers.
-func toldKeys(told []keyTold) (string, []hotspot) {
-	var line string
-	var spots []hotspot
-	for i, k := range told {
-		if i > 0 {
-			line += keysStyle.Render(" · ")
-		}
-		text := k.key + " " + k.does
-		from := ansi.StringWidth(line)
-		spots = append(spots, hotspot{from: from, to: from + ansi.StringWidth(text), key: k.key})
-		line += keysStyle.Render(text)
-	}
-	return line, spots
+	return strings.Join(card(title, lines, width, shown), "\n")
 }
 
 var (
@@ -612,10 +580,10 @@ func (m browser) keys() (string, []hotspot) {
 	told := browsingKeys
 	switch {
 	case m.filtering:
-		line, told = "/"+m.filter+keysStyle.Render("▏ "), typingKeys
+		line, told = "/"+m.filter+m.theme.muted.Render("▏")+keysGap, typingKeys
 	case m.filter != "":
 		spots = append(spots, hotspot{from: 0, to: ansi.StringWidth("/" + m.filter), key: "/"})
-		line, told = "/"+m.filter+keysStyle.Render(" · "), filteredKeys
+		line, told = "/"+m.filter+keysGap, filteredKeys
 	}
 	preview, previewing := m.shownPreview()
 	_, _, wanted := m.previewKey()
@@ -646,7 +614,7 @@ func (m browser) keys() (string, []hotspot) {
 	if m.tasking {
 		line, spots, told = "", nil, taskingKeys
 	}
-	keys, keySpots := toldKeys(told)
+	keys, keySpots := m.theme.keys(told)
 	offset := ansi.StringWidth(line)
 	for _, spot := range keySpots {
 		spots = append(spots, hotspot{from: offset + spot.from, to: offset + spot.to, key: spot.key})
@@ -655,8 +623,8 @@ func (m browser) keys() (string, []hotspot) {
 }
 
 // list is the shown projects' names, those whose session runs in green
-// after a mark, the selected one highlighted and kept in view, the mark
-// left out of the highlight so that it looks the same on every line. It
+// after a mark, the selected one bright after the cursor's mark, in the
+// selected colour while the list holds the cursor, and kept in view. It
 // keeps its width when the filter shows no project.
 func (m browser) list(height int) string {
 	shown := m.shown()
@@ -664,14 +632,15 @@ func (m browser) list(height int) string {
 	first := m.firstShown(height)
 	lines := make([]string, 0, len(shown)-first)
 	for i, project := range shown[first:] {
+		at := first+i == m.cursor
 		mark, style := " ", lipgloss.NewStyle()
 		if project.Running() {
-			mark, style = runningMark, runningStyle
+			mark, style = m.theme.runningMark(), m.theme.ok
 		}
-		if first+i == m.cursor {
-			style = style.Reverse(true)
+		if at {
+			style = style.Bold(true)
 		}
-		lines = append(lines, mark+" "+style.Render(fmt.Sprintf("%-*s ", nameWidth, project.Name())))
+		lines = append(lines, m.theme.gutter(at, !m.tasking)+mark+" "+style.Render(fmt.Sprintf("%-*s", nameWidth, project.Name())))
 	}
 	if len(m.projects) == 0 {
 		return ""
@@ -682,10 +651,10 @@ func (m browser) list(height int) string {
 // projectListTitle is the title of the project list's card.
 const projectListTitle = "projects"
 
-// listWidth is the width of the project list: a mark and a name, or what
-// its card's title needs when wider.
+// listWidth is the width of the project list: the cursor's mark, a mark
+// and a name, or what its card's title needs when wider.
 func (m browser) listWidth() int {
-	return max(m.nameWidth()+3, ansi.StringWidth(projectListTitle)+1)
+	return max(gutterWidth+2+m.nameWidth(), ansi.StringWidth(projectListTitle)+1)
 }
 
 // nameWidth is the width of the list's names: of all projects, so that
@@ -742,18 +711,18 @@ func (m browser) details(width, height int) string {
 	}
 	project := shown[m.cursor]
 	if m.config {
-		return detailsTop(project, width) + "\n\n" + configText(project.Config().Content, width)
+		return m.detailsTop(project, width) + "\n\n" + configText(project.Config().Content, width)
 	}
 	windows := project.Project().Plan().Windows()
 	if len(windows) == 0 {
-		return detailsTop(project, width)
+		return m.detailsTop(project, width)
 	}
 	laid := m.laidOut(project, windows, width, height)
 	panes := laid.panes
 	if laid.paneList != "" {
 		panes = append(panes, laid.paneList)
 	}
-	listLine, _ := windowList(m.look, project, windows, laid.index, width, laid.miniWidth())
+	listLine, _ := windowList(m.theme, project, windows, laid.index, width, laid.miniWidth(), !m.tasking)
 	below := append(slices.Clone(laid.miniatures), panes...)
 	return laid.top + "\n\n" + listLine + "\n" + strings.Join(append(below, laid.levels...), "\n")
 }
@@ -791,12 +760,12 @@ type detailsLayout struct {
 // window's panes drawn or listed, its pane list and the levels of the
 // selected pane in what is left.
 func (m browser) laidOut(project app.ProjectOverview, windows []domain.WindowPlan, width, height int) detailsLayout {
-	top := detailsTop(project, width)
+	top := m.detailsTop(project, width)
 	index := m.drawn(windows)
 	below := height - windowListRow(top) - 1 // the window list
-	levelLines := []string{keysStyle.Render("not in the config")}
+	levelLines := []string{m.theme.muted.Render("not in the config")}
 	if pane, inConfig := m.selectedInConfig(len(windows[index].Panes())); inConfig {
-		levelLines = levels(project.Project(), index, pane, width)
+		levelLines = levels(m.theme, project.Project(), index, pane, width)
 	}
 	var miniatures []string
 	if below-miniatureHeight-1 >= minDrawingHeight+1+min(len(levelLines), 3) {
@@ -833,7 +802,7 @@ func (m browser) miniatures(project app.ProjectOverview, windows []domain.Window
 	if len(windows) < 2 {
 		return nil
 	}
-	_, spots := windowList(m.look, project, windows, selected, width, miniatureWidth)
+	_, spots := windowList(m.theme, project, windows, selected, width, miniatureWidth, !m.tasking)
 	var placed []hotspot
 	for _, spot := range spots {
 		if spot.key == "" {
@@ -847,12 +816,12 @@ func (m browser) miniatures(project app.ProjectOverview, windows []domain.Window
 	rows := make([]string, miniatureHeight)
 	for _, spot := range placed {
 		window := windows[spot.item]
-		drawn := drawing(m.look, window, root, alerts(project, window), -1, false, m.width, max(m.height-1, 1),
+		drawn := drawing(m.theme, window, root, alerts(project, window), -1, false, m.width, max(m.height-1, 1),
 			miniatureWidth, miniatureHeight)
 		for y := range rows {
 			line := drawn[y]
 			if spot.item == selected {
-				line = m.look.picked.Render(ansi.Strip(line))
+				line = m.theme.picked.Render(ansi.Strip(line))
 			}
 			rows[y] += strings.Repeat(" ", max(spot.from-ansi.StringWidth(rows[y]), 0)) + line
 		}
@@ -873,15 +842,17 @@ func (m browser) panesShown(project app.ProjectOverview, index, width, below, le
 		return undrawnPanes(window, root, alerts(project, window), pane, width, below), "", nil
 	}
 	if preview, ok := m.shownPreview(); ok {
-		drawn := previewDrawing(m.look, preview, previewNames(preview, window), previewAlerts(preview, alerts(project, window)),
+		drawn := previewDrawing(m.theme, preview, previewNames(preview, window), previewAlerts(preview, alerts(project, window)),
 			m.previewPane, width, max(below-1-levelHeight, minDrawingHeight))
-		line, spots := namesList(m.look, previewNames(preview, window), previewOrder(preview), m.previewPane, width)
+		line, spots := namesList(m.theme, previewNames(preview, window), previewOrder(preview), m.previewPane, width,
+			!m.tasking, previewAlerts(preview, alerts(project, window)))
 		return drawn, line, spots
 	}
 	// A session opens at the browser's size, less tmux's status line.
-	drawn := drawing(m.look, window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
+	drawn := drawing(m.theme, window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
 		width, max(below-1-levelHeight, minDrawingHeight))
-	line, spots := paneList(m.look, project.Project().Windows()[index], drawnOrder(window, m.width, max(m.height-1, 1)), pane, width)
+	line, spots := paneList(m.theme, project.Project().Windows()[index], drawnOrder(window, m.width, max(m.height-1, 1)), pane, width,
+		!m.tasking, alerts(project, window))
 	return drawn, line, spots
 }
 
@@ -917,13 +888,7 @@ func (m browser) selectedExited() bool {
 func alerts(project app.ProjectOverview, window domain.WindowPlan) []alert {
 	panes := make([]alert, len(window.Panes()))
 	for _, warning := range project.Warnings() {
-		a := programAlert
-		switch {
-		case errors.Is(warning, app.ErrMissingDirectory):
-			a = dirAlert
-		case errors.Is(warning, app.ErrCommandExited):
-			a = exitedAlert
-		}
+		a := alertOfWarning(warning)
 		for i := range panes {
 			if warning.Concerns(window.Name(), i) {
 				panes[i] = max(panes[i], a)
@@ -931,6 +896,17 @@ func alerts(project app.ProjectOverview, window domain.WindowPlan) []alert {
 		}
 	}
 	return panes
+}
+
+// alertOfWarning is the alert a warning puts on the panes it concerns.
+func alertOfWarning(warning app.Warning) alert {
+	switch {
+	case errors.Is(warning, app.ErrMissingDirectory):
+		return dirAlert
+	case errors.Is(warning, app.ErrCommandExited):
+		return exitedAlert
+	}
+	return programAlert
 }
 
 // detailsTitle titles the details' card: the selected project's config
@@ -952,34 +928,36 @@ func (m browser) detailsTitle() string {
 
 // detailsTop is project's summary, or why its config can't be read,
 // wrapped to width.
-func detailsTop(project app.ProjectOverview, width int) string {
-	header := summary(project)
+func (m browser) detailsTop(project app.ProjectOverview, width int) string {
+	header := m.summary(project)
 	if err := project.Problem(); err != nil {
-		header = problemStyle.Render(err.Error())
+		header = m.theme.problem.Render(err.Error())
 	}
 	return lipgloss.NewStyle().Width(width).Render(header)
 }
 
-// windowList is the names of windows, the selected one in a block of the
-// selected colour, ○ marking those the project's owned session lacks,
-// each padded to pad cells to sit above its miniature, and which one of
+// windowList is the names of windows, the selected one chosen, in the
+// selected colour while the list holds the cursor, as focused says, ○
+// marking those the project's owned session lacks, each padded to pad
+// cells to sit above its miniature, and which one of
 // how many is drawn, after ←→ when there are several to switch between;
 // with the cells each window's name and each arrow covers, to click
 // them. When they don't fit in width, the first ones make way for the
 // selected one.
-func windowList(look look, project app.ProjectOverview, windows []domain.WindowPlan, selected, width, pad int) (string, []hotspot) {
+func windowList(theme theme, project app.ProjectOverview, windows []domain.WindowPlan, selected, width, pad int, focused bool) (string, []hotspot) {
 	missing := map[domain.WindowName]bool{}
 	for _, name := range project.MissingWindows() {
 		missing[name] = true
 	}
 	labels := make([]string, len(windows))
 	for i, window := range windows {
-		label := " " + window.Name().String() + " "
+		name := window.Name().String()
+		if i == selected {
+			name = theme.chosen(name, focused)
+		}
+		label := " " + name + " "
 		if missing[window.Name()] {
 			label = " ○" + label
-		}
-		if i == selected {
-			label = look.selected.Render(label)
 		}
 		labels[i] = label + strings.Repeat(" ", max(pad-ansi.StringWidth(label), 0))
 	}
@@ -987,7 +965,7 @@ func windowList(look look, project app.ProjectOverview, windows []domain.WindowP
 	if len(windows) > 1 {
 		count = "←→ " + count
 	}
-	count = keysStyle.Render(count)
+	count = theme.muted.Render(count)
 	first := 0
 	line := strings.Join(labels, "  ")
 	for first < selected && ansi.StringWidth(line)+1+ansi.StringWidth(count) > width {
@@ -1017,19 +995,21 @@ func windowList(look look, project app.ProjectOverview, windows []domain.WindowP
 // summary is where the project stands: its running session against its
 // config, its root, what would likely go wrong opening
 // it, and what every pane starts with.
-func summary(project app.ProjectOverview) string {
+func (m browser) summary(project app.ProjectOverview) string {
 	var lines []string
 	if session, ok := project.Session(); ok {
-		lines = append(lines, sessionLine(project, session))
+		lines = append(lines, m.sessionLine(project, session))
 	}
 	rootLine := root(project)
 	if !project.RootExists() {
-		rootLine += " " + problemStyle.Render("✗ missing")
+		rootLine += " " + m.theme.problem.Render("✗ missing")
 	}
 	lines = append(lines, rootLine)
 
 	for _, warning := range project.Warnings() {
-		lines = append(lines, warningStyle.Render("⚠ "+warning.Error()))
+		a := alertOfWarning(warning)
+		style, _ := m.theme.alertStyle(a)
+		lines = append(lines, style.Render(alertGlyph(a)+" "+warning.Error()))
 	}
 
 	for _, list := range []struct {
@@ -1041,7 +1021,7 @@ func summary(project app.ProjectOverview) string {
 			texts = append(texts, cmd.String())
 		}
 		if len(texts) > 0 {
-			lines = append(lines, keysStyle.Render(list.label+" "+strings.Join(texts, " · ")))
+			lines = append(lines, m.theme.muted.Render(list.label+" "+strings.Join(texts, " · ")))
 		}
 	}
 	var env []string
@@ -1049,7 +1029,7 @@ func summary(project app.ProjectOverview) string {
 		env = append(env, v.Name()+"="+v.Value())
 	}
 	if len(env) > 0 {
-		lines = append(lines, keysStyle.Render("env "+strings.Join(env, " · ")))
+		lines = append(lines, m.theme.muted.Render("env "+strings.Join(env, " · ")))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1057,10 +1037,10 @@ func summary(project app.ProjectOverview) string {
 // sessionLine is how the running session compares with the config, and
 // so what enter does: "● running · 2/3 windows · "logs" missing, enter
 // restores it".
-func sessionLine(project app.ProjectOverview, session domain.RunningSession) string {
-	line := runningMark + " running"
+func (m browser) sessionLine(project app.ProjectOverview, session domain.RunningSession) string {
+	line := m.theme.runningMark() + " running"
 	if !session.Owned() {
-		return line + keysStyle.Render(" · not started by weaver, enter attaches as it is")
+		return line + m.theme.muted.Render(" · not started by weaver, enter attaches as it is")
 	}
 	present, configured := project.WindowCount()
 	line += fmt.Sprintf(" · %d/%d windows", present, configured)
@@ -1076,5 +1056,5 @@ func sessionLine(project app.ProjectOverview, session domain.RunningSession) str
 	if len(missing) > 1 {
 		pronoun = "them"
 	}
-	return line + " · " + warningStyle.Render(strings.Join(names, ", ")+" missing, enter restores "+pronoun)
+	return line + " · " + m.theme.warning.Render(strings.Join(names, ", ")+" missing, enter restores "+pronoun)
 }

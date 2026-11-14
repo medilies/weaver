@@ -24,10 +24,12 @@ weave can't write to, only warns.
 
 ## `selected-colour`
 
-The colour marking what is selected in the [browser](browser.md) and
-the [config form](config-form.md): the selected pane in the drawing, the
-selected window, pane or option in a list, and the chosen answer of a
-question, its text black or white to stay readable. An ANSI colour number, `0` to `255`, or `"#rrggbb"` in
+The colour marking what is selected, and where the cursor is, in the
+[browser](browser.md) and the [config form](config-form.md): the
+selected pane in the drawing, the selected window, pane or option in a
+list, underlined, and the chosen answer of a question, while the
+cursor is on them (in the browser, on the project list); the cursor's › mark; the border of the card holding
+the cursor, the others muted; and the keys told at the bottom. An ANSI colour number, `0` to `255`, or `"#rrggbb"` in
 quotes. Cyan (`6`) unless set. Warnings keep their own colours.
 
 ## `keys`

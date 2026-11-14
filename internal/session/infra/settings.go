@@ -10,12 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -215,34 +213,4 @@ func (k DrawingKeys) free() error {
 		taken[key.value] = "keys." + key.field
 	}
 	return nil
-}
-
-// look is how the selected colour shows: text in it, or a block of it.
-type look struct {
-	picked, selected lipgloss.Style
-}
-
-func (s Settings) look() look {
-	return look{
-		picked:   lipgloss.NewStyle().Foreground(s.colour),
-		selected: lipgloss.NewStyle().Background(s.colour).Foreground(textOn(s.colour)),
-	}
-}
-
-// textOn is the text colour readable on a block of colour: black on a
-// light one, white on a dark one.
-func textOn(colour color.Color) color.Color {
-	if basic, ok := colour.(ansi.BasicColor); ok {
-		// Terminals choose their own basic colours: black, red, blue and
-		// magenta are dark in most, bright black too.
-		if slices.Contains([]ansi.BasicColor{0, 1, 4, 5, 8}, basic) {
-			return lipgloss.Color("15")
-		}
-		return lipgloss.Color("0")
-	}
-	r, g, b, _ := colour.RGBA() // 16 bits each
-	if 299*r+587*g+114*b >= 1000*0x8000 {
-		return lipgloss.Color("0")
-	}
-	return lipgloss.Color("15")
 }

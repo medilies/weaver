@@ -54,7 +54,7 @@ func taskListWidth(projects []app.ProjectOverview, width int) int {
 	widest := 0
 	for _, project := range projects {
 		for _, task := range tasksOf(project.Project()) {
-			widest = max(widest, ansi.StringWidth(task.group), 2+ansi.StringWidth(task.label))
+			widest = max(widest, gutterWidth+ansi.StringWidth(task.group), gutterWidth+2+ansi.StringWidth(task.label))
 		}
 	}
 	if widest == 0 {
@@ -72,38 +72,39 @@ func (m browser) taskColumn(width, height int) (string, []int) {
 		return "", nil
 	}
 	lines, tasks := m.taskList(width, height)
-	return column(taskListTitle, strings.Join(lines, "\n"), width+cardSides, height, m.look.edge(m.tasking)), tasks
+	return column(taskListTitle, strings.Join(lines, "\n"), width+cardSides, height, m.theme.edge(m.tasking)), tasks
 }
 
 // taskList is the selected project's tasks under their window and pane,
-// ● before those still running, the selected one highlighted while the
-// cursor is in the list, the mark left out of the highlight, kept in
-// view in height lines cut to width; with the task each line shows, or -1.
+// ● before those still running, the selected one bright after the
+// cursor's mark while the cursor is in the list, kept in view in height
+// lines cut to width; with the task each line shows, or -1.
 func (m browser) taskList(width, height int) ([]string, []int) {
 	// Cut, as every line is, so that each stays one row, as clicks count them.
 	var lines []string
 	var tasks []int
 	listed := m.tasksShown()
 	if len(listed) == 0 {
-		return []string{keysStyle.Render("none")}, []int{-1}
+		return []string{m.theme.muted.Render("none")}, []int{-1}
 	}
 	selected, group := 0, ""
 	for i, task := range listed {
 		if task.group != group {
 			group = task.group
-			lines = append(lines, keysStyle.Render(ansi.Truncate(group, width, "…")))
+			lines = append(lines, strings.Repeat(" ", gutterWidth)+m.theme.muted.Render(ansi.Truncate(group, width-gutterWidth, "…")))
 			tasks = append(tasks, -1)
 		}
 		mark := " "
 		if m.taskRuns(task.at) {
-			mark = runningMark
+			mark = m.theme.runningMark()
 		}
-		label := ansi.Truncate(task.label, max(width-2, 0), "…")
-		if m.tasking && i == m.selectedTask(len(listed)) {
+		label := ansi.Truncate(task.label, max(width-gutterWidth-2, 0), "…")
+		at := m.tasking && i == m.selectedTask(len(listed))
+		if at {
 			selected = len(lines)
-			label = cursorStyle.Render(label + strings.Repeat(" ", max(width-2-ansi.StringWidth(label), 0)))
+			label = m.theme.bright.Render(label)
 		}
-		lines = append(lines, mark+" "+label)
+		lines = append(lines, m.theme.gutter(at, true)+mark+" "+label)
 		tasks = append(tasks, i)
 	}
 	first := max(selected-height+1, 0)

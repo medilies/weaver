@@ -107,7 +107,7 @@ func (m browser) roomWith(noticeLines int) bool {
 // roomIn reports whether details width×height cells have the room to
 // draw the selected project's window, below its summary and window list.
 func (m browser) roomIn(width, height int) bool {
-	below := height - windowListRow(detailsTop(m.shown()[m.cursor], width)) - 1
+	below := height - windowListRow(m.detailsTop(m.shown()[m.cursor], width)) - 1
 	return width >= minDrawingWidth && below-1 >= minDrawingHeight
 }
 

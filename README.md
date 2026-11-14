@@ -57,8 +57,8 @@ weaver ~/dev/weaver | api › task dev |
                     |                |  app shell   flutter run   emulator
                     |                | app shell  ~/dev/nimbus/app  window app
 
-enter open · s start · b bind · e edit · E raw · x kill · d delete
-tab pane · t tasks · y config · / filter · q quit
+enter open  s start  b bind  e edit  E raw  x kill  d delete
+tab pane  t tasks  y config  / filter  q quit
 ```
 
 ## Install

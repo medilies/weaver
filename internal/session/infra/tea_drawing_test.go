@@ -79,7 +79,7 @@ func TestLayOut(t *testing.T) {
 
 func TestDrawing(t *testing.T) {
 	t.Run("shares borders between panes, joining them", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, `      - name: left
+		got := drawing(defaultTheme, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
       - name: below
@@ -102,7 +102,7 @@ func TestDrawing(t *testing.T) {
 	})
 
 	t.Run("puts the selected pane's name in brackets", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, `      - name: left
+		got := drawing(defaultTheme, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
 `), "/srv/shop", nil, 1, false, 81, 20, 31, 4)[0]
@@ -112,7 +112,7 @@ func TestDrawing(t *testing.T) {
 	})
 
 	t.Run("leaves out the brackets of a selected name with no room for them", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, `      - name: left
+		got := drawing(defaultTheme, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
 `), "/srv/shop", nil, 1, false, 81, 20, 15, 4)[0]
@@ -122,7 +122,7 @@ func TestDrawing(t *testing.T) {
 	})
 
 	t.Run("draws the selected pane heavy, without brackets, when heavy", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, `      - name: left
+		got := drawing(defaultTheme, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
       - name: below
@@ -148,27 +148,27 @@ func TestDrawing(t *testing.T) {
 	})
 
 	t.Run("colours the selected pane's border in the selected colour", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, `      - name: left
+		row := drawing(defaultTheme, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
 `), "/srv/shop", nil, 1, false, 81, 20, 21, 4)[1]
-		if want := defaultLook.picked.Render("│"); !strings.HasSuffix(row, want) {
+		if want := defaultTheme.picked.Render("│"); !strings.HasSuffix(row, want) {
 			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
 
 	t.Run("colours the selected pane's name in the selected colour", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, `      - name: left
+		row := drawing(defaultTheme, firstWindow(t, `      - name: left
       - name: right
         split: { direction: right }
 `), "/srv/shop", nil, 1, false, 81, 20, 31, 4)[0]
-		if want := defaultLook.picked.Render("[ right ]"); !strings.Contains(row, want) {
+		if want := defaultTheme.picked.Render("[ right ]"); !strings.Contains(row, want) {
 			t.Fatalf("got %q, want it to contain %q", row, want)
 		}
 	})
 
 	t.Run("cuts a name that doesn't fit in its border", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, `      - name: a long name
+		got := drawing(defaultTheme, firstWindow(t, `      - name: a long name
       - name: b
         split: { direction: below }
 `), "/srv/shop", nil, -1, false, 81, 20, 12, 5)[0]
@@ -178,21 +178,21 @@ func TestDrawing(t *testing.T) {
 	})
 
 	t.Run("cuts a prompt that doesn't fit in its box", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, "      - command: npm run dev\n"), "/srv/shop", nil, -1, false, 81, 20, 12, 3)[1]
+		got := drawing(defaultTheme, firstWindow(t, "      - command: npm run dev\n"), "/srv/shop", nil, -1, false, 81, 20, 12, 3)[1]
 		if want := "│ $ npm r… │"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("names no lone pane, as tmux draws no border around it", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, "      - name: only\n"), "/srv/shop", nil, -1, false, 81, 20, 12, 3)[0]
+		got := drawing(defaultTheme, firstWindow(t, "      - name: only\n"), "/srv/shop", nil, -1, false, 81, 20, 12, 3)[0]
 		if want := "┌──────────┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("keeps a combining mark with its letter", func(t *testing.T) {
-		got := drawing(defaultLook, firstWindow(t, "      - note: [\"cafe\u0301\"]\n"), "/srv/shop", nil, -1, false, 81, 20, 12, 4)[1]
+		got := drawing(defaultTheme, firstWindow(t, "      - note: [\"cafe\u0301\"]\n"), "/srv/shop", nil, -1, false, 81, 20, 12, 4)[1]
 		if want := "│ cafe\u0301     │"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -206,8 +206,15 @@ func TestDrawingAlerts(t *testing.T) {
 `
 
 	t.Run("puts ⚠ in the top border of a pane with an alert", func(t *testing.T) {
-		got := ansi.Strip(drawing(defaultLook, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, programAlert}, -1, false, 81, 20, 21, 4)[0])
+		got := ansi.Strip(drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, programAlert}, -1, false, 81, 20, 21, 4)[0])
 		if want := "┌─ left ──┬─ ⚠ ri… ─┐"; got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("puts ✗ in the top border of a pane whose directory is missing", func(t *testing.T) {
+		got := ansi.Strip(drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[0])
+		if want := "┌─ left ──┬─ ✗ ri… ─┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
@@ -218,49 +225,49 @@ func TestDrawingAlerts(t *testing.T) {
 `
 
 	t.Run("colours the border of a pane with an alert", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
-		if want := problemStyle.Render("│"); !strings.HasSuffix(row, want) {
+		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
+		if want := defaultTheme.problem.Render("│"); !strings.HasSuffix(row, want) {
 			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
 
 	t.Run("leaves plain the border of a pane without one", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
+		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
 		if !strings.HasPrefix(row, "│ $ █") {
 			t.Fatalf("got %q, want it to start plain", row)
 		}
 	})
 
 	t.Run("leaves plain what a pane with an alert shows inside", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
-		if !strings.Contains(row, "│ $ █     "+problemStyle.Render("│")) {
+		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
+		if !strings.Contains(row, "│ $ █     "+defaultTheme.problem.Render("│")) {
 			t.Fatalf("got %q, want the right pane's prompt plain", row)
 		}
 	})
 
 	t.Run("leaves plain a neighbour's name on a shared border", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, -1, false, 81, 20, 21, 7)[3]
-		if want := problemStyle.Render("─") + " bottom "; !strings.Contains(row, want) {
+		row := drawing(defaultTheme, firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, -1, false, 81, 20, 21, 7)[3]
+		if want := defaultTheme.problem.Render("─") + " bottom "; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the border red and the name bottom plain: %q", row, want)
 		}
 	})
 
 	t.Run("colours a selected pane with an alert in the alert's colour", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 1, false, 81, 20, 21, 4)[1]
-		if want := problemStyle.Render("│"); !strings.HasSuffix(row, want) {
+		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 1, false, 81, 20, 21, 4)[1]
+		if want := defaultTheme.problem.Render("│"); !strings.HasSuffix(row, want) {
 			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
 
 	t.Run("colours a shared border with the worse alert", func(t *testing.T) {
-		row := drawing(defaultLook, firstWindow(t, sideBySide), "/srv/shop", []alert{dirAlert, programAlert}, -1, false, 81, 20, 21, 4)[1]
-		if want := " $ █     " + problemStyle.Render("│") + " $ █"; !strings.Contains(row, want) {
+		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{dirAlert, programAlert}, -1, false, 81, 20, 21, 4)[1]
+		if want := " $ █     " + defaultTheme.problem.Render("│") + " $ █"; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the shared border red: %q", row, want)
 		}
 	})
 
 	t.Run("marks a lone pane with an alert, though it has no name shown", func(t *testing.T) {
-		got := ansi.Strip(drawing(defaultLook, firstWindow(t, "      - name: only\n"), "/srv/shop", []alert{programAlert}, -1, false, 81, 20, 12, 3)[0])
+		got := ansi.Strip(drawing(defaultTheme, firstWindow(t, "      - name: only\n"), "/srv/shop", []alert{programAlert}, -1, false, 81, 20, 12, 3)[0])
 		if want := "┌─ ⚠ ──────┐"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -276,6 +283,16 @@ func TestUndrawnPanes(t *testing.T) {
         split: { direction: below }
 `), "/srv/shop", nil, -1, 40, 2)
 		if want := []string{"a · $ █", "… 2 more"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("puts ✗ first for a pane whose directory is missing, ⚠ for the others", func(t *testing.T) {
+		got := undrawnPanes(firstWindow(t, `      - name: a
+      - name: b
+        split: { direction: below }
+`), "/srv/shop", []alert{dirAlert, programAlert}, -1, 40, 2)
+		if want := []string{"✗ · a · $ █", "⚠ · b · $ █"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
@@ -414,8 +431,8 @@ func TestDrawnOrder(t *testing.T) {
 	})
 }
 
-// defaultLook is the selected colour without settings.
-var defaultLook = DefaultSettings().look()
+// defaultTheme is the theme without settings.
+var defaultTheme = DefaultSettings().theme()
 
 func TestPreviewDrawing(t *testing.T) {
 	// Two panes side by side in a 81x21 window, below a row of top border.
@@ -425,7 +442,7 @@ func TestPreviewDrawing(t *testing.T) {
 	)
 
 	t.Run("shows each pane's last lines under its name", func(t *testing.T) {
-		got := previewDrawing(defaultLook, preview, []string{"api", "2"}, nil, -1, 21, 4)
+		got := previewDrawing(defaultTheme, preview, []string{"api", "2"}, nil, -1, 21, 4)
 		want := []string{
 			"┌─ api ───┬─ 2 ─────┐",
 			"│ three   │ red an… │",
@@ -439,7 +456,7 @@ func TestPreviewDrawing(t *testing.T) {
 
 	t.Run("ends a colour the pane leaves open before the border", func(t *testing.T) {
 		open := windowPreview(t, 81, 20, domain.NewPanePreview(0, 0, 81, 20, "", []string{"\x1b[31mred"}))
-		row := previewDrawing(defaultLook, open, []string{"1"}, nil, -1, 21, 3)[1]
+		row := previewDrawing(defaultTheme, open, []string{"1"}, nil, -1, 21, 3)[1]
 		reset, border := strings.Index(row, ansi.ResetStyle), strings.LastIndex(row, "│")
 		if reset < strings.Index(row, "red") || reset > border {
 			t.Fatalf("got %q, want the colour reset between the text and the border", row)

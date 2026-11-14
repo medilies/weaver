@@ -72,7 +72,7 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	}
 	model := configForm{
 		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
-		workspace: f.workspace, documents: f.documents, look: f.settings.look(), drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
+		workspace: f.workspace, documents: f.documents, theme: f.settings.theme(), drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
 	}
 	if !draft.NameStays {
 		model.focus.field = fieldName
@@ -144,7 +144,7 @@ type spot struct {
 // configForm is TeaConfigForm's Bubble Tea model. The project is always
 // valid: a field being typed changes it only once enter keeps it.
 type configForm struct {
-	look          look
+	theme         theme
 	drawingKeys   DrawingKeys
 	project       domain.Project
 	original      []byte // the project as its config writes it, to tell changes; none when unsaved
@@ -210,8 +210,6 @@ type question struct {
 	text string
 	yes  func(configForm) (configForm, tea.Cmd)
 }
-
-var checkStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 
 func (m configForm) Init() tea.Cmd {
 	return m.start
@@ -1276,11 +1274,11 @@ func tracksText(tracks []domain.Track) string {
 	return strings.Join(texts, " ")
 }
 
-// tracksShown is tracks as the window card shows them, "equal" dimmed
+// tracksShown is tracks as the window card shows them, "equal" muted
 // for none.
-func tracksShown(tracks []domain.Track) string {
+func (m configForm) tracksShown(tracks []domain.Track) string {
 	if len(tracks) == 0 {
-		return keysStyle.Render("equal")
+		return m.theme.muted.Render("equal")
 	}
 	return tracksText(tracks)
 }
@@ -1587,21 +1585,21 @@ func (m configForm) overHigher(at spot, name string) string {
 }
 
 // envRows adds the variables the project, window or pane at is in sets,
-// each with what it is over, those it gets from higher levels dimmed,
+// each with what it is over, those it gets from higher levels muted,
 // then the row adding one.
 func (m configForm) envRows(s *section, at spot) {
 	label := "env"
 	vars := m.ownEnv(at).Vars()
 	for k, v := range vars {
-		m.put(s, label, varText(v), keysStyle.Render(m.overHigher(at, v.Name())), spot{window: at.window, pane: at.pane, field: fieldEnv, item: k})
+		m.put(s, label, varText(v), m.theme.muted.Render(m.overHigher(at, v.Name())), spot{window: at.window, pane: at.pane, field: fieldEnv, item: k})
 		label = ""
 	}
 	for k, v := range m.higherEnv(at) {
-		m.put(s, label, keysStyle.Render(varText(v.EnvVar)), keysStyle.Render(v.level),
+		m.put(s, label, m.theme.muted.Render(varText(v.EnvVar)), m.theme.muted.Render(v.level),
 			spot{window: at.window, pane: at.pane, field: fieldHigherEnv, item: k})
 		label = ""
 	}
-	m.put(s, label, keysStyle.Render("+ add"), "", spot{window: at.window, pane: at.pane, field: fieldEnv, item: len(vars)})
+	m.put(s, label, m.theme.muted.Render("+ add"), "", spot{window: at.window, pane: at.pane, field: fieldEnv, item: len(vars)})
 }
 
 // section is lines of the page, the rows the cursor can be on among
@@ -1662,8 +1660,8 @@ func (s *section) text(line string) {
 }
 
 // boxed adds child in a card titled title, width cells wide, its border
-// drawn in edge.
-func (s *section) boxed(title string, child section, width int, edge lipgloss.Style) {
+// and title as shown says.
+func (s *section) boxed(title string, child section, width int, shown edge) {
 	if child.cursor >= 0 { // below the card's top border
 		s.cursor, s.cursorEnd = len(s.lines)+1+child.cursor, len(s.lines)+1+child.cursorEnd
 	}
@@ -1672,35 +1670,27 @@ func (s *section) boxed(title string, child section, width int, edge lipgloss.St
 		h.spots = shifted(h.spots, 2)
 		s.hits = append(s.hits, h)
 	}
-	s.lines = append(s.lines, card(title, child.lines, width, edge)...)
+	s.lines = append(s.lines, card(title, child.lines, width, shown)...)
 	s.spots = append(s.spots, child.spots...)
 }
 
 // card is body in a rounded box width cells wide, title in its top
-// border, the border drawn in edge.
-func card(title string, body []string, width int, edge lipgloss.Style) []string {
+// border, the border and the title as shown says.
+func card(title string, body []string, width int, shown edge) []string {
 	border := lipgloss.RoundedBorder()
+	line := shown.border
 	inner := max(width-4, 1)
-	head := edge.Render(border.TopLeft + strings.Repeat(border.Top, max(width-2, 0)) + border.TopRight)
+	head := line.Render(border.TopLeft + strings.Repeat(border.Top, max(width-2, 0)) + border.TopRight)
 	if title != "" {
 		title = ansi.Truncate(title, max(width-5, 0), "")
-		head = edge.Render(border.TopLeft+border.Top+" ") + title +
-			edge.Render(" "+strings.Repeat(border.Top, max(width-5-ansi.StringWidth(title), 0))+border.TopRight)
+		head = line.Render(border.TopLeft+border.Top+" ") + shown.title.Render(title) +
+			line.Render(" "+strings.Repeat(border.Top, max(width-5-ansi.StringWidth(title), 0))+border.TopRight)
 	}
 	out := []string{head}
-	for _, line := range body {
-		out = append(out, edge.Render(border.Left)+" "+padded(ansi.Truncate(line, inner, "…"), inner)+" "+edge.Render(border.Right))
+	for _, text := range body {
+		out = append(out, line.Render(border.Left)+" "+padded(ansi.Truncate(text, inner, "…"), inner)+" "+line.Render(border.Right))
 	}
-	return append(out, edge.Render(border.BottomLeft+strings.Repeat(border.Bottom, max(width-2, 0))+border.BottomRight))
-}
-
-// edge is the style of a card's border: the selected colour for the
-// innermost card holding the cursor, as marked says it is.
-func (l look) edge(marked bool) lipgloss.Style {
-	if marked {
-		return l.picked
-	}
-	return lipgloss.NewStyle()
+	return append(out, line.Render(border.BottomLeft+strings.Repeat(border.Bottom, max(width-2, 0))+border.BottomRight))
 }
 
 // gutterWidth and labelWidth are the cells before a row's value: the
@@ -1715,15 +1705,15 @@ func (m configForm) put(s *section, label, value, after string, at spot) {
 	typed := m.editing && m.edit.at == at
 	shown := padded(label, labelWidth)
 	if focused {
-		shown = cursorStyle.Render(label) + strings.Repeat(" ", max(labelWidth-ansi.StringWidth(label), 0))
+		shown = m.theme.bright.Render(label) + strings.Repeat(" ", max(labelWidth-ansi.StringWidth(label), 0))
 	}
 	if typed {
 		value = m.edit.input.View()
 	}
 	if m.quoteOpen(at) {
-		after = warningStyle.Render("⚠ unclosed quote")
+		after = m.theme.warning.Render("⚠ unclosed quote")
 	}
-	line := gutter(focused) + shown + value
+	line := m.theme.gutter(focused, true) + shown + value
 	if after != "" {
 		line += "  " + after
 	}
@@ -1735,7 +1725,7 @@ func (m configForm) put(s *section, label, value, after string, at spot) {
 			if i > 0 {
 				line = "  " + line // under the text, past the ✗
 			}
-			s.text(indent + problemStyle.Render(line))
+			s.text(indent + m.theme.problem.Render(line))
 		}
 	}
 }
@@ -1776,7 +1766,7 @@ func (m configForm) list(s *section, label string, items []string, at spot) {
 		label = ""
 	}
 	at.item = len(items)
-	m.put(s, label, keysStyle.Render("+ add"), "", at)
+	m.put(s, label, m.theme.muted.Render("+ add"), "", at)
 }
 
 // shown is the project with what is typed, when it is valid and shows
@@ -1796,9 +1786,9 @@ func (m configForm) mark(dir string) string {
 	case err != nil:
 		return ""
 	case exists:
-		return checkStyle.Render("✓")
+		return m.theme.ok.Render("✓")
 	}
-	return problemStyle.Render("✗ missing")
+	return m.theme.problem.Render("✗ missing")
 }
 
 // selection is the window shown, the entry after the last when there is
@@ -1830,13 +1820,13 @@ func (m configForm) layout() section {
 	shown.project = m.shown()
 	width := max(m.width, 30)
 	page := newSection()
-	page.boxed("project", shown.projectCard(), width, m.look.edge(m.focus.window < 0))
+	page.boxed("project", shown.projectCard(), width, m.theme.edge(m.focus.window < 0))
 	picked := shown.selection()
 	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
 	focused := m.focus == listAt
-	line, spots := formWindowList(m.look, shown.project.Windows(), picked.window, width-gutterWidth)
-	page.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
-	page.boxed("windows", shown.windowsCard(width-4), width, m.look.edge(m.focus.window >= 0 && !m.inPaneCard(picked)))
+	line, spots := formWindowList(m.theme, shown.project.Windows(), picked.window, width-gutterWidth, focused)
+	page.listRow(m.theme.gutter(focused, true)+line, listAt, focused, gutterWidth, spots)
+	page.boxed("windows", shown.windowsCard(width-4), width, m.theme.edge(m.focus.window >= 0 && !m.inPaneCard(picked)))
 	return page
 }
 
@@ -1844,14 +1834,6 @@ func (m configForm) layout() section {
 // picked, or on the pane list above it.
 func (m configForm) inPaneCard(picked spot) bool {
 	return m.focus.window == picked.window && m.focus.pane == picked.pane && m.focus.pane >= 0 && m.focus.field != fieldDrawing
-}
-
-// gutter is the cells before a row: the cursor's mark when focused.
-func gutter(focused bool) string {
-	if focused {
-		return "› "
-	}
-	return "  "
 }
 
 // clicked is m after a click at (x, y) on a window in the window list
@@ -1897,11 +1879,11 @@ func (m configForm) projectCard() section {
 	p := m.project
 	s := newSection()
 	if m.nameStays {
-		shownText(&s, "name", keysStyle.Render(p.Name().String()))
+		shownText(&s, "name", m.theme.muted.Render(p.Name().String()))
 	} else {
 		name := p.Name().String()
 		if m.unnamed {
-			name = keysStyle.Render("none yet")
+			name = m.theme.muted.Render("none yet")
 		}
 		m.put(&s, "name", name, "", projectNameAt)
 	}
@@ -1926,7 +1908,7 @@ func (m configForm) windowsCard(width int) section {
 		if at := (spot{window: picked.window, pane: -1, field: fieldName}); m.editing && m.edit.at == at {
 			m.put(&s, "name", "", "", at)
 		} else {
-			s.text(strings.Repeat(" ", gutterWidth) + keysStyle.Render("enter names a new window"))
+			s.text(strings.Repeat(" ", gutterWidth) + m.theme.muted.Render("enter names a new window"))
 		}
 		return s
 	}
@@ -1943,8 +1925,8 @@ func (m configForm) windowsCard(width int) section {
 	if grid, gridded := window.Grid(); gridded {
 		m.putChoices(&s, "layout", layoutOptions, 0, at(fieldLayout))
 		m.put(&s, "areas", areasText(grid), "", at(fieldGridAreas))
-		m.put(&s, "columns", tracksShown(grid.Columns()), "", at(fieldGridColumns))
-		m.put(&s, "rows", tracksShown(grid.Rows()), "", at(fieldGridRows))
+		m.put(&s, "columns", m.tracksShown(grid.Columns()), "", at(fieldGridColumns))
+		m.put(&s, "rows", m.tracksShown(grid.Rows()), "", at(fieldGridRows))
 	}
 	s.text("")
 
@@ -1956,60 +1938,62 @@ func (m configForm) windowsCard(width int) section {
 	// status line.
 	drawWidth := width - gutterWidth
 	height := max(min(drawWidth*(m.height-1)/max(m.width, 1), m.bodyHeight()/3), minDrawingHeight)
-	drawn := drawing(m.look, plan, root.String(), nil, picked.pane, focused, m.width, max(m.height-1, 1), drawWidth, height)
+	drawn := drawing(m.theme, plan, root.String(), nil, picked.pane, focused, m.width, max(m.height-1, 1), drawWidth, height)
 	for i, line := range drawn {
 		drawn[i] = strings.Repeat(" ", gutterWidth) + line
 	}
 	s.block(drawn, drawingAt, focused)
 	listAt := spot{window: picked.window, pane: picked.pane, field: fieldPaneList}
 	focused = m.focus == listAt
-	line, spots := paneList(m.look, window, drawnOrder(plan, m.width, max(m.height-1, 1)), picked.pane, width-gutterWidth)
-	s.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
+	line, spots := paneList(m.theme, window, drawnOrder(plan, m.width, max(m.height-1, 1)), picked.pane, width-gutterWidth, focused, nil)
+	s.listRow(m.theme.gutter(focused, true)+line, listAt, focused, gutterWidth, spots)
 	s.text("")
 	pane := window.Panes()[picked.pane]
 
-	s.boxed(paneHeading(pane), m.paneCard(picked.window, picked.pane), width, m.look.edge(m.inPaneCard(picked)))
+	s.boxed(paneHeading(pane), m.paneCard(picked.window, picked.pane), width, m.theme.edge(m.inPaneCard(picked)))
 	return s
 }
 
 // formWindowList is the windows' names, then "+ window" adding one, the
-// selected one in a block of the selected colour, with the cells each
-// covers, to click it.
+// selected one chosen, in the selected colour while the list holds the
+// cursor, as focused says, with the cells each covers, to click it.
 // When they don't fit in width, the first ones make way for the selected
 // one.
-func formWindowList(look look, windows []domain.Window, selected int, width int) (string, []hotspot) {
+func formWindowList(theme theme, windows []domain.Window, selected int, width int, focused bool) (string, []hotspot) {
 	labels := make([]string, 0, len(windows)+1)
 	for _, window := range windows {
-		labels = append(labels, " "+window.Name().String()+" ")
+		labels = append(labels, window.Name().String())
 	}
-	labels = append(labels, " + window ")
+	labels = append(labels, "+ window")
 	for i, label := range labels {
 		switch {
 		case i == selected:
-			labels[i] = look.selected.Render(label)
+			label = theme.chosen(label, focused)
 		case i == len(windows):
-			labels[i] = keysStyle.Render(label)
+			label = theme.muted.Render(label)
 		}
+		labels[i] = " " + label + " "
 	}
 	return listed(labels, selected, width)
 }
 
 // paneList is the names of window's panes, or their numbers for
-// those without, in order, as the drawing places them, the selected one
-// in a block of the selected colour, with the cells each covers, to
-// click it. When they
+// those without, in order, as the drawing places them, each after the
+// glyph of its alert, from alerts by its index, if any, the selected one
+// chosen, in the selected colour while the list holds the cursor, as
+// focused says, with the cells each covers, to click it. When they
 // don't fit in width, the first ones make way for the selected one.
-func paneList(look look, window domain.Window, order []int, selected int, width int) (string, []hotspot) {
+func paneList(theme theme, window domain.Window, order []int, selected int, width int, focused bool, alerts []alert) (string, []hotspot) {
 	names := make([]string, len(window.Panes()))
 	for i, pane := range window.Panes() {
 		names[i] = pane.Name().String()
 	}
-	return namesList(look, names, order, selected, width)
+	return namesList(theme, names, order, selected, width, focused, alerts)
 }
 
 // namesList is names, or their numbers for those empty, listed as
 // paneList lists a window's panes.
-func namesList(look look, names []string, order []int, selected int, width int) (string, []hotspot) {
+func namesList(theme theme, names []string, order []int, selected int, width int, focused bool, alerts []alert) (string, []hotspot) {
 	labels := make([]string, 0, len(order))
 	for _, i := range order {
 		name := names[i]
@@ -2017,10 +2001,13 @@ func namesList(look look, names []string, order []int, selected int, width int) 
 			name = strconv.Itoa(i + 1)
 		}
 		if i == selected {
-			labels = append(labels, look.selected.Render(" "+name+" "))
-		} else {
-			labels = append(labels, " "+name+" ")
+			name = theme.chosen(name, focused)
 		}
+		a := alertOf(alerts, i)
+		if style, ok := theme.alertStyle(a); ok {
+			name = style.Render(alertGlyph(a)) + " " + name
+		}
+		labels = append(labels, " "+name+" ")
 	}
 	line, spots := listed(labels, slices.Index(order, selected), width)
 	for k := range spots {
@@ -2057,7 +2044,7 @@ func placement(window domain.Window, pane domain.Pane) string {
 }
 
 // paneCard is a pane's fields, its project's and window's before
-// commands and its project's variables dimmed among its own, with the
+// commands and its project's variables muted among its own, with the
 // level they come from, then its tasks.
 func (m configForm) paneCard(index, j int) section {
 	p := m.project
@@ -2066,15 +2053,15 @@ func (m configForm) paneCard(index, j int) section {
 	pane := window.Panes()[j]
 	at := func(f field) spot { return spot{window: index, pane: j, field: f} }
 	s := newSection()
-	s.text(strings.Repeat(" ", gutterWidth) + keysStyle.Render(placement(window, pane)))
+	s.text(strings.Repeat(" ", gutterWidth) + m.theme.muted.Render(placement(window, pane)))
 
 	name := pane.Name().String()
 	if name == "" {
-		name = keysStyle.Render("none: the window's only pane")
+		name = m.theme.muted.Render("none: the window's only pane")
 	}
 	m.put(&s, "name", name, "", at(fieldName))
 	dir, own := pane.Dir()
-	value := keysStyle.Render("window's: " + shownDir(root, window.Dir()))
+	value := m.theme.muted.Render("window's: " + shownDir(root, window.Dir()))
 	if !own {
 		dir = window.Dir()
 	} else {
@@ -2096,7 +2083,7 @@ func (m configForm) paneCard(index, j int) section {
 
 	label := "before"
 	for _, line := range higherBefore(p, window) {
-		shownText(&s, label, keysStyle.Render(line.value+"  "+line.level))
+		shownText(&s, label, m.theme.muted.Render(line.value+"  "+line.level))
 		label = ""
 	}
 	m.list(&s, label, lines(pane.Before()), at(fieldBefore))
@@ -2117,12 +2104,12 @@ func (m configForm) taskRows(s *section, tasks []domain.Task, at spot) {
 		m.put(s, label, task.Command().String(), "", spot{window: at.window, pane: at.pane, field: fieldTask, item: i})
 		name := task.Name()
 		if name == "" {
-			name = keysStyle.Render("none: shown by its command")
+			name = m.theme.muted.Render("none: shown by its command")
 		}
 		m.put(s, "  name", name, "", spot{window: at.window, pane: at.pane, field: fieldTaskName, item: i})
 		label = ""
 	}
-	m.put(s, label, keysStyle.Render("+ add"), "", spot{window: at.window, pane: at.pane, field: fieldTask, item: len(tasks)})
+	m.put(s, label, m.theme.muted.Render("+ add"), "", spot{window: at.window, pane: at.pane, field: fieldTask, item: len(tasks)})
 }
 
 // varText is v as shown, "NAME=value", its value quoted when it would
@@ -2158,23 +2145,25 @@ func (m configForm) putClear(s *section, at spot) {
 }
 
 // putChoices adds a row labelled label showing options side by side,
-// the selected one highlighted, each clicked to pick it.
+// the selected one chosen, in the selected colour while the cursor is on
+// the row, the others muted, each clicked to pick it.
 func (m configForm) putChoices(s *section, label string, options []string, selected int, at spot) {
 	focused := m.focus == at
 	shown := padded(label, labelWidth)
 	if focused {
-		shown = cursorStyle.Render(label) + strings.Repeat(" ", max(labelWidth-ansi.StringWidth(label), 0))
+		shown = m.theme.bright.Render(label) + strings.Repeat(" ", max(labelWidth-ansi.StringWidth(label), 0))
 	}
 	labels := make([]string, len(options))
 	for i, option := range options {
 		if i == selected {
-			labels[i] = m.look.selected.Render(" " + option + " ")
+			option = m.theme.chosen(option, focused)
 		} else {
-			labels[i] = keysStyle.Render(" " + option + " ")
+			option = m.theme.muted.Render(option)
 		}
+		labels[i] = " " + option + " "
 	}
 	line, spots := listed(labels, selected, max(m.width-4*2-gutterWidth-labelWidth, 1))
-	s.listRow(gutter(focused)+shown+line, at, focused, gutterWidth+labelWidth, spots)
+	s.listRow(m.theme.gutter(focused, true)+shown+line, at, focused, gutterWidth+labelWidth, spots)
 }
 
 // scrolled is the first line shown, keeping the row the cursor is on and
@@ -2217,7 +2206,7 @@ func (m configForm) render() string {
 	height := m.bodyHeight()
 	lines, top := m.layout().lines, m.top
 	if m.reviewing != nil {
-		lines, top = m.reviewing.styled(m.width), m.reviewing.top
+		lines, top = m.reviewing.styled(m.theme, m.width), m.reviewing.top
 	}
 	shown := lines[min(top, len(lines)):min(top+height, len(lines))]
 	body := strings.Join(shown, "\n") + strings.Repeat("\n", height-len(shown))
@@ -2227,15 +2216,15 @@ func (m configForm) render() string {
 // styled is the diff's lines, removed ones red and added ones green,
 // within width cells, without the carriage returns of a config with
 // Windows line ends.
-func (r review) styled(width int) []string {
+func (r review) styled(theme theme, width int) []string {
 	lines := make([]string, 0, len(r.diff))
 	for _, line := range r.diff {
-		style := keysStyle
+		style := theme.muted
 		switch line[0] {
 		case '-':
-			style = problemStyle
+			style = theme.problem
 		case '+':
-			style = checkStyle
+			style = theme.ok
 		}
 		lines = append(lines, style.Render(ansi.Truncate(" "+strings.TrimSuffix(line, "\r"), width, "…")))
 	}
@@ -2257,11 +2246,11 @@ func (m configForm) trail() string {
 			parts = append(parts, paneHeading(panes[f.pane]))
 		}
 	}
-	line := titleStyle.Render(" " + strings.Join(parts, " › "))
+	line := m.theme.bright.Render(" " + strings.Join(parts, " › "))
 	if !m.dirty() {
 		return ansi.Truncate(line, m.width, "…")
 	}
-	unsaved := warningStyle.Render("● unsaved ")
+	unsaved := m.theme.warning.Render("● unsaved ")
 	gap := max(m.width-ansi.StringWidth(line)-ansi.StringWidth(unsaved), 1)
 	return ansi.Truncate(line+strings.Repeat(" ", gap)+unsaved, m.width, "…")
 }
@@ -2271,39 +2260,55 @@ func (m configForm) trail() string {
 func (m configForm) status() string {
 	switch {
 	case m.reviewing != nil && m.reviewing.replaces:
-		return fmt.Sprintf(" Replace %s's registered config with this?", m.project.Name()) + keysStyle.Render("  y save · n back")
+		return fmt.Sprintf(" Replace %s's registered config with this?", m.project.Name()) + keysGap + m.toldKeys(saveKeys)
 	case m.reviewing != nil && m.reviewing.unstored:
-		return " Save the new project's config?" + keysStyle.Render("  y save · n back")
+		return " Save the new project's config?" + keysGap + m.toldKeys(saveKeys)
 	case m.reviewing != nil:
-		return " Save these changes to the config?" + keysStyle.Render("  y save · n back")
+		return " Save these changes to the config?" + keysGap + m.toldKeys(saveKeys)
 	case m.asking != nil:
-		return " " + m.asking.text + keysStyle.Render("  y yes · n no")
+		return " " + m.asking.text + keysGap + m.toldKeys(answerKeys)
 	case m.problem != "":
-		return " " + problemStyle.Render("✗ "+m.problem)
+		return " " + m.theme.problem.Render("✗ "+m.problem)
 	}
 	return ""
 }
 
+// saveKeys and answerKeys are told after the question the status asks.
+var (
+	saveKeys   = []keyTold{{"y", "save"}, {"n", "back"}}
+	answerKeys = []keyTold{{"y", "yes"}, {"n", "no"}}
+)
+
+// toldKeys is told as the theme shows keys, without where they are.
+func (m configForm) toldKeys(told []keyTold) string {
+	line, _ := m.theme.keys(told)
+	return line
+}
+
 // keys are what the keys do, while typing or on a row.
 func (m configForm) keys() string {
-	told := "↑↓ move · enter edit · ←→ change · o add · d delete · J/K reorder · u undo · ctrl+r redo · ctrl+s save · esc leave"
+	told := []keyTold{{"↑↓", "move"}, {"enter", "edit"}, {"←→", "change"}, {"o", "add"}, {"d", "delete"}, {"J/K", "reorder"},
+		{"u", "undo"}, {"ctrl+r", "redo"}, {"ctrl+s", "save"}, {"esc", "leave"}}
+	note := ""
 	switch {
 	case m.focus.field == fieldDrawing && !m.editing && m.reviewing == nil:
 		k := m.drawingKeys
-		told = "←→↑↓ select · " + k.splitRight + " split right · " + k.splitBelow + " split below · " + k.remove + " remove · " +
-			k.shrink + "/" + k.grow + " resize · enter edit · u undo · ctrl+s save · esc leave"
+		told = []keyTold{{"←→↑↓", "select"}, {k.splitRight, "split right"}, {k.splitBelow, "split below"}, {k.remove, "remove"},
+			{k.shrink + "/" + k.grow, "resize"}, {"enter", "edit"}, {"u", "undo"}, {"ctrl+s", "save"}, {"esc", "leave"}}
 		if window, ok := m.windowAt(m.focus.window); ok {
 			if _, gridded := window.Grid(); gridded {
-				told = "←→↑↓ select · enter edit · u undo · ctrl+s save · esc leave · the window's areas place these panes"
+				told = []keyTold{{"←→↑↓", "select"}, {"enter", "edit"}, {"u", "undo"}, {"ctrl+s", "save"}, {"esc", "leave"}}
+				note = keysGap + m.theme.muted.Render("the window's areas place these panes")
 			}
 		}
 	case m.reviewing != nil:
-		told = "↑↓ scroll · y save · n back to the form"
+		told = []keyTold{{"↑↓", "scroll"}, {"y", "save"}, {"n", "back to the form"}}
 	case m.editing:
-		told = "enter keep · esc cancel · ctrl+s save"
+		told = []keyTold{{"enter", "keep"}, {"esc", "cancel"}, {"ctrl+s", "save"}}
 		if m.edit.at.field == fieldCommand && m.edit.input.Value() == "" {
-			told = "←→ starts · " + told
+			told = append([]keyTold{{"←→", "starts"}}, told...)
 		}
 	}
-	return ansi.Truncate(keysStyle.Render(" "+told), m.width, "…")
+	line, _ := m.theme.keys(told)
+	return ansi.Truncate(" "+line+note, m.width, "…")
 }
