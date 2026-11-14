@@ -114,8 +114,8 @@ func TestRunTask(t *testing.T) {
 	t.Run("refuses a project that isn't running", func(t *testing.T) {
 		tasks := &fakeTasks{fakeSessions: &fakeSessions{}}
 		err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
-		if !errors.Is(err, domain.ErrSessionNotRunning) || !strings.Contains(err.Error(), "open it first") {
-			t.Fatalf("got %v, want ErrSessionNotRunning saying to open it first", err)
+		if !errors.Is(err, domain.ErrSessionNotRunning) || !strings.Contains(err.Error(), "open or start it first") {
+			t.Fatalf("got %v, want ErrSessionNotRunning saying to open or start it first", err)
 		}
 		if len(tasks.typed)+len(tasks.apart) > 0 {
 			t.Fatalf("ran %q %q, want nothing run", tasks.typed, tasks.apart)
@@ -165,6 +165,52 @@ func TestRunTask(t *testing.T) {
 		err := runTask(t, runningShop(t), answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 0, Task: 0})
 		if !errors.Is(err, domain.ErrTaskNotFound) {
 			t.Fatalf("got %v, want ErrTaskNotFound", err)
+		}
+	})
+}
+
+func TestRunTaskStaying(t *testing.T) {
+	// staying runs the task at of the tasked shop project, its session in
+	// tasks, confirming with confirm, leaving the user where they are, and
+	// returns what it said.
+	staying := func(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) string {
+		t.Helper()
+		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
+		name, err := domain.NewProjectName("shop")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		said, err := app.NewRunTask(configs, tasks, confirm).HandleStaying(name, at)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(tasks.attached) != 0 {
+			t.Fatalf("got %q attached, want the user left where they are", tasks.attached)
+		}
+		return said
+	}
+
+	t.Run("types the task into its pane, saying where", func(t *testing.T) {
+		tasks := runningShop(t)
+		said := staying(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		if said != "Running migrate in shop › front." || len(tasks.typed) != 1 {
+			t.Fatalf("got %q, typed %q; want migrate typed in front", said, tasks.typed)
+		}
+	})
+
+	t.Run("names the window of a window's only, unnamed pane", func(t *testing.T) {
+		said := staying(t, runningShop(t), answer(false), app.TaskAt{Window: windowName(t, "logs"), Pane: 0, Task: 0})
+		if said != "Running tail in logs." {
+			t.Fatalf("got %q, want tail running in logs", said)
+		}
+	})
+
+	t.Run("says a task run apart runs in a throwaway window", func(t *testing.T) {
+		tasks := runningShop(t)
+		tasks.busy = map[string]bool{"shop/1": true}
+		said := staying(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		if said != "Running migrate in a throwaway window." || len(tasks.apart) != 1 {
+			t.Fatalf("got %q, apart %q; want migrate run apart", said, tasks.apart)
 		}
 	})
 }

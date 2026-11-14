@@ -1,7 +1,10 @@
 package infra
 
 import (
+	"slices"
 	"strings"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -92,7 +95,7 @@ func (m browser) taskList(width, height int) ([]string, []int) {
 			tasks = append(tasks, -1)
 		}
 		indent := "  "
-		runs := m.shown()[m.cursor].TaskRuns(task.at)
+		runs := m.taskRuns(task.at)
 		if runs {
 			indent = "● "
 		}
@@ -139,7 +142,8 @@ func (m browser) taskSelected(index int) browser {
 }
 
 // pressInTasks is m after key, pressed with the cursor in the task list:
-// ↑↓ select a task, enter runs it, esc goes back to the projects.
+// ↑↓ select a task, enter runs it and goes there, r runs it, staying,
+// esc goes back to the projects.
 func (m browser) pressInTasks(key string) (browser, bool) {
 	switch key {
 	case "up", "k":
@@ -151,6 +155,10 @@ func (m browser) pressInTasks(key string) (browser, bool) {
 		return m, false
 	case "enter":
 		return m.runningTask(m.selectedTask(len(m.tasksShown())))
+	case "r":
+		next, chosen := m.runningTask(m.selectedTask(len(m.tasksShown())))
+		next.choice.Action = app.ActionRunTaskStaying
+		return next, chosen
 	}
 	return m, false
 }
@@ -165,4 +173,33 @@ func (m browser) runningTask(index int) (browser, bool) {
 	m = m.taskSelected(index)
 	m.choice = app.Choice{Action: app.ActionRunTask, Project: m.shown()[m.cursor].Name(), Task: listed[index].at}
 	return m, true
+}
+
+// taskRuns reports whether the selected project's task at still runs: as
+// last found while the browser shows it, else as its overview says.
+func (m browser) taskRuns(at app.TaskAt) bool {
+	project := m.shown()[m.cursor]
+	if m.hasRunning && m.running.project == project.Name() {
+		return slices.Contains(m.running.tasks, at)
+	}
+	return project.TaskRuns(at)
+}
+
+// tasksRunning are a project's tasks found still running.
+type tasksRunning struct {
+	project domain.ProjectName
+	tasks   []app.TaskAt
+}
+
+// fetchTasks finds which of the selected project's tasks still run, away
+// from the screen's updates, when its owned session can tell.
+func (m browser) fetchTasks() tea.Cmd {
+	shown := m.shown()
+	if len(shown) == 0 || m.live == nil || !shown[m.cursor].Previewable() || len(m.tasksShown()) == 0 {
+		return nil
+	}
+	project, live := shown[m.cursor], m.live
+	return func() tea.Msg {
+		return tasksRunning{project: project.Name(), tasks: live.RunningTasks(project)}
+	}
 }

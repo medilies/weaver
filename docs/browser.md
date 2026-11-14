@@ -65,7 +65,8 @@ were when the browser last showed the list.
 Beside the project list, the task list shows the selected project's tasks under
 `window › pane`, in the order its panes are created, ● before one still
 running in its pane or its throwaway window (weaver can't tell it from
-another job started there after it ended). Running one needs the project's
+another job started there after it ended), checked again every second.
+Running one needs the project's
 session running, started by weaver: when the pane's shell is idle at its
 prompt, the task's command is typed into it and run, after cutting
 whatever is at the prompt, such as a `prefill` (C-y pastes it back);
@@ -100,11 +101,11 @@ or that leaves a quote open, marks its pane.
 | r | rerun the selected pane's command once it exited: typed into the pane again, as a task is, then you are put in that pane. Only in a session weaver started, on a pane run with `command`, not `prefill` |
 | p | switch between the preview of the selected window and its drawing, for as long as the browser stays open. Only in a session weaver started |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
-| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it, esc goes back |
+| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it and puts you where it runs, r runs it and keeps you in the browser, saying where it runs, esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
-| o | open it detached, like `weave -d <project>`: the browser stays, saying what was started |
+| s | start it, like `weave -s <project>`: the browser stays, saying what was started |
 | b | bind the current directory, like `weave bind` |
 | e | change its config in the [config form](config-form.md), like `weave edit <project>` |
 | E | edit its config in your editor, like `weave edit --raw <project>` |
@@ -112,7 +113,7 @@ or that leaves a quote open, marks its pane.
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc hides the config, then clears the filter, first) |
 
-After opening detached, binding, editing, killing, deleting or running a task, the list
+After starting, binding, editing, killing, deleting or running a task, the list
 comes back, unfiltered, with what happened. Since the browser and the config form take
 the mouse, most terminals select text with shift held, and the wheel
 doesn't scroll them.

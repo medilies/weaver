@@ -38,7 +38,7 @@ func tick() tea.Cmd {
 // the project's owned session has the window.
 func (m browser) previewKey() (app.ProjectOverview, domain.WindowName, bool) {
 	shown := m.shown()
-	if m.drawings || m.config || len(shown) == 0 || m.previews == nil {
+	if m.drawings || m.config || len(shown) == 0 || m.live == nil {
 		return app.ProjectOverview{}, domain.WindowName{}, false
 	}
 	project := shown[m.cursor]
@@ -60,9 +60,9 @@ func (m browser) fetch() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	previews := m.previews
+	live := m.live
 	return func() tea.Msg {
-		preview, err := previews.Preview(project, window)
+		preview, err := live.Preview(project, window)
 		return previewed{project: project.Name(), window: window, preview: preview, err: err}
 	}
 }

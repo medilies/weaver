@@ -9,7 +9,7 @@ import (
 )
 
 func newRootCommand(weaver application) *cobra.Command {
-	var detached bool
+	var start bool
 	root := &cobra.Command{
 		Use:   "weave [project | .]",
 		Short: "Open a project's tmux session",
@@ -20,7 +20,7 @@ stopping if one fails. Inside tmux, it switches to the session instead.
 
 weave . opens the project whose root contains the current directory.
 
-With --detached, weave starts the session, or restores the windows it
+With --start, weave starts the session, or restores the windows it
 lacks, without attaching or switching, and says what it did.
 
 Without a project, weave lists the projects and the selected one's
@@ -30,8 +30,8 @@ their tasks.`,
 		ValidArgsFunction: completeProjects(weaver),
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if detached {
-				return openDetached(cmd, weaver, args)
+			if start {
+				return startProject(cmd, weaver, args)
 			}
 			// "." can't be a project name, which starts with a letter or digit.
 			if len(args) == 1 && args[0] != "." {
@@ -52,7 +52,7 @@ their tasks.`,
 			return weaver.openProject.HandleDir(dir)
 		},
 	}
-	root.Flags().BoolVarP(&detached, "detached", "d", false, "start the session without attaching or switching to it")
+	root.Flags().BoolVarP(&start, "start", "s", false, "start the session without attaching or switching to it")
 	root.AddCommand(
 		newBindCommand(weaver),
 		newEditCommand(weaver),
@@ -63,11 +63,11 @@ their tasks.`,
 	return root
 }
 
-// openDetached opens the project args name, or whose root contains the
-// current directory for ".", detached, and prints what it did.
-func openDetached(cmd *cobra.Command, weaver application, args []string) error {
+// startProject starts the project args name, or whose root contains
+// the current directory for ".", and prints what it did.
+func startProject(cmd *cobra.Command, weaver application, args []string) error {
 	if len(args) == 0 {
-		return errors.New("--detached needs a project, or . for the current directory's")
+		return errors.New("--start needs a project, or . for the current directory's")
 	}
 	var done string
 	var err error
@@ -76,9 +76,9 @@ func openDetached(cmd *cobra.Command, weaver application, args []string) error {
 		if dirErr != nil {
 			return dirErr
 		}
-		done, err = weaver.openProject.HandleDirDetached(dir)
+		done, err = weaver.openProject.HandleDirStart(dir)
 	} else {
-		done, err = weaver.openProject.HandleDetached(args[0])
+		done, err = weaver.openProject.HandleStart(args[0])
 	}
 	if err != nil {
 		return err

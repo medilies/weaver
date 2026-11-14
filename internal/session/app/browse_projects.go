@@ -225,7 +225,12 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 	}
 }
 
-// Preview implements WindowPreviewer, for the browser.
+// RunningTasks implements LiveSessions, for the browser.
+func (uc BrowseProjects) RunningTasks(project ProjectOverview) []TaskAt {
+	return uc.runningTasks(project)
+}
+
+// Preview implements LiveSessions, for the browser.
 func (uc BrowseProjects) Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error) {
 	switch {
 	case !project.found:
@@ -510,8 +515,8 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 	switch choice.Action {
 	case ActionOpen:
 		return name, "", uc.open.Handle(name.String())
-	case ActionOpenDetached:
-		notice, err := uc.open.HandleDetached(name.String())
+	case ActionStart:
+		notice, err := uc.open.HandleStart(name.String())
 		return name, notice, err
 	case ActionBind:
 		project, err := uc.bind.Handle(BindRequest{WorkingDir: workingDir})
@@ -550,6 +555,9 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
 	case ActionRunTask:
 		return name, "", uc.run.Handle(name, choice.Task)
+	case ActionRunTaskStaying:
+		notice, err := uc.run.HandleStaying(name, choice.Task)
+		return name, notice, err
 	case ActionRerun:
 		return name, "", uc.rerun.Handle(name, choice.Pane)
 	}

@@ -100,9 +100,11 @@ const (
 	// ActionRerun types the chosen pane's exited command into it again,
 	// then puts the user in that pane.
 	ActionRerun
-	// ActionOpenDetached opens the chosen project detached, the browser
-	// staying.
-	ActionOpenDetached
+	// ActionStart starts the chosen project, the browser staying.
+	ActionStart
+	// ActionRunTaskStaying runs the chosen task of the chosen project, the
+	// browser staying.
+	ActionRunTaskStaying
 )
 
 // Choice is what the user picked in the project browser: an action, and
@@ -123,17 +125,22 @@ type ProjectBrowser interface {
 	// Browse shows projects, the one named selected highlighted and
 	// notice in a status line, and returns the user's choice, or
 	// ErrAborted when they quit. While it shows a project whose
-	// Previewable reports true, it keeps asking previews for the preview
-	// of the selected window.
-	Browse(projects []ProjectOverview, selected domain.ProjectName, notice string, previews WindowPreviewer) (Choice, error)
+	// Previewable reports true, it keeps asking live for the preview of
+	// the selected window and the tasks still running.
+	Browse(projects []ProjectOverview, selected domain.ProjectName, notice string, live LiveSessions) (Choice, error)
 }
 
-// WindowPreviewer previews the windows of projects' owned sessions.
-type WindowPreviewer interface {
+// LiveSessions tells how projects' owned sessions are now, for the
+// browser to keep up with them.
+type LiveSessions interface {
 	// Preview is the window named window of project's owned session as
 	// it is now. An error wraps domain.ErrSessionNotRunning when no
 	// session runs, domain.ErrSessionNotOwned when weaver didn't start it,
 	// domain.ErrWindowNotFound when the project has no such window, or
 	// domain.ErrWindowNotRunning when the session lacks it.
 	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
+	// RunningTasks are project's tasks still running in its owned
+	// session now, as ProjectOverview.TaskRuns tells them; none when tmux
+	// can't tell.
+	RunningTasks(project ProjectOverview) []TaskAt
 }

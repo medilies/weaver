@@ -43,8 +43,8 @@ func NewTeaBrowser(settings Settings) TeaBrowser {
 }
 
 // Browse implements app.ProjectBrowser.
-func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.WindowPreviewer) (app.Choice, error) {
-	model := browser{projects: projects, notice: notice, look: b.look, previews: previews, drawings: b.kept.drawings}
+func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, live app.LiveSessions) (app.Choice, error) {
+	model := browser{projects: projects, notice: notice, look: b.look, live: live, drawings: b.kept.drawings}
 	for i, project := range projects {
 		if project.Name() == selected {
 			model.cursor = i
@@ -81,7 +81,7 @@ func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Proje
 
 // browserKeys are the keys making a choice.
 var browserKeys = map[string]app.Action{
-	"enter": app.ActionOpen, "o": app.ActionOpenDetached, "b": app.ActionBind, "e": app.ActionEdit, "E": app.ActionEditRaw,
+	"enter": app.ActionOpen, "s": app.ActionStart, "b": app.ActionBind, "e": app.ActionEdit, "E": app.ActionEditRaw,
 	"x": app.ActionKill, "d": app.ActionDelete,
 }
 
@@ -113,10 +113,12 @@ type browser struct {
 	filtering     bool // typing the filter
 	config        bool // the selected project's config shown instead of its drawing
 	drawings      bool // the drawing shown in place of the preview
-	previews      app.WindowPreviewer
+	live          app.LiveSessions
 	preview       previewed // the last preview captured, if hasPreview
 	hasPreview    bool
-	previewPane   int // the selected pane of the preview, by its index in it
+	previewPane   int          // the selected pane of the preview, by its index in it
+	running       tasksRunning // the tasks last found running, if hasRunning
+	hasRunning    bool
 	notice        string
 	width, height int
 	choice        app.Choice
@@ -216,9 +218,10 @@ func (m browser) windowsShown() []domain.WindowPlan {
 	return shown[m.cursor].Project().Plan().Windows()
 }
 
-// Init captures the preview, and asks for it again every previewEvery.
+// Init captures the preview and finds the tasks still running, and asks
+// for them again every previewEvery.
 func (m browser) Init() tea.Cmd {
-	return tea.Batch(m.fetch(), tick())
+	return tea.Batch(m.fetch(), m.fetchTasks(), tick())
 }
 
 // Update is m after msg, its list scrolled to keep the cursor in view,
@@ -233,13 +236,19 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if wants && (!wanted || before.Name() != after.Name() || beforeWindow != afterWindow) {
 		cmd = tea.Batch(cmd, next.fetch())
 	}
+	if shown, was := next.shown(), m.shown(); len(shown) > 0 && (len(was) == 0 || was[m.cursor].Name() != shown[next.cursor].Name()) {
+		cmd = tea.Batch(cmd, next.fetchTasks())
+	}
 	return next, cmd
 }
 
 func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case previewTick:
-		return m, tea.Batch(m.fetch(), tick())
+		return m, tea.Batch(m.fetch(), m.fetchTasks(), tick())
+	case tasksRunning:
+		m.running, m.hasRunning = msg, true
+		return m, nil
 	case previewed:
 		return m.withPreview(msg), nil
 	case tea.WindowSizeMsg:
@@ -535,8 +544,8 @@ func toldKeys(told []keyTold) (string, []hotspot) {
 
 var (
 	typingKeys   = []keyTold{{"enter", "keep"}, {"esc", "clear"}}
-	filteredKeys = []keyTold{{"enter", "open"}, {"o", "detached"}, {"b", "bind"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
-	browsingKeys = []keyTold{{"enter", "open"}, {"o", "detached"}, {"b", "bind"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
+	filteredKeys = []keyTold{{"enter", "open"}, {"s", "start"}, {"b", "bind"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
+	browsingKeys = []keyTold{{"enter", "open"}, {"s", "start"}, {"b", "bind"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
 )
 
 // paneKey is tab told, before the last two keys, when the drawn window
@@ -557,7 +566,7 @@ var (
 )
 
 // taskingKeys are told while the cursor is in the task list.
-var taskingKeys = []keyTold{{"enter", "run"}, {"esc", "back"}, {"q", "quit"}}
+var taskingKeys = []keyTold{{"enter", "run, go"}, {"r", "run"}, {"esc", "back"}, {"q", "quit"}}
 
 // keys are the filter being typed and what its keys do, or the filter
 // kept and the keys acting on what it shows, cut to the width; with the

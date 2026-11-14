@@ -22,8 +22,8 @@ var (
 
 // OpenProject puts the user in a project's tmux session, starting it
 // first, after its setup commands, when it isn't running, or re-creating
-// the windows it lacks when weaver started it. Opened detached, it does
-// the same but leaves the user where they are.
+// the windows it lacks when weaver started it. Started, it does the same
+// but leaves the user where they are.
 type OpenProject struct {
 	projects  domain.ProjectRegistry
 	sessions  domain.SessionLauncher
@@ -54,10 +54,9 @@ func (uc OpenProject) Handle(rawName string) error {
 	return uc.open(project)
 }
 
-// HandleDetached opens the project named rawName detached, and says what
-// it did: "Started shop.", "Restored "logs" in shop." or "shop is already
+// HandleStart starts the project named rawName, and says what it did: "Started shop.", "Restored "logs" in shop." or "shop is already
 // running."
-func (uc OpenProject) HandleDetached(rawName string) (string, error) {
+func (uc OpenProject) HandleStart(rawName string) (string, error) {
 	name, err := domain.NewProjectName(rawName)
 	if err != nil {
 		return "", err
@@ -69,9 +68,9 @@ func (uc OpenProject) HandleDetached(rawName string) (string, error) {
 	return uc.ready(project)
 }
 
-// HandleDirDetached opens detached the project HandleDir opens, and says
-// what it did, as HandleDetached does.
-func (uc OpenProject) HandleDirDetached(dir string) (string, error) {
+// HandleDirStart starts the project HandleDir opens, and says what it
+// did, as HandleStart does.
+func (uc OpenProject) HandleDirStart(dir string) (string, error) {
 	project, err := uc.containing(dir)
 	if err != nil {
 		return "", err

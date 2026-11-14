@@ -93,7 +93,7 @@ func requireOwned(sessions domain.SessionFinder, name domain.ProjectName) error 
 	case err != nil:
 		return err
 	case !running:
-		return fmt.Errorf("%s: %w: open it first", name, domain.ErrSessionNotRunning)
+		return fmt.Errorf("%s: %w: open or start it first", name, domain.ErrSessionNotRunning)
 	case !session.Owned():
 		return fmt.Errorf("%s: %w: its panes can't be told apart", name, domain.ErrSessionNotOwned)
 	}

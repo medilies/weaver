@@ -513,12 +513,12 @@ func TestOpenProjectHandleDir(t *testing.T) {
 	})
 }
 
-func TestOpenProjectDetached(t *testing.T) {
-	// detached opens shop detached against sessions, returning what it said.
-	detached := func(t *testing.T, sessions *fakeSessions) string {
+func TestOpenProjectStart(t *testing.T) {
+	// started starts shop against sessions, returning what it said.
+	started := func(t *testing.T, sessions *fakeSessions) string {
 		t.Helper()
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleDetached("shop")
+		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleStart("shop")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -530,29 +530,29 @@ func TestOpenProjectDetached(t *testing.T) {
 
 	t.Run("starts the session without attaching", func(t *testing.T) {
 		sessions := &fakeSessions{}
-		if said := detached(t, sessions); said != "Started shop." || !slices.Equal(sessions.started, []string{"shop"}) {
+		if said := started(t, sessions); said != "Started shop." || !slices.Equal(sessions.started, []string{"shop"}) {
 			t.Fatalf("got %q, started %q; want shop started", said, sessions.started)
 		}
 	})
 
 	t.Run("restores the windows weaver's session lacks without attaching", func(t *testing.T) {
 		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop")}}
-		if said := detached(t, sessions); said != `Restored "logs" in shop.` || !slices.Equal(sessions.restored, []string{"logs"}) {
+		if said := started(t, sessions); said != `Restored "logs" in shop.` || !slices.Equal(sessions.restored, []string{"logs"}) {
 			t.Fatalf("got %q, restored %q; want logs restored", said, sessions.restored)
 		}
 	})
 
 	t.Run("says a session with every window is already running", func(t *testing.T) {
 		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop", "logs")}}
-		if said := detached(t, sessions); said != "shop is already running." {
+		if said := started(t, sessions); said != "shop is already running." {
 			t.Fatalf("got %q, want shop already running", said)
 		}
 	})
 
-	t.Run("opens detached the project whose root contains a directory", func(t *testing.T) {
+	t.Run("starts the project whose root contains a directory", func(t *testing.T) {
 		sessions := &fakeSessions{}
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleDirDetached("/srv/shop/back")
+		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleDirStart("/srv/shop/back")
 		if err != nil || said != "Started shop." || len(sessions.attached) != 0 {
 			t.Fatalf("got %q, %v, attached %q; want shop started, not attached", said, err, sessions.attached)
 		}

@@ -51,13 +51,13 @@ func TestEveryCommandNameIsAReservedProjectName(t *testing.T) {
 	}
 }
 
-// `weave --detached` alone has no project to open: it doesn't fall back
+// `weave --start` alone has no project to open: it doesn't fall back
 // to the browser.
-func TestDetachedNeedsAProject(t *testing.T) {
+func TestStartNeedsAProject(t *testing.T) {
 	root := newRootCommand(application{})
-	root.SetArgs([]string{"--detached"})
+	root.SetArgs([]string{"--start"})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "needs a project") {
-		t.Fatalf("got %v, want --detached refused without a project", err)
+		t.Fatalf("got %v, want --start refused without a project", err)
 	}
 }

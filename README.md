@@ -90,7 +90,7 @@ weave bind scratch    # same, starting from the windows, panes and commands of t
 weave bind .          # same, from the session you're in
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
-weave -d nimbus       # start it, or restore its windows, without attaching: you stay where you are
+weave -s nimbus       # start it, or restore its windows, without attaching: you stay where you are
 weave                 # browse the projects, to open, bind, edit, kill or delete them, or run their tasks
 weave edit nimbus     # change its config in the config form, each field checked as you type
 weave edit --raw nimbus  # edit it in $VISUAL or $EDITOR instead, keeping comments; only a valid config is saved

@@ -16,7 +16,8 @@ type TaskAt struct {
 
 // RunTask runs a pane's task in its project's running session: typed into
 // the pane when its shell is idle, otherwise, if the user agrees, in a
-// throwaway window. Then it puts the user where the task runs.
+// throwaway window. Then it puts the user where the task runs, unless they
+// chose to stay where they are.
 type RunTask struct {
 	projects domain.ProjectRegistry
 	tasks    domain.TaskRunner
@@ -34,18 +35,8 @@ func NewRunTask(projects domain.ProjectRegistry, tasks domain.TaskRunner, confir
 // panes it can't tell, with ErrSessionNotOwned; declining to run the
 // task apart is ErrAborted.
 func (uc RunTask) Handle(name domain.ProjectName, at TaskAt) error {
-	project, err := uc.projects.FindByName(name)
+	task, _, err := uc.started(name, at)
 	if err != nil {
-		return err
-	}
-	window, pane, task, err := taskOf(project, at)
-	if err != nil {
-		return err
-	}
-	if err := requireOwned(uc.tasks, name); err != nil {
-		return err
-	}
-	if err := uc.run(name, window, at.Pane, pane, task); err != nil {
 		return err
 	}
 	if err := uc.tasks.Attach(name); err != nil {
@@ -54,15 +45,55 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt) error {
 	return nil
 }
 
+// HandleStaying runs the task at of project as Handle does, but leaves
+// the user where they are, and says where it runs: "Running migrate in
+// api › back."
+func (uc RunTask) HandleStaying(name domain.ProjectName, at TaskAt) (string, error) {
+	task, place, err := uc.started(name, at)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Running %s in %s.", task.Label(), place), nil
+}
+
+// started runs the task at of project, and returns it and where it runs:
+// its pane, "api › back", or the throwaway window it ran apart in.
+func (uc RunTask) started(name domain.ProjectName, at TaskAt) (domain.Task, string, error) {
+	project, err := uc.projects.FindByName(name)
+	if err != nil {
+		return domain.Task{}, "", err
+	}
+	window, pane, task, err := taskOf(project, at)
+	if err != nil {
+		return domain.Task{}, "", err
+	}
+	if err := requireOwned(uc.tasks, name); err != nil {
+		return domain.Task{}, "", err
+	}
+	apart, err := uc.run(name, window, at.Pane, pane, task)
+	if err != nil {
+		return domain.Task{}, "", err
+	}
+	place := window.Name().String()
+	switch {
+	case apart:
+		place = "a throwaway window"
+	case !pane.Name().IsZero():
+		place += " › " + pane.Name().String()
+	}
+	return task, place, nil
+}
+
 // run types task into pane, at index of window, when its shell is idle,
-// or else, if the user agrees, runs it in a throwaway window.
-func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task) error {
+// or else, if the user agrees, runs it in a throwaway window, and reports
+// whether it did so.
+func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task) (bool, error) {
 	busy, err := uc.tasks.Busy(name, window, index)
 	if err != nil {
-		return fmt.Errorf("%s: %w", where(window, pane), err)
+		return false, fmt.Errorf("%s: %w", where(window, pane), err)
 	}
 	if !busy {
-		return uc.tasks.Type(name, window, index, task.Command())
+		return false, uc.tasks.Type(name, window, index, task.Command())
 	}
 	shown := pane.Name().String()
 	if pane.Name().IsZero() {
@@ -70,12 +101,12 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 	}
 	yes, err := uc.confirm.Confirm(fmt.Sprintf("%s is busy: run %s in a throwaway window?", shown, task.Label()))
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !yes {
-		return ErrAborted
+		return false, ErrAborted
 	}
-	return uc.tasks.RunApart(name, window, index, task)
+	return true, uc.tasks.RunApart(name, window, index, task)
 }
 
 // taskOf finds the task at of project, with its pane and that pane's

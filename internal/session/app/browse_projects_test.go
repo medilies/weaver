@@ -17,7 +17,7 @@ import (
 type scriptedBrowser struct {
 	choices  []app.Choice
 	shown    []browserView
-	previews app.WindowPreviewer // the last call's
+	previews app.LiveSessions // the last call's
 }
 
 // browserView is what one call to Browse showed.
@@ -27,7 +27,7 @@ type browserView struct {
 	notice   string
 }
 
-func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.WindowPreviewer) (app.Choice, error) {
+func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.LiveSessions) (app.Choice, error) {
 	b.previews = previews
 	b.shown = append(b.shown, browserView{projects: projects, selected: selected, notice: notice})
 	if len(b.choices) == 0 {
@@ -434,6 +434,38 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if got := len(s.browser.shown); got != 1 {
 			t.Fatalf("browser shown %d times, want once", got)
+		}
+	})
+
+	t.Run("stays in the browser once a task runs staying, saying where it runs", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		choice := choose(t, app.ActionRunTaskStaying, "shop")
+		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		s.browser.choices = []app.Choice{choice}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.browser.last().notice; len(s.browser.shown) != 2 || got != "Running tail in logs." {
+			t.Fatalf("browser shown %d times, last with %q; want it back saying tail runs", len(s.browser.shown), got)
+		}
+	})
+
+	t.Run("tells the browser which tasks run now", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shop, _ := s.browser.last().overview("shop")
+		s.sessions.commands = map[string][]domain.RunningCommand{"shop": {
+			domain.NewRunningCommand(windowName(t, "logs"), 0, command(t, "tail -f app.log")),
+		}}
+		want := []app.TaskAt{{Window: windowName(t, "logs"), Task: 0}}
+		if got := s.browser.previews.RunningTasks(shop); !slices.Equal(got, want) {
+			t.Fatalf("got %v, want tail running since the list was shown", got)
 		}
 	})
 
@@ -993,7 +1025,7 @@ func isProjectNotFound(err error) bool {
 // failingBrowser is an app.ProjectBrowser that can't show anything.
 type failingBrowser struct{ err error }
 
-func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string, app.WindowPreviewer) (app.Choice, error) {
+func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string, app.LiveSessions) (app.Choice, error) {
 	return app.Choice{}, b.err
 }
 
@@ -1104,8 +1136,8 @@ func TestBrowseProjectsPreview(t *testing.T) {
 	})
 }
 
-func TestBrowseProjectsOpensDetached(t *testing.T) {
-	s := newBrowseSetup(t, choose(t, app.ActionOpenDetached, "blog"))
+func TestBrowseProjectsStartsAProject(t *testing.T) {
+	s := newBrowseSetup(t, choose(t, app.ActionStart, "blog"))
 	if err := s.browse(answer(true)); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
