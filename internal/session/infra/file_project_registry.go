@@ -43,8 +43,9 @@ func (r FileProjectRegistry) WithWarnings(w io.Writer) FileProjectRegistry {
 }
 
 // Names implements domain.ProjectRegistry. It reads file names only:
-// config files whose stem isn't exactly a valid project name are
-// skipped, with a warning, and a missing directory has no projects.
+// config files whose stem isn't exactly a valid project name, and .yaml
+// files, are skipped, with a warning, and a missing directory has no
+// projects.
 func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 	entries, err := os.ReadDir(r.dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -58,7 +59,15 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 		stem, isConfig := strings.CutSuffix(entry.Name(), configExtension)
 		// Dot-files, such as the .#shop.yml lock Emacs makes while
 		// shop.yml is edited, aren't configs and aren't worth a warning.
-		if entry.IsDir() || !isConfig || strings.HasPrefix(stem, ".") {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		// .yaml is an easy name to give a config written by hand.
+		if yamlStem, isYAML := strings.CutSuffix(entry.Name(), ".yaml"); isYAML {
+			r.warnYAML(entry.Name(), yamlStem+configExtension)
+			continue
+		}
+		if !isConfig {
 			continue
 		}
 		name, err := domain.NewProjectName(stem)
@@ -78,13 +87,34 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 }
 
 func (r FileProjectRegistry) warnSkipped(file string, reason error) {
+	r.warnOnce(file, fmt.Sprintf("%v; rename it to register it", reason))
+}
+
+// warnYAML warns about a file ending in .yaml, saying the command
+// renaming it to config, unless config is taken or wouldn't register.
+func (r FileProjectRegistry) warnYAML(file, config string) {
+	path, renamed := filepath.Join(r.dir, file), filepath.Join(r.dir, config)
+	stem := strings.TrimSuffix(config, configExtension)
+	if name, err := domain.NewProjectName(stem); err != nil || name.String() != stem {
+		r.warnOnce(file, "configs end in "+configExtension+", and its name isn't a project name either")
+		return
+	}
+	if _, err := os.Lstat(renamed); err == nil {
+		r.warnOnce(file, fmt.Sprintf("configs end in %s, and %s is one already", configExtension, config))
+		return
+	}
+	r.warnOnce(file, fmt.Sprintf("configs end in %s; rename it to register it: %s",
+		configExtension, shellWords([]string{"mv", path, renamed})))
+}
+
+func (r FileProjectRegistry) warnOnce(file, message string) {
 	path := filepath.Join(r.dir, file)
 	if r.warned[path] {
 		return
 	}
 	r.warned[path] = true
 	// A warning that can't be written changes nothing worth failing for.
-	_, _ = fmt.Fprintf(r.warnings, "warning: skipping %s: %v; rename it to register it\n", path, reason)
+	_, _ = fmt.Fprintf(r.warnings, "warning: skipping %s: %s\n", path, message)
 }
 
 // FindByName implements domain.ProjectRegistry.

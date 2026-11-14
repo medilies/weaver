@@ -602,6 +602,50 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		}
 	})
 
+	t.Run("warns about a config ending in .yaml with the command renaming it", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml", "nimbus.yaml", ".#nimbus.yaml")
+		var warnings strings.Builder
+
+		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		yaml, yml := filepath.Join(dir, "nimbus.yaml"), filepath.Join(dir, "nimbus.yml")
+		want := "warning: skipping " + yaml + ": configs end in .yml; rename it to register it: mv " + yaml + " " + yml + "\n"
+		if got := warnings.String(); got != want || len(names) != 1 {
+			t.Fatalf("got %v and %q, want only shop and %q", names, got, want)
+		}
+	})
+
+	t.Run("warns about a config ending in .yaml without renaming it to a name that wouldn't register", func(t *testing.T) {
+		dir := writeConfigs(t, "list.yaml")
+		var warnings strings.Builder
+
+		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := "warning: skipping " + filepath.Join(dir, "list.yaml") + ": configs end in .yml, and its name isn't a project name either\n"
+		if got := warnings.String(); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("warns about a config ending in .yaml without renaming it over the .yml beside it", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml", "shop.yaml")
+		var warnings strings.Builder
+
+		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := "warning: skipping " + filepath.Join(dir, "shop.yaml") + ": configs end in .yml, and shop.yml is one already\n"
+		if got := warnings.String(); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
 	t.Run("lists a name once when a config beside it has blank space around it", func(t *testing.T) {
 		dir := writeConfigs(t, "shop.yml", "shop .yml")
 

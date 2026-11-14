@@ -4,6 +4,8 @@ A project is one config file at `~/.config/weaver/projects/<name>.yml`
 (`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
 the project's name and its tmux session's name: letters, digits, `-` and
 `_`, starting with a letter or a digit, and not one of weave's commands.
+A file ending in `.yaml` isn't a config: weave warns about it, with the
+`mv` that renames it.
 
 The smallest config opens one window with one shell in the root:
 
