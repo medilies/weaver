@@ -54,6 +54,30 @@ its own.
 
 Each says what it is for; picked by judgement, not by a trigger.
 
+### Unit tests for the config form and the browser (M)
+
+**Use**: the config form's logic (undo and redo, the diff, a grid
+turned into splits, fields checked as typed) is only checked by the
+scenarios in `docs/agents/terminal-testing.md`, which take a tmux
+server and a minute or two. Most of it needs no tmux at all.
+
+- Two ways. Plain Go: build the model, call `Update` with
+  `tea.KeyPressMsg`s, check `View()` holds the text expected, as
+  `tea_drawing_test.go` already does for drawings. No dependency.
+  Or Charm's `teatest` (`github.com/charmbracelet/x/exp/teatest`): the
+  program runs in the test, with `Type`, `Send`, `WaitFor` and golden
+  files of the final output (`-update` rewrites them). It adds waiting
+  on output that arrives later, such as the preview's.
+- `teatest` is in `x/exp`: experimental, no stable version. Check it
+  supports Bubble Tea v2 before choosing it. Golden files of styled
+  output break on every change of look; force a plain colour profile in
+  tests.
+- Neither replaces the scenarios: attaching, switching, real sessions,
+  the preview of real panes and a real terminal's drawing need tmux.
+  The scenarios that are form logic only (10, 11, 15 to 18) could move.
+- Changes a rule: `CLAUDE.md` says the dialog, the config form and the
+  browser aren't unit-tested.
+
 ### A clean shutdown when killing (M)
 
 **Use**: a dev server leaves state behind (a lock file, a stale PID,
