@@ -82,7 +82,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
-- The confirmation dialog, the config form and the browser aren't unit-tested; check them by running `weave bind`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`. Before a release, and after one on the published binary, run the scenarios with `docs/agents/terminal-test.sh`, and watch one run in a real terminal; `docs/agents/terminal-testing.md` describes them and says how never to reach the user's own tmux server. A case those scenarios miss, once found, is added to them, kept free of anything from the user's machine.
+- The confirmation dialog, the config form and the browser aren't unit-tested; check them by running `weave bind`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`. Before a release, and after one on the published binary, run the scenarios with `test/terminal/run.sh`, and watch one run with `-w`; `docs/agents/terminal-testing.md` describes them and says how never to reach the user's own tmux server. A case those scenarios miss, once found, is added to them, kept free of anything from the user's machine.
 
 ## Workflow
 

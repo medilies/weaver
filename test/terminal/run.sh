@@ -3,18 +3,20 @@
 # throwaway tmux server: one line per scenario, and the screen of a
 # failing one.
 #
-#   terminal-test.sh [-b DIR] [-k] [N...]
+#   test/terminal/run.sh [-w] [-k] [-b DIR] [N...]
 #
 #   N...     the scenarios to run, all by default; each sets up what it
 #            needs, so any one runs alone
+#   -w       watch the run in a terminal window that opens for it
+#   -k       keep the servers and /tmp/wvt once done, to look around;
+#            the next run clears them away first
 #   -b DIR   test DIR/weave, such as a release's, instead of building
 #            ./cmd/weave
-#   -k       keep /tmp/wvt afterwards, to look around or watch
 #
-# Watch a run, read-only, from any terminal of 160x45 or more:
+# Or watch a run, read-only, from any terminal of 160x45 or more:
 #   tmux -S /tmp/wvt/screen.sock attach -r
 # Sourced, after a run with -k, it defines its functions and runs
-# nothing: unset TMUX; . docs/agents/terminal-test.sh; fresh; browse shop
+# nothing: unset TMUX; . test/terminal/run.sh; fresh; browse shop
 #
 # Never touches the user's tmux: every tmux command names its socket.
 set -u
@@ -261,6 +263,29 @@ logs_idle() {
 settings() { printf '%s\n' "$@" >"$W/cfg/weaver/settings.yml"; }
 config() { cat "$W/cfg/weaver/projects/$1.yml"; }
 
+# watch_window: a terminal window watching the screen, read-only: the
+# one TERMINAL names, else the first found.
+watch_window() {
+	local t cmd=(env -u TMUX tmux -S "$SCREEN" attach -r)
+	for t in ${TERMINAL:-} kitty alacritty foot gnome-terminal xterm x-terminal-emulator; do
+		command -v "$t" >/dev/null || continue
+		case ${t##*/} in
+		kitty) setsid "$t" --title weave-tests -o initial_window_width=160c -o initial_window_height=45c "${cmd[@]}" ;;
+		alacritty) setsid "$t" --title weave-tests -o window.dimensions.columns=160 -o window.dimensions.lines=45 -e "${cmd[@]}" ;;
+		foot) setsid "$t" --title weave-tests --window-size-chars 160x45 "${cmd[@]}" ;;
+		gnome-terminal) "$t" --title weave-tests --geometry 160x45 -- "${cmd[@]}" ;;
+		xterm) setsid "$t" -T weave-tests -geometry 160x45 -e "${cmd[@]}" ;;
+		*) setsid "$t" -e "${cmd[@]}" ;;
+		esac >/dev/null 2>&1 &
+		until_ 10 watched && return
+		echo "$t didn't attach; watch with: tmux -S $SCREEN attach -r" >&2
+		return
+	done
+	echo "no terminal found, set TERMINAL; watch with: tmux -S $SCREEN attach -r" >&2
+}
+
+watched() { [ -n "$(S list-clients 2>/dev/null)" ]; }
+
 clean() {
 	T kill-server 2>/dev/null
 	S kill-server 2>/dev/null
@@ -272,7 +297,7 @@ clean() {
 s1() {
 	browse || return
 	local want
-	for want in '─ projects ─' '─ tasks ─' '─ blog.yml ─' '  notes' '  shop' 'q quit'; do
+	for want in '─ projects ' '─ tasks ' '─ blog.yml ' '  notes' '  shop' 'q quit'; do
 		shows "$want" || fail "'$want' isn't drawn" || return
 	done
 }
@@ -544,11 +569,12 @@ s20() {
 # --- Running ----------------------------------------------------------------
 
 main() {
-	local bin= keep= n all=() pass=0 failed=()
-	while getopts b:k opt; do
+	local bin= keep= watch= n all=() pass=0 failed=()
+	while getopts b:kw opt; do
 		case $opt in
 		b) bin=$(cd "$OPTARG" && pwd) || exit 2 ;;
 		k) keep=1 ;;
+		w) watch=1 ;;
 		*) exit 2 ;;
 		esac
 	done
@@ -560,13 +586,16 @@ main() {
 	else
 		for n in $(declare -F | awk '$3 ~ /^s[0-9]+$/ {print substr($3, 2)}' | sort -n); do all+=("$n"); done
 	fi
-	[ -e "$W" ] && {
-		echo "$W exists, from an earlier run: remove it first" >&2
-		exit 2
-	}
+	# What a run kept with -k goes first.
+	clean
 	# Cleaned up however the run ends, unless kept.
 	[ -n "$keep" ] || trap clean EXIT
 	setup "$bin"
+	if [ -n "$watch" ]; then
+		watch_window
+	else
+		echo "watch: tmux -S $SCREEN attach -r" >&2
+	fi
 	for n in "${all[@]}"; do
 		FAILED=
 		if fresh && "s$n" && [ -z "$FAILED" ]; then
@@ -580,6 +609,9 @@ main() {
 		fi
 	done
 	echo "$pass/${#all[@]} passed${failed:+, failed: ${failed[*]}}"
+	if [ -n "$watch" ] && [ -z "$keep" ] && [ -t 0 ]; then
+		read -rp "Enter closes the window and cleans up. " _
+	fi
 	[ ${#failed[@]} -eq 0 ]
 }
 

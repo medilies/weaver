@@ -1,11 +1,12 @@
 # Testing in a real terminal
 
-How to check weave end to end before or after a release: the browser, the config form and the confirmation dialog aren't unit-tested, and neither is how they behave together in a real terminal. [`terminal-test.sh`](terminal-test.sh) runs every scenario below against a throwaway tmux server and prints one line per scenario, with the screen of any that fails:
+How to check weave end to end before or after a release: the browser, the config form and the confirmation dialog aren't unit-tested, and neither is how they behave together in a real terminal. [`test/terminal/run.sh`](../../test/terminal/run.sh) runs every scenario below against a throwaway tmux server and prints one line per scenario, with the screen of any that fails:
 
 ```sh
-docs/agents/terminal-test.sh            # all of them, about 45 seconds
-docs/agents/terminal-test.sh 7 15       # some; each sets up what it needs
-docs/agents/terminal-test.sh -k 11      # keep /tmp/wvt afterwards, to look around
+test/terminal/run.sh          # all of them, about 45 seconds
+test/terminal/run.sh 7 15     # some; each sets up what it needs
+test/terminal/run.sh -w       # watched in a terminal window that opens for it
+test/terminal/run.sh -k 11    # the servers and /tmp/wvt kept once done, to look around
 ```
 
 ```text
@@ -28,14 +29,13 @@ gh release download vX.Y.Z -R medilies/weaver -p '*inux*amd64*' -p checksums.txt
 sha256sum -c --ignore-missing checksums.txt
 mkdir asset && tar -xzf *inux*amd64*.tar.gz -C asset
 gobin/weave --version; asset/weave --version   # both vX.Y.Z
-cd - && docs/agents/terminal-test.sh -b /tmp/wvr/gobin && docs/agents/terminal-test.sh -b /tmp/wvr/asset
+cd - && test/terminal/run.sh -b /tmp/wvr/gobin && test/terminal/run.sh -b /tmp/wvr/asset
 rm -rf /tmp/wvr
 ```
 
-The script checks text, sizes, colours as escape codes and what tmux holds, not how a terminal emulator draws them. Watch one run, read-only, from a terminal window of 160x45 or more, for what only eyes catch, such as misaligned borders or a wide character cut in half:
+The script checks text, sizes, colours as escape codes and what tmux holds, not how a terminal emulator draws them. Watch one run for what only eyes catch, such as misaligned borders or a wide character cut in half: `-w` opens a terminal window of 160x45 watching it, read-only, and waits for Enter once done before closing it. The window is the terminal `TERMINAL` names, else the first of kitty, alacritty, foot, gnome-terminal, xterm and x-terminal-emulator on `PATH`. Without `-w`, the run prints how to watch it from a terminal of your own; the screen it shows isn't the default tmux server's, so `tmux attach` alone finds nothing:
 
 ```sh
-docs/agents/terminal-test.sh -k &   # then, in the terminal window:
 tmux -S /tmp/wvt/screen.sock attach -r
 ```
 
@@ -43,7 +43,7 @@ tmux -S /tmp/wvt/screen.sock attach -r
 
 ```mermaid
 flowchart LR
-  script[terminal-test.sh] -- "send-keys, capture-pane, list-clients" --> server
+  script[run.sh] -- "send-keys, capture-pane, list-clients" --> server
   subgraph screen ["screen server: the terminal, 160x45"]
     client["tmux attach -t term, again after a kill"]
   end
@@ -70,12 +70,12 @@ The agent's shell usually runs inside the user's tmux, with `$TMUX` set, and `tm
 To try a new case before writing its scenario, keep a run with `-k` and source the script, which then defines its functions without running anything:
 
 ```sh
-docs/agents/terminal-test.sh -k 1
-unset TMUX; . docs/agents/terminal-test.sh
+test/terminal/run.sh -k 1
+unset TMUX; . test/terminal/run.sh
 fresh; started shop; logs_idle; browse shop; keys Right; wait_for 'r rerun' && screen | grep -F '⚠'
 ```
 
-Read with `grep` or `wait_for`, not whole screens. Remove `/tmp/wvt` once done: `clean`.
+Read with `grep` or `wait_for`, not whole screens. `clean` removes the servers and `/tmp/wvt`, and the next run does it anyway.
 
 ## Scenarios
 
