@@ -160,7 +160,7 @@ type BrowseProjects struct {
 	sessions  domain.SessionInspector
 	list      ListProjects
 	open      OpenProject
-	freeze    FreezeProject
+	bind      BindProject
 	edit      EditProject
 	kill      KillProject
 	run       RunTask
@@ -178,7 +178,7 @@ func NewBrowseProjects(
 	sessions domain.SessionInspector,
 	list ListProjects,
 	open OpenProject,
-	freeze FreezeProject,
+	bind BindProject,
 	edit EditProject,
 	kill KillProject,
 	run RunTask,
@@ -186,12 +186,12 @@ func NewBrowseProjects(
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
-		sessions: sessions, list: list, open: open, freeze: freeze, edit: edit, kill: kill, run: run, rerun: rerun,
+		sessions: sessions, list: list, open: open, bind: bind, edit: edit, kill: kill, run: run, rerun: rerun,
 	}
 }
 
 // Handle shows the browser until the user opens a project, runs a task,
-// reruns a command, or quits; a project frozen from it is rooted at workingDir.
+// reruns a command, or quits; a project bound from it is rooted at workingDir.
 func (uc BrowseProjects) Handle(workingDir string) error {
 	var selected domain.ProjectName
 	notice := ""
@@ -488,8 +488,8 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 	switch choice.Action {
 	case ActionOpen:
 		return name, "", uc.open.Handle(name.String())
-	case ActionFreeze:
-		project, err := uc.freeze.Handle(FreezeRequest{WorkingDir: workingDir})
+	case ActionBind:
+		project, err := uc.bind.Handle(BindRequest{WorkingDir: workingDir})
 		if err != nil {
 			return name, "", err
 		}

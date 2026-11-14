@@ -19,7 +19,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | selected colour | The colour marking what is selected in the browser and the config form; cyan unless set | `selected-colour:` (settings) | `Settings`, `look` |
 | drawing keys | The config form's keys splitting, removing and resizing panes on the drawing; tmux's unless set | `keys:` (settings) | `DrawingKeys` |
 | config | A project's YAML file | `weave show`, `weave edit` | `ProjectRegistry`, `ConfigDocument` |
-| registered | Having a config; freeze registers, delete unregisters | `weave list` | `ProjectRegistry.Names()` |
+| registered | Having a config; bind registers, delete unregisters | `weave list` | `ProjectRegistry.Names()` |
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
 | workspace | The filesystem projects live in: their directories, and the programs on PATH | | `Workspace` |
 | window, pane | tmux windows and panes, panes laid out by splits or a grid | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
@@ -36,20 +36,20 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | focus | The window open lands you in, and the pane each window selects; the first ones unless set. At most one per project and one per window | `focus:` (window, pane) | `WithFocus`, `Focusing`, `FocusedWindow()`, `FocusedPane()` |
 | clear | Hiding a pane's before commands once they ran: `clear` is typed after them, then the note printed. Set on the project, a window or a pane, the lowest winning; off unless set | `clear:` | `Clearing`, `WithClearing`, `PanePlan.Clears()` |
 | note | Lines printed in a pane before its shell starts, or after its before commands when it clears | `note:` | `Pane.WithNote` |
-| session | A tmux session; a project's session is named after it | `weave freeze [session]` | `RunningSession`, `Session*` ports |
+| session | A tmux session; a project's session is named after it | `weave bind [session]` | `RunningSession`, `Session*` ports |
 | running / not running | Whether a project's session exists | ● in the browser | `ProjectStatus.Running()` |
 | owned session | A session weaver started; only those are restored | | `RunningSession.Owned()` |
-| capture | Reading a running session's windows and panes, for freeze to start from | `weave freeze [session]` | `SessionCapturer.Capture` |
+| capture | Reading a running session's windows and panes, for bind to start from | `weave bind [session]` | `SessionCapturer.Capture` |
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |
 | restoration | Putting back the configured windows an owned session lost | | `Project.Restoration`, `WindowPlacement` |
-| freeze | Register a project through the config form, optionally from a running session | `weave freeze`, key `f` | `FreezeProject`, `ActionFreeze` |
-| draft | What a form starts from: a name, a root, and the captured windows if any when freezing; a registered project and its config when editing, whose name stays; a freeze's name is typed | | `ProjectDraft`, `NameStays` |
+| bind | Register a project through the config form, optionally from a running session; binding, bound. Not "freeze", its name until v0.6.0, nor "bind" as tmux's key bindings | `weave bind`, key `b` | `BindProject`, `ActionBind` |
+| draft | What a form starts from: a name, a root, and the captured windows if any when binding; a registered project and its config when editing, whose name stays; when binding, the name is typed | | `ProjectDraft`, `NameStays` |
 | open | Start a project's session if not running, then attach or switch | `weave <project>`, enter | `OpenProject`, `ActionOpen` |
 | setup commands | Commands run once in the root, in order, before opening builds a project's session; a failing one stops the open. Not "start", which is too close to a pane's startup | `setup:` | `Project.Setup()`, `SettingUp`, `CommandRunner`, `ShellRunner` |
 | edit | Change a config in the config form, or raw in the editor, keeping it only if valid | `weave edit`, key `e`; `weave edit --raw`, key `E` | `EditProject`, `ActionEdit`, `ActionEditRaw` |
-| config form | A full-screen form changing a project in place, a draft when freezing: a card for the project, then the window list and a card for the selected window, with its drawing, the pane list and the selected pane's card, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e`; `weave freeze`, key `f` | `TeaConfigForm`, `app.ProjectForm` |
+| config form | A full-screen form changing a project in place, a draft when binding: a card for the project, then the window list and a card for the selected window, with its drawing, the pane list and the selected pane's card, each field checked as it is typed. Saving rewrites the config, so its comments go | `weave edit`, key `e`; `weave bind`, key `b` | `TeaConfigForm`, `app.ProjectForm` |
 | undo, redo | Going back to the project as it was before the config form's last change, or forward again | keys `u`, `ctrl+r` in the config form | `undone`, `redone` in `tea_config_form.go` |
-| diff | What saving changes in the stored config, shown before the config form saves: comments the user wrote show as removed. Freezing under a registered name, it is what saving changes in that project's config | `ctrl+s` in the config form | `configDiff`, `review` in `tea_config_form.go` |
+| diff | What saving changes in the stored config, shown before the config form saves: comments the user wrote show as removed. Binding under a registered name, it is what saving changes in that project's config | `ctrl+s` in the config form | `configDiff`, `review` in `tea_config_form.go` |
 | card | The config form's box for the project, the windows or the selected pane: the one with the cursor, or with the cursor on its window list or pane list above it, has a heavy border, as does the selected pane in the drawing when the cursor is on it | config form | `card` in `tea_config_form.go` |
 | trail | The config form's top line: the project, window and pane the cursor is in, and ● unsaved when there are changes | config form | `trail` in `tea_config_form.go` |
 | kill | End a project's session and what runs in it. Not "stop" | `weave kill`, key `x` | `KillProject`, `ActionKill` |
@@ -80,7 +80,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
-- The confirmation dialog, the config form and the browser aren't unit-tested; check them by running `weave freeze`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`. Before a release, and after one on the published binary, run the scenarios in `docs/agents/terminal-testing.md` in a real terminal, which also says how never to reach the user's own tmux server. A case those scenarios miss, once found, is added to them, kept free of anything from the user's machine.
+- The confirmation dialog, the config form and the browser aren't unit-tested; check them by running `weave bind`, `weave edit` and `weave` in a pane of a throwaway tmux server (`TMUX_TMPDIR`) with a temporary `XDG_CONFIG_HOME`. Before a release, and after one on the published binary, run the scenarios in `docs/agents/terminal-testing.md` in a real terminal, which also says how never to reach the user's own tmux server. A case those scenarios miss, once found, is added to them, kept free of anything from the user's machine.
 
 ## Workflow
 

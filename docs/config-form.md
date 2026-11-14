@@ -1,11 +1,11 @@
 # The config form
 
-`weave freeze` and `weave edit` (keys `f` and `e` in the
+`weave bind` and `weave edit` (keys `b` and `e` in the
 [browser](browser.md)) open the config form, which changes a project in
 place.
 
 It shows a project as cards: the project's, then the
-window list and the selected window's card. Freezing starts it on a
+window list and the selected window's card. Binding starts it on a
 name, the root, and the session's windows if you named one; the name is
 typed there, and stays when editing. The selected window's panes are
 drawn as they open, the selected pane in the

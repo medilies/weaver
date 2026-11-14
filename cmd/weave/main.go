@@ -14,7 +14,7 @@ import (
 
 // application is the use cases the commands run.
 type application struct {
-	freezeProject  app.FreezeProject
+	bindProject    app.BindProject
 	browseProjects app.BrowseProjects
 	editProject    app.EditProject
 	openProject    app.OpenProject
@@ -22,7 +22,7 @@ type application struct {
 	listProjects   app.ListProjects
 	// documents reads configs as stored, for `show`.
 	documents app.ProjectDocuments
-	// sessions lists running tmux sessions, to complete `freeze`.
+	// sessions lists running tmux sessions, to complete `bind`.
 	sessions domain.SessionLister
 }
 
@@ -56,16 +56,16 @@ func wire() (application, error) {
 	confirm, configForm := infra.NewTeaConfirmer(settings), infra.NewTeaConfigForm(workspace, projects, settings)
 
 	weaver := application{
-		freezeProject: app.NewFreezeProject(projects, tmux, workspace, configForm),
-		editProject:   app.NewEditProject(projects, projects, configForm, infra.NewEditor(), confirm),
-		sessions:      tmux,
-		openProject:   app.NewOpenProject(projects, tmux, workspace, commands),
-		killProject:   app.NewKillProject(tmux, tmux, projects, commands, infra.NewLineAcknowledger(os.Stdin, os.Stderr)),
-		listProjects:  app.NewListProjects(projects, tmux),
-		documents:     projects,
+		bindProject:  app.NewBindProject(projects, tmux, workspace, configForm),
+		editProject:  app.NewEditProject(projects, projects, configForm, infra.NewEditor(), confirm),
+		sessions:     tmux,
+		openProject:  app.NewOpenProject(projects, tmux, workspace, commands),
+		killProject:  app.NewKillProject(tmux, tmux, projects, commands, infra.NewLineAcknowledger(os.Stdin, os.Stderr)),
+		listProjects: app.NewListProjects(projects, tmux),
+		documents:    projects,
 	}
 	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(settings), confirm, projects, projects, workspace, tmux,
-		weaver.listProjects, weaver.openProject, weaver.freezeProject, weaver.editProject, weaver.killProject,
+		weaver.listProjects, weaver.openProject, weaver.bindProject, weaver.editProject, weaver.killProject,
 		app.NewRunTask(projects, tmux, confirm), app.NewRerunCommand(projects, tmux))
 	return weaver, nil
 }

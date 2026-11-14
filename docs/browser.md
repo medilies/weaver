@@ -57,7 +57,7 @@ when something
 runs there, or the pane is in copy mode, weaver asks before running the task in a throwaway window
 instead, named after the task (or its command's program), starting in
 the pane's directory with its `env` and `before` commands, and kept open
-once the task ends until you close it. `weave freeze` leaves throwaway
+once the task ends until you close it. `weave bind` leaves throwaway
 windows out, and opening the project doesn't restore them. Either way
 weaver then puts you where the task runs, as opening the project does.
 A pane offers tasks under `tasks:`:
@@ -87,14 +87,14 @@ or that leaves a quote open, marks its pane.
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it, like `weave <project>` |
-| f | freeze the current directory, like `weave freeze` |
+| b | bind the current directory, like `weave bind` |
 | e | change its config in the [config form](config-form.md), like `weave edit <project>` |
 | E | edit its config in your editor, like `weave edit --raw <project>` |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc hides the config, then clears the filter, first) |
 
-After freezing, editing, killing, deleting or running a task, the list
+After binding, editing, killing, deleting or running a task, the list
 comes back, unfiltered, with what happened. Since the browser and the config form take
 the mouse, most terminals select text with shift held, and the wheel
 doesn't scroll them.

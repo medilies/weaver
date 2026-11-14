@@ -42,7 +42,7 @@ func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments
 // so, and is typed otherwise. It returns the project as ctrl+s saves it,
 // once the user has seen what saving changes in the draft's config, or
 // ErrAborted when the user leaves it unchanged or discards it. A draft
-// without a Config, as freezing gives, is unsaved until then, and saving
+// without a Config, as binding gives, is unsaved until then, and saving
 // it under a registered name shows what it changes in that config and asks
 // before replacing it; declining opens the form typing the name, so another
 // can be given. A name to type that isn't valid opens the form typing it.
@@ -175,7 +175,7 @@ type state struct {
 	unnamed bool
 }
 
-// standInName names a project being frozen until a valid name is typed,
+// standInName names a project being bound until a valid name is typed,
 // when the one suggested isn't.
 var standInName, _ = domain.NewProjectName("project")
 

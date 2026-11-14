@@ -72,7 +72,7 @@ func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Proje
 
 // browserKeys are the keys making a choice.
 var browserKeys = map[string]app.Action{
-	"enter": app.ActionOpen, "f": app.ActionFreeze, "e": app.ActionEdit, "E": app.ActionEditRaw,
+	"enter": app.ActionOpen, "b": app.ActionBind, "e": app.ActionEdit, "E": app.ActionEditRaw,
 	"x": app.ActionKill, "d": app.ActionDelete,
 }
 
@@ -283,7 +283,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	default:
 		shown := m.shown()
 		action, ok := browserKeys[key]
-		if !ok || (len(shown) == 0 && action != app.ActionFreeze) {
+		if !ok || (len(shown) == 0 && action != app.ActionBind) {
 			break
 		}
 		m.choice = app.Choice{Action: action}
@@ -486,8 +486,8 @@ func toldKeys(told []keyTold) (string, []hotspot) {
 
 var (
 	typingKeys   = []keyTold{{"enter", "keep"}, {"esc", "clear"}}
-	filteredKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
-	browsingKeys = []keyTold{{"enter", "open"}, {"f", "freeze"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
+	filteredKeys = []keyTold{{"enter", "open"}, {"b", "bind"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"esc", "clear"}, {"q", "quit"}}
+	browsingKeys = []keyTold{{"enter", "open"}, {"b", "bind"}, {"e", "edit"}, {"E", "raw"}, {"x", "kill"}, {"d", "delete"}, {"/", "filter"}, {"q", "quit"}}
 )
 
 // paneKey is tab told, before the last two keys, when the drawn window
@@ -620,7 +620,7 @@ func (m browser) details(width, height int) string {
 	shown := m.shown()
 	switch {
 	case len(m.projects) == 0:
-		return "No projects yet: press f to freeze the current directory."
+		return "No projects yet: press b to bind the current directory."
 	case len(shown) == 0:
 		return fmt.Sprintf("No project's name contains %q.", m.filter)
 	}

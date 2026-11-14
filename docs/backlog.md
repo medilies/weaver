@@ -71,7 +71,7 @@ the least code:
 - **The browser in its own tmux session**, weave switching to it and
   back. Open questions: its name clashes with a project's session (a
   project named `weaver` has the session `weaver`); it shows in tmux's
-  session list and among the sessions `weave freeze` offers to capture;
+  session list and among the sessions `weave bind` offers to capture;
   weaver would start a session that isn't a project's, so *owned
   session* must leave it out; and whether it is killed or kept once a
   project opens. Needs a glossary entry first.
@@ -120,7 +120,7 @@ Like tmux's `choose-tree` preview: `capture-pane` each pane of a
 running session and fill the drawing's boxes with their last lines,
 drawn from tmux's real geometry instead of the plan, so panes closed or
 added show against the config. `infra/tmux_layout.go` already parses
-`#{window_layout}` for freeze, so the geometry costs almost nothing;
+`#{window_layout}` for bind, so the geometry costs almost nothing;
 what is left is `capture-pane` on the tmux port and a refresh while the
 browser is open. The refresh loop is when to build the overviews
 concurrently: the browser rebuilds every overview, one after another,
@@ -159,7 +159,7 @@ open; `wait` orders the panes among themselves.
   type-ahead, which is uncertain.
 - Start with `port` (host default `localhost`) and `timeout`; `http` (a
   2xx answer) if needed later.
-- Freeze can't see waits: replacing a config drops them, as it drops
+- Bind can't see waits: replacing a config drops them, as it drops
   comments.
 - A new subcommand reserves its name (`reservedNames` in
   `domain/project.go`), which breaks a registered project already named
@@ -197,7 +197,7 @@ browser, does.
 - Browser: lazy windows marked in the window list (`emulator · lazy`), and a
   key with a small picker to open one (a new `Action`).
 - The warnings check a lazy window only when it is being opened.
-- Freeze from a session where the window isn't open drops it from the
+- Bind from a session where the window isn't open drops it from the
   config it writes: warn, or carry lazy windows over from the existing
   config.
 
@@ -217,15 +217,16 @@ change to bring it back.
   Weavers of Hollow Knight: Silksong; this plugin would swap the words
   weaver shows (browser, config form, CLI messages) for weaving and
   silk words, for those who want the theme. The core keeps the plain
-  words of the glossary. Candidates: *mend* for restoration, *woven*
-  for an owned session, *snapped thread* for an exited command, *fray*
-  for a warning, *loom* for the browser, *spool* for the task list,
-  *threading* for setup commands, *unravel* for teardown, *cut* for
-  kill, *pattern* for a project, *warp* and *weft* for a grid's
-  columns and rows. Generic words only, never the game's proper names
-  (Hornet, Pharloom, Needolin). Waits on the plugin system above, and
-  on the shown words being gathered in one place a plugin can replace;
-  today they are spread over `infra/tea_*.go` and `cmd/weave`.
+  words of the glossary, but for *bind* (ADR 0002). Candidates:
+  *unbind* for delete, *weave* for open, *mend* for restoration,
+  *woven* for an owned session, *snapped thread* for an exited
+  command, *fray* for a warning, *loom* for the browser, *spool* for
+  the task list, *threading* for setup commands, *unravel* for
+  teardown, *cut* for kill, *pattern* for a project, *warp* and *weft*
+  for a grid's columns and rows. Generic words only, never the game's
+  proper names (Hornet, Pharloom, Needolin). Waits on the plugin system
+  above, and on the shown words being gathered in one place a plugin
+  can replace; today they are spread over `infra/tea_*.go` and `cmd/weave`.
 
 - **Most recently opened first, in the list.** weaver would keep a
   record of when each project was opened, besides the configs. Back if
@@ -275,7 +276,7 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   to `~/.config`) on every OS, which moves existing macOS configs and
   would have to keep reading the old directory. On a case-insensitive
   filesystem, `shop` and `Shop` are one config (the TODO in
-  `domain/project.go`): freezing `shop` when `Shop.yml` exists finds
+  `domain/project.go`): binding `shop` when `Shop.yml` exists finds
   that config and asks before replacing it, but the two names still
   overwrite each other. CI
   builds only for Linux, though darwin binaries ship.
@@ -296,19 +297,19 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   today, and every other value object trims its input (`oneLine`).
 - **`weave edit` races.** Edits are lost if the config is deleted while
   the editor is open (`ErrProjectNotFound`), and nothing protects
-  against a lost update from a concurrent `weave freeze`.
-- **Freezing a pane with a job.** It is frozen in its shell's directory,
+  against a lost update from a concurrent `weave bind`.
+- **Binding a pane with a job.** It is captured in its shell's directory,
   read from `/proc`, so `make -C sub dev` from the root keeps the root.
   A subshell that changes directory first loses it:
-  `(cd api && exec sleep 300)` is frozen with the root and the prefill
+  `(cd api && exec sleep 300)` is captured with the root and the prefill
   `sleep 300`. A shell a wrapper forks, as a `default-command` of
   `sh -c 'bash -i; true'` does, is taken for a job. Telling shells apart
   would be guesswork.
-- **Freezing a pane started as another shell.** `tmux new-window zsh`
-  where `default-shell` is bash is frozen with `zsh` typed at its
+- **Binding a pane started as another shell.** `tmux new-window zsh`
+  where `default-shell` is bash is captured with `zsh` typed at its
   prompt, for the same reason.
 - **A symlink in a root that leads out of it.** `/srv/shop/api` to
-  `/data/api` is frozen as the absolute `/data/api`: tmux and `/proc`
+  `/data/api` is captured as the absolute `/data/api`: tmux and `/proc`
   report directories resolved. Editing the config keeps the link.
 
 **Left out** of the config, as other session managers have them:
@@ -347,7 +348,7 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   warning (`Idle`) and the clean shutdown after teardown.
 - One tmux pane listing (`projectPanes`) serves the exited-command
   warning and tasks; `Capture` could use it too, but still asks tmux four
-  or five times per pane: not worth changing while freeze is
+  or five times per pane: not worth changing while bind is
   interactive, since splitting free-text paths and labels out of one
   line adds parsing risk.
 - A second CLI argument serves lazy windows.

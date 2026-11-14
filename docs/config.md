@@ -56,7 +56,7 @@ windows:
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see [Grid](#grid). |
 | `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
-| `focus` (pane) | `true` selects this pane in its window, instead of the first. At most one pane per window. Freezing a session focuses the window and panes that were active. |
+| `focus` (pane) | `true` selects this pane in its window, instead of the first. At most one pane per window. Binding a session focuses the window and panes that were active. |
 | `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
@@ -118,12 +118,12 @@ d e b
 d c c
 ```
 
-`weave freeze` writes splits.
+`weave bind` writes splits.
 
 ## Validation, comments and schema
 
 Unknown fields are errors: they are usually typos. Comments are kept by
-`weave edit --raw`, but not when `weave freeze` replaces a config or the
+`weave edit --raw`, but not when `weave bind` replaces a config or the
 config form saves it: weave edit asks first when a config has some.
 
 When weaver saves a config, it writes `weaver.schema.json` next to it

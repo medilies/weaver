@@ -18,7 +18,7 @@ stopping if one fails. Inside tmux, it switches to the session instead.
 weave . opens the project whose root contains the current directory.
 
 Without a project, weave lists the projects and the selected one's
-summary and config, to open, freeze, edit, kill or delete them, or run
+summary and config, to open, bind, edit, kill or delete them, or run
 their tasks.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
@@ -39,7 +39,7 @@ their tasks.`,
 		},
 	}
 	root.AddCommand(
-		newFreezeCommand(weaver),
+		newBindCommand(weaver),
 		newEditCommand(weaver),
 		newKillCommand(weaver),
 		newListCommand(weaver),

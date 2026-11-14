@@ -15,7 +15,7 @@ var ErrAborted = errors.New("aborted")
 // are about talking to the user, which only use cases do.
 
 // ProjectDraft is what a form starts from: suggestions the user can
-// change when freezing, or a registered project and its config when
+// change when binding, or a registered project and its config when
 // editing it, whose name stays.
 type ProjectDraft struct {
 	Name      string
@@ -27,7 +27,7 @@ type ProjectDraft struct {
 	Setup     []domain.Command
 	Teardown  []domain.Command
 	Windows   []domain.Window // a running session's, to start from; none to start blank
-	Config    []byte          // the config as stored, which saving replaces; none when freezing
+	Config    []byte          // the config as stored, which saving replaces; none when binding
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.
@@ -84,8 +84,8 @@ type Action int
 const (
 	// ActionOpen opens the chosen project, as `weave <project>` does.
 	ActionOpen Action = iota + 1
-	// ActionFreeze registers a project rooted at the working directory.
-	ActionFreeze
+	// ActionBind registers a project rooted at the working directory.
+	ActionBind
 	// ActionEdit edits the chosen project's config in the config form.
 	ActionEdit
 	// ActionEditRaw edits the chosen project's config in the editor.
@@ -103,7 +103,7 @@ const (
 )
 
 // Choice is what the user picked in the project browser: an action, and
-// the project highlighted then, which the action applies to (freezing a
+// the project highlighted then, which the action applies to (binding a
 // project applies to none, but the browser comes back to it), the task
 // picked when running one, and the pane picked when rerunning its
 // command.

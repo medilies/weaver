@@ -12,12 +12,12 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-func newFreezeCommand(weaver application) *cobra.Command {
+func newBindCommand(weaver application) *cobra.Command {
 	var name, root string
 	cmd := &cobra.Command{
-		Use:   "freeze [session]",
-		Short: "Register a project through the config form, from a running session if given",
-		Long: `weave freeze opens the config form on a new project: its name, its
+		Use:   "bind [session]",
+		Short: "Bind a directory, or a running session if given, into a project config through the config form",
+		Long: `weave bind opens the config form on a new project: its name, its
 root (the current directory unless --root says otherwise) and one
 window, to change as weave edit does, then saves it.
 
@@ -52,11 +52,11 @@ run it.`,
 			if strings.HasPrefix(expanded, "~") {
 				return fmt.Errorf("--root %s: only a leading ~/ stands for your home directory", root)
 			}
-			request := app.FreezeRequest{Name: name, Root: expanded, WorkingDir: dir}
+			request := app.BindRequest{Name: name, Root: expanded, WorkingDir: dir}
 			if len(args) == 1 {
 				request.Session = args[0]
 			}
-			project, err := weaver.freezeProject.Handle(request)
+			project, err := weaver.bindProject.Handle(request)
 			if errors.Is(err, app.ErrAborted) {
 				_, err = fmt.Fprintln(cmd.ErrOrStderr(), "Nothing saved.")
 				return err

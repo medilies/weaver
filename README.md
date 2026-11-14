@@ -57,7 +57,7 @@ weaver ~/dev/weaver | api › task dev |
                     |                |  app shell   flutter run   emulator
                     |                | app shell  ~/dev/nimbus/app  window app
 
-enter open · f freeze · e edit · E raw · x kill · d delete · tab pane
+enter open · b bind · e edit · E raw · x kill · d delete · tab pane
 t tasks · y config · / filter · q quit
 ```
 
@@ -85,12 +85,12 @@ source <(weave completion bash)
 ## Usage
 
 ```sh
-weave freeze          # register the project in the current directory, through the config form
-weave freeze scratch  # same, starting from the windows, panes and commands of the running session scratch
-weave freeze .        # same, from the session you're in
+weave bind            # register the project in the current directory, through the config form
+weave bind scratch    # same, starting from the windows, panes and commands of the running session scratch
+weave bind .          # same, from the session you're in
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
-weave                 # browse the projects, to open, freeze, edit, kill or delete them, or run their tasks
+weave                 # browse the projects, to open, bind, edit, kill or delete them, or run their tasks
 weave edit nimbus     # change its config in the config form, each field checked as you type
 weave edit --raw nimbus  # edit it in $VISUAL or $EDITOR instead, keeping comments; only a valid config is saved
 weave kill nimbus     # kill the session and everything running in it
@@ -105,7 +105,7 @@ nothing, and creates no directories.
 ## Documentation
 
 - [Project config](docs/config.md): every field, `before` commands for toolchains, grids, the schema
-- [Opening, killing and freezing](docs/sessions.md): `setup` and `teardown`, restoring closed windows, capturing a session
+- [Opening, killing and binding](docs/sessions.md): `setup` and `teardown`, restoring closed windows, capturing a session
 - [The browser](docs/browser.md): summary and warnings, the drawing, tasks, keys
 - [The config form](docs/config-form.md): cards, editing on the drawing, keys
 - [Settings](docs/settings.md): the selected colour and the drawing's keys

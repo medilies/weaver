@@ -8,7 +8,7 @@ import (
 
 // ExpandHome turns a leading "~" into the user's home directory, so
 // configs can say "~/dev/weaver" and stay portable across machines. The
-// forms and `weave freeze --root=~/…`, which the shell leaves as typed,
+// forms and `weave bind --root=~/…`, which the shell leaves as typed,
 // read it the same way.
 func ExpandHome(path string) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {

@@ -22,11 +22,11 @@ func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
 	}
 }
 
-// `weave freeze --root=~bob/x` would otherwise freeze <cwd>/~bob/x: only
+// `weave bind --root=~bob/x` would otherwise bind <cwd>/~bob/x: only
 // ~/ is expanded, as in a config.
-func TestFreezeRejectsARootUnderAnotherUsersHome(t *testing.T) {
+func TestBindRejectsARootUnderAnotherUsersHome(t *testing.T) {
 	root := newRootCommand(application{})
-	root.SetArgs([]string{"freeze", "--root=~bob/x"})
+	root.SetArgs([]string{"bind", "--root=~bob/x"})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "only a leading ~/") {
 		t.Fatalf("got %v, want the ~bob root rejected", err)

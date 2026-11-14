@@ -169,7 +169,7 @@ func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlaceme
 // its window or session gets a number. The job in the foreground of a
 // pane's terminal, if any, is typed at its prompt but not run: ps rebuilds
 // it from its arguments, losing quotes, pipes and variables, so the user
-// checks it first. The active window and panes are focused, so freezing
+// checks it first. The active window and panes are focused, so binding
 // keeps where you were. A pane started with a command, rather than a shell,
 // gets that command, as tmux holds it, in the directory it started in. The pane weaver runs in gets no
 // command: its job is weaver. A pane with a job keeps its shell's
@@ -504,7 +504,7 @@ func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, ind
 		return err
 	}
 	if _, err := t.run("set-option", "-w", "-t", ids[0], throwawayTag, "1"); err != nil {
-		_, _ = t.run("kill-window", "-t", ids[0]) // untagged, freeze would capture it
+		_, _ = t.run("kill-window", "-t", ids[0]) // untagged, bind would capture it
 		return err
 	}
 	for _, tag := range [][]string{{"-w", "-t", ids[0], taskOfTag, source}, {"-p", "-t", ids[1], taskTag, argument(task.Command().String())}} {

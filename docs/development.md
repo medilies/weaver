@@ -20,10 +20,10 @@ implements them and `cmd/weave` wires everything together.
 ```mermaid
 graph TD
     subgraph cmd["cmd/weave (Cobra CLI)"]
-        CLI["weave, freeze, edit, kill, list, show, completion"]
+        CLI["weave, bind, edit, kill, list, show, completion"]
     end
     subgraph app["internal/session/app"]
-        UC["BrowseProjects, OpenProject, FreezeProject,<br/>EditProject, KillProject, ListProjects"]
+        UC["BrowseProjects, OpenProject, BindProject,<br/>EditProject, KillProject, ListProjects"]
         AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
     end
     subgraph domain["internal/session/domain"]
