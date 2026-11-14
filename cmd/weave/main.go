@@ -21,8 +21,6 @@ type application struct {
 	openProject    app.OpenProject
 	killProject    app.KillProject
 	listProjects   app.ListProjects
-	// documents reads configs as stored, for `show`.
-	documents app.ProjectDocuments
 	// sessions lists running tmux sessions, to complete `bind`.
 	sessions domain.SessionLister
 	// settings reads the settings, once.
@@ -77,7 +75,6 @@ func wire() (application, error) {
 		openProject:  app.NewOpenProject(projects, tmux, workspace, commands),
 		killProject:  app.NewKillProject(tmux, tmux, projects, commands, infra.NewLineAcknowledger(os.Stdin, os.Stderr)),
 		listProjects: app.NewListProjects(projects, tmux),
-		documents:    projects,
 		settings:     settings,
 	}
 	weaver.browseProjects = app.NewBrowseProjects(lazyBrowser(builtOnce(settings, infra.NewTeaBrowser)), confirm, projects, projects, workspace, tmux,

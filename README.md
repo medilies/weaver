@@ -57,8 +57,8 @@ weaver ~/dev/weaver | api › task dev |
                     |                |  app shell   flutter run   emulator
                     |                | app shell  ~/dev/nimbus/app  window app
 
-enter open · b bind · e edit · E raw · x kill · d delete · tab pane
-t tasks · y config · / filter · q quit
+enter open · s start · b bind · e edit · E raw · x kill · d delete
+tab pane · t tasks · y config · / filter · q quit
 ```
 
 ## Install
@@ -90,14 +90,10 @@ weave bind scratch    # same, starting from the windows, panes and commands of t
 weave bind .          # same, from the session you're in
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
-weave -s nimbus       # start it, or restore its windows, without attaching: you stay where you are
+weave -d nimbus       # start it, or restore its windows, without attaching: you stay where you are
 weave                 # browse the projects, to open, bind, edit, kill or delete them, or run their tasks
-weave edit nimbus     # change its config in the config form, each field checked as you type
-weave edit --raw nimbus  # edit it in $VISUAL or $EDITOR instead, keeping comments; only a valid config is saved
 weave kill nimbus     # kill the session and everything running in it
 weave kill            # same, for the session you're in, if weave started it
-weave list            # registered projects, and which sessions run
-weave show nimbus     # print its config file
 ```
 
 weaver runs only what your config says: it knows no git and clones

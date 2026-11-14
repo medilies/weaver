@@ -105,11 +105,11 @@ or that leaves a quote open, marks its pane.
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it and puts you where it runs, r runs it and keeps you in the browser, saying where it runs, esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
-| enter | open it, like `weave <project>` |
-| s | start it, like `weave -s <project>`: the browser stays, saying what was started |
+| enter | open it: start it, then attach or switch, like `weave <project>` |
+| s | start it, like `weave -d <project>`: the browser stays, saying what was started |
 | b | bind the current directory, like `weave bind` |
-| e | change its config in the [config form](config-form.md), like `weave edit <project>` |
-| E | edit its config in your editor, like `weave edit --raw <project>` |
+| e | change its config in the [config form](config-form.md) |
+| E | edit its config raw in $VISUAL, else $EDITOR, else vi (with VS Code, `VISUAL="code --wait"`), keeping its comments; only a valid config is saved: on a mistake, weaver asks whether to discard your changes, and otherwise reopens the editor on what you wrote |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc hides the config, then clears the filter, first) |

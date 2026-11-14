@@ -53,14 +53,14 @@ func TestEveryCommandNameIsAReservedProjectName(t *testing.T) {
 	}
 }
 
-// `weave --start` alone has no project to open: it doesn't fall back
+// `weave --detached` alone has no project to open: it doesn't fall back
 // to the browser.
 func TestStartNeedsAProject(t *testing.T) {
 	root := newRootCommand(application{})
-	root.SetArgs([]string{"--start"})
+	root.SetArgs([]string{"--detached"})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "needs a project") {
-		t.Fatalf("got %v, want --start refused without a project", err)
+		t.Fatalf("got %v, want --detached refused without a project", err)
 	}
 }
 
@@ -96,12 +96,12 @@ func (foreignSession) Restore(domain.ProjectName, []domain.WindowPlacement) erro
 	return errors.New("restored")
 }
 
-// `weave -s shop` prints what it did, and doesn't attach.
+// `weave -d shop` prints what it did, and doesn't attach.
 func TestStartPrintsWhatItDid(t *testing.T) {
 	root := newRootCommand(application{openProject: app.NewOpenProject(shopRegistered{}, foreignSession{}, nil, nil)})
 	var out bytes.Buffer
 	root.SetOut(&out)
-	root.SetArgs([]string{"-s", "shop"})
+	root.SetArgs([]string{"-d", "shop"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -110,10 +110,10 @@ func TestStartPrintsWhatItDid(t *testing.T) {
 	}
 }
 
-// `weave -s .` starts the project holding the current directory.
+// `weave -d .` starts the project holding the current directory.
 func TestStartDotLooksUpTheCurrentDirectory(t *testing.T) {
 	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, infra.NewLocalWorkspace(), nil)})
-	root.SetArgs([]string{"-s", "."})
+	root.SetArgs([]string{"-d", "."})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {
 		t.Fatalf("got %v, want ErrNoProjectAt from looking up the current directory", err)

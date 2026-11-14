@@ -129,7 +129,7 @@ func (uc OpenProject) containing(dir string) (domain.Project, error) {
 	found := innermost(resolved)
 	switch len(found) {
 	case 0:
-		err := fmt.Errorf("%w: %s (weave list shows the registered projects)", ErrNoProjectAt, dir)
+		err := fmt.Errorf("%w: %s (run weave to see the registered projects)", ErrNoProjectAt, dir)
 		if len(invalid) > 0 {
 			err = fmt.Errorf("%w; skipped invalid configs:\n%w", err, errors.Join(invalid...))
 		}
@@ -215,7 +215,7 @@ func (uc OpenProject) start(project domain.Project) error {
 			return err
 		}
 		if !exists {
-			return fmt.Errorf("root: %w: %s (create it, or change it with weave edit %s)", ErrMissingDirectory, root, project.Name())
+			return fmt.Errorf("root: %w: %s (create it, or edit %s with e in weave)", ErrMissingDirectory, root, project.Name())
 		}
 	}
 	for _, cmd := range setup {
@@ -271,7 +271,7 @@ func (uc OpenProject) checkWindowDirs(project domain.ProjectName, window domain.
 			return err
 		}
 		if !exists {
-			return fmt.Errorf("%s: %w: %s (create it, or change it with weave edit %s)",
+			return fmt.Errorf("%s: %w: %s (create it, or edit %s with e in weave)",
 				where(window, pane), ErrMissingDirectory, pane.Dir(), project)
 		}
 	}

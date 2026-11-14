@@ -69,40 +69,22 @@ func complete(t *testing.T, args ...string) []string {
 func TestProjectNameCompletion(t *testing.T) {
 	t.Run("weave suggests projects, noting running ones, besides commands", func(t *testing.T) {
 		got := complete(t, "")
-		for _, want := range []string{"nimbus", "shop\trunning", "list\tList registered projects and whether their session runs"} {
+		for _, want := range []string{"nimbus", "shop\trunning", "kill\tKill a project's tmux session and everything running in it"} {
 			if !slices.Contains(got, want) {
 				t.Fatalf("got %q, want it to contain %q", got, want)
 			}
 		}
 	})
 
-	for _, command := range []string{"kill", "show"} {
-		t.Run(command+" suggests projects only", func(t *testing.T) {
-			if got, want := complete(t, command, ""), []string{"nimbus", "shop\trunning"}; !slices.Equal(got, want) {
-				t.Fatalf("got %q, want %q", got, want)
-			}
-		})
-	}
+	t.Run("kill suggests projects only", func(t *testing.T) {
+		if got, want := complete(t, "kill", ""), []string{"nimbus", "shop\trunning"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
 
 	t.Run("suggests nothing after the project", func(t *testing.T) {
 		if got := complete(t, "kill", "shop", ""); len(got) != 0 {
 			t.Fatalf("got %q, want no suggestions", got)
 		}
 	})
-}
-
-func TestListCommand(t *testing.T) {
-	weaver := application{listProjects: app.NewListProjects(registered{"nimbus", "shop"}, running{"shop"})}
-	root := newRootCommand(weaver)
-	var out bytes.Buffer
-	root.SetOut(&out)
-	root.SetArgs([]string{"list"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got, want := out.String(), "nimbus  -\nshop    running\n"; got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
 }

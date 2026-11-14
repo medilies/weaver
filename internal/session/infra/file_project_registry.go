@@ -35,8 +35,8 @@ func NewFileProjectRegistry(dir string) FileProjectRegistry {
 	return FileProjectRegistry{dir: dir, warnings: io.Discard, warned: map[string]bool{}}
 }
 
-// WithWarnings writes to w why config files are skipped, e.g. "edit.yml",
-// which `weave edit` can't open since it runs the edit command.
+// WithWarnings writes to w why config files are skipped, e.g. "kill.yml",
+// which `weave kill` can't open since it runs the kill command.
 func (r FileProjectRegistry) WithWarnings(w io.Writer) FileProjectRegistry {
 	r.warnings = w
 	return r

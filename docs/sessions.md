@@ -9,7 +9,7 @@ running, weaver first:
 1. runs the config's `setup` commands in the root, one after another,
    and stops if one fails or you press Ctrl-C, starting no session;
 2. checks every pane's directory exists, and stops if one is missing,
-   saying to create it or change it with `weave edit`: weaver creates
+   saying to create it or change it with `e` in the browser: weaver creates
    none;
 3. builds the session, sized like your terminal so percentage splits
    come out right, labels its panes in their top border, and types each
@@ -34,8 +34,9 @@ didn't start is only attached. Neither runs the `setup` commands.
 
 ## Start
 
-`weave --start <project>` (`-s`, `.` too) does all of the above but
-attach: the session starts, or its missing windows come back, and you
+Opening is starting, then attaching: `weave --detached <project>`
+(`-d`, as in tmux, `.` too) does all of the above but attach, so the
+session starts, or its missing windows come back, and you
 stay where you are, told what was done: `Started shop.`, `Restored
 "logs" in shop.` or `shop is already running.` In the browser, `s`
 does the same and keeps the browser open, the notice saying it.

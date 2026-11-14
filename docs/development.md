@@ -2,7 +2,7 @@
 
 ```sh
 go build ./...               # build everything
-go run ./cmd/weave show X    # run without building
+go run ./cmd/weave X         # run without building
 go test ./...                # run tests (the tmux adapter's need tmux)
 golangci-lint run ./...      # format check, static analysis, layer boundaries
 ```

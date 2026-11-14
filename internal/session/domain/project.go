@@ -16,7 +16,9 @@ import (
 var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
 // reservedNames are weave's own commands: `weave <name>` runs the
-// command, so a project named after one could never be opened.
+// command, so a project named after one could never be opened. edit,
+// list and show left the CLI in v0.7.0 but stay reserved, so bringing
+// one back breaks no config.
 //
 // TODO: compare names case-insensitively? "Edit" passes, and on a
 // case-insensitive filesystem (macOS) "Edit.yml" and "edit.yml" are one

@@ -937,7 +937,7 @@ func (m configForm) entered() (configForm, tea.Cmd) {
 	switch at.field {
 	case fieldGridAreas:
 		if window, ok := m.windowAt(at.window); ok && !areasTypable(window) {
-			m.problem = "A pane's name holds a comma or a /, which separate the areas typed here: change them with weave edit --raw."
+			m.problem = "A pane's name holds a comma or a /, which separate the areas typed here: save, then change them raw with E in weave."
 			return m, nil
 		}
 	case fieldStarts, fieldClear, fieldFocus, fieldLayout:

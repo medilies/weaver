@@ -9,7 +9,7 @@ import (
 )
 
 func newRootCommand(weaver application) *cobra.Command {
-	var start bool
+	var detached bool
 	root := &cobra.Command{
 		Use:   "weave [project | .]",
 		Short: "Open a project's tmux session",
@@ -20,8 +20,9 @@ stopping if one fails. Inside tmux, it switches to the session instead.
 
 weave . opens the project whose root contains the current directory.
 
-With --start, weave creates the session, or restores the windows it
-lacks, without attaching or switching, and says what it did.
+With --detached, weave starts the project: it creates the session, or
+restores the windows it lacks, without attaching or switching, and says
+what it did.
 
 Without a project, weave lists the projects and the selected one's
 summary and config, to open, start, bind, edit, kill or delete them, or
@@ -30,7 +31,7 @@ run their tasks.`,
 		ValidArgsFunction: completeProjects(weaver),
 		SilenceUsage:      true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if start {
+			if detached {
 				return startProject(cmd, weaver, args)
 			}
 			// "." can't be a project name, which starts with a letter or digit.
@@ -52,13 +53,10 @@ run their tasks.`,
 			return weaver.openProject.HandleDir(dir)
 		},
 	}
-	root.Flags().BoolVarP(&start, "start", "s", false, "start the session without attaching or switching to it")
+	root.Flags().BoolVarP(&detached, "detached", "d", false, "start the session without attaching or switching to it")
 	root.AddCommand(
 		newBindCommand(weaver),
-		newEditCommand(weaver),
 		newKillCommand(weaver),
-		newListCommand(weaver),
-		newShowCommand(weaver),
 	)
 	return root
 }
@@ -67,7 +65,7 @@ run their tasks.`,
 // the current directory for ".", and prints what it did.
 func startProject(cmd *cobra.Command, weaver application, args []string) error {
 	if len(args) == 0 {
-		return errors.New("--start needs a project, or . for the current directory's")
+		return errors.New("--detached needs a project, or . for the current directory's")
 	}
 	var done string
 	var err error

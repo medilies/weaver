@@ -130,6 +130,13 @@ form() {
 	wait_for '↑↓ move'
 }
 
+# edit <project>: the project's config form, from the browser's e.
+edit() {
+	browse "$1" || return
+	keys e
+	wait_for '↑↓ move'
+}
+
 # split_at: the column the drawing's second pane starts at, its prompt
 # on the same line as the first's; 0 when no line has two prompts.
 split_at() {
@@ -272,7 +279,7 @@ unzoomed_kill() {
 
 # started <project>: the project's session, started from term.
 started() {
-	run "weave $1 --start" || return
+	run "weave $1 --detached" || return
 	until_ 10 T has-session -t "=$1" 2>/dev/null || fail "$1 didn't start"
 }
 
@@ -428,7 +435,7 @@ s9() {
 }
 
 s10() {
-	form 'weave edit shop' || return
+	edit shop || return
 	cursor_to focus || return
 	keys Enter C-s
 	wait_for 'Save these changes to the config?' || return
@@ -498,7 +505,7 @@ names_only() {
 
 s15() {
 	settings 'selected-colour: 214' 'keys: { split-right: "|", split-below: "-" }'
-	form 'weave edit notes' || return
+	edit notes || return
 	test -e "$W/cfg/weaver/settings.schema.json" || fail "no settings.schema.json" || return
 	cursor_to 'code +shell' || return
 	keys Right
@@ -513,26 +520,25 @@ s15() {
 	wait_for 'pane 1   pane 2' || return
 	T capture-pane -p -e -t "$AT" | grep -qF '38;5;214' || fail "nothing in colour 214" || return
 	keys u Escape
-	wait_for 'Nothing saved.'
+	wait_for 'Nothing done.'
 }
 
 s16() {
 	settings 'keys: { remove: u }'
 	local before
 	before=$(config notes)
-	run "VISUAL='touch $W/edited' weave edit --raw notes; echo exit=\$?" || return
+	run 'weave; echo exit=$?' || return
 	wait_for 'Error: /tmp/wvt/cfg/weaver/settings.yml: keys.remove: key taken: "u" already does undo' || return
-	until_ 5 has_line "$AT" exit=1 || fail "weave edit didn't exit 1" || return
-	test ! -e "$W/edited" || fail "the editor opened" || return
+	until_ 5 has_line "$AT" exit=1 || fail "weave didn't exit 1" || return
+	! shows 'q quit' || fail "the browser opened" || return
 	expect "the config" "$(config notes)" "$before" || return
-	run 'weave list | cut -d" " -f1 | paste -sd" " -' || return
-	until_ 5 has_line "$AT" 'blog notes shop' || fail "weave list didn't list the projects" || return
 	run 'weave --version >/dev/null && weave completion bash >/dev/null && echo both-ran' || return
-	until_ 5 has_line "$AT" both-ran || fail "--version or completion failed"
+	until_ 5 has_line "$AT" both-ran || fail "--version or completion failed" || return
+	started notes
 }
 
 s17() {
-	form 'weave edit notes' || return
+	edit notes || return
 	cursor_to areas || return
 	keys Enter C-u
 	keys -l 'files, edit / files, logs'
@@ -549,7 +555,7 @@ s17() {
 }
 
 s18() {
-	form 'weave edit notes' || return
+	edit notes || return
 	cursor_to layout || return
 	local before size
 	before=$(split_at)

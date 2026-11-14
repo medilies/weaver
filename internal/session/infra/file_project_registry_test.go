@@ -594,7 +594,7 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		}
 
 		want := "warning: skipping " + filepath.Join(dir, "edit.yml") +
-			": project name is a weave command: \"edit\"; rename it to register it\n" +
+			": project name is reserved for a weave command: \"edit\"; rename it to register it\n" +
 			"warning: skipping " + filepath.Join(dir, "my.shop.yml") +
 			": " + domain.ErrInvalidProjectName.Error() + "; rename it to register it\n"
 		if got := warnings.String(); got != want {

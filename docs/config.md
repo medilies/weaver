@@ -125,8 +125,9 @@ d c c
 ## Validation, comments and schema
 
 Unknown fields are errors: they are usually typos. Comments are kept by
-`weave edit --raw`, but not when `weave bind` replaces a config or the
-config form saves it: weave edit asks first when a config has some.
+editing a config raw (`E` in the browser), but not when `weave bind`
+replaces a config or the config form saves it: weaver asks first when a
+config has some.
 
 When weaver saves a config, it writes `weaver.schema.json` next to it
 and points the config at it with a first line of
@@ -135,5 +136,5 @@ as VS Code (with its YAML extension) complete fields and flag mistakes
 as you type.
 
 Configs from v0.1.0 may still have `repositories:`, which weaver no
-longer reads: delete it with `weave edit --raw <project>`. Saving also
+longer reads: delete it by editing the config raw, with `E` in the browser. Saving also
 refreshes `weaver.schema.json`, which until then still allows it.

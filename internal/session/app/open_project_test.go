@@ -246,7 +246,7 @@ func TestOpenProject(t *testing.T) {
 		workspace := everything()
 		delete(workspace.dirs, "/srv/shop/logs")
 		err := openShop(t, &fakeSessions{}, workspace)
-		if err == nil || !strings.HasSuffix(err.Error(), "/srv/shop/logs (create it, or change it with weave edit shop)") {
+		if err == nil || !strings.HasSuffix(err.Error(), "/srv/shop/logs (create it, or edit shop with e in weave)") {
 			t.Fatalf("got %v, want a hint to create it or edit shop", err)
 		}
 	})

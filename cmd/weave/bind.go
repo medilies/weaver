@@ -19,7 +19,7 @@ func newBindCommand(weaver application) *cobra.Command {
 		Short: "Bind a directory, or a running session if given, into a project config through the config form",
 		Long: `weave bind opens the config form on a new project: its name, its
 root (the current directory unless --root says otherwise) and one
-window, to change as weave edit does, then saves it.
+window, to change as editing does in the browser, then saves it.
 
 Given a running tmux session, the windows and panes start as the session
 has them, and the name as the session's: lay them out by hand, then let

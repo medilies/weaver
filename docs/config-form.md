@@ -1,7 +1,7 @@
 # The config form
 
-`weave bind` and `weave edit` (keys `b` and `e` in the
-[browser](browser.md)) open the config form, which changes a project in
+`weave bind`, and keys `b` and `e` in the [browser](browser.md), open
+the config form, which changes a project in
 place.
 
 It shows a project as cards: the project's, then the
@@ -40,11 +40,11 @@ adds a pane, and a pane no longer named is removed with what it runs:
 rename a pane in its card instead, which renames it in the areas too.
 Changing how many columns or rows there are makes them equal. When a
 pane's name holds a comma or a `/`, the areas can't be typed there:
-use `weave edit --raw`. Panes are
+edit the config raw, with `E` in the browser. Panes are
 saved in the order the config lists them, new ones last.
 
-Saving rewrites the config, so its comments go: `weave edit` asks first
-when a config has some. To keep them, use `weave edit --raw` instead.
+Saving rewrites the config, so its comments go: weaver asks first when
+a config has some. To keep them, edit it raw with `E` instead.
 
 ## Keys
 

@@ -56,6 +56,22 @@ as the preview, waits for a use of its own.
 
 Each says what it is for; picked by judgement, not by a trigger.
 
+### `weave edit`, `weave list` and `weave show` again (S)
+
+**Use**: a user asks to edit, list or show configs from the shell, or a
+script needs one of them. They left the CLI in v0.7.0 for the browser,
+which does each ([ADR 0003](adr/0003-edit-list-and-show-leave-the-cli.md)).
+
+- `weave edit [--raw] <project>`: the config form, or the config raw in
+  the editor, keeping it only if valid; `Saved <project>.`, `No
+  changes.` or `Nothing saved.`. `EditProject` still does both.
+- `weave list`: each registered project and `running` or `-`, aligned.
+  `ListProjects` still does it, for completion.
+- `weave show <project>`: the config as stored, through
+  `app.ProjectDocuments`.
+- Their names are still reserved, so adding one back breaks no config.
+  Bring back only the one asked for, and its terminal scenario.
+
 ### Unit tests for the config form and the browser (M)
 
 **Use**: the config form's logic (undo and redo, the diff, a grid
@@ -155,7 +171,7 @@ output.
   doesn't change.
 - `infra`: a value decodes as a string or `{from: …}` (a custom
   `UnmarshalYAML`), and the schema uses `oneOf`.
-- The browser summary and `weave show` print
+- The browser summary and details print
   `DB_PASSWORD from pass show shop/db`. weaver never has the value to
   print.
 - The warnings can check that the `from` program is on `PATH`.
@@ -328,7 +344,7 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   the safe way round: the editor warns, and weave still loads the
   config. Tightening the parsers could reject released configs that load
   today, and every other value object trims its input (`oneLine`).
-- **`weave edit` races.** Edits are lost if the config is deleted while
+- **Editing races.** Edits are lost if the config is deleted while
   the editor is open (`ErrProjectNotFound`), and nothing protects
   against a lost update from a concurrent `weave bind`.
 - **Binding a pane with a job.** It is captured in its shell's directory,

@@ -10,8 +10,9 @@ var (
 	// carry safely.
 	ErrInvalidProjectName = errors.New("project name must start with a letter or digit and contain only letters, digits, '-' and '_'")
 	// ErrReservedProjectName is returned when a project name is one of
-	// weave's commands, which `weave <name>` would run instead.
-	ErrReservedProjectName = errors.New("project name is a weave command")
+	// weave's commands, which `weave <name>` would run instead, or one
+	// kept for them.
+	ErrReservedProjectName = errors.New("project name is reserved for a weave command")
 	// ErrEmptyProjectRoot is returned when a project root path is blank.
 	ErrEmptyProjectRoot = errors.New("project root must not be empty")
 	// ErrRelativeProjectRoot is returned when a project root is not an
