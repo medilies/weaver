@@ -2168,9 +2168,10 @@ func (m configForm) putChoices(s *section, label string, options []string, selec
 
 // scrolled is the first line shown, keeping the row the cursor is on and
 // the line below it, where an error shows, in view, or its first lines
-// when it is too tall for that; on the last row, down to the page's end,
-// where the cards around it close. Until the terminal's size is known,
-// the top.
+// when it is too tall for that; on the first row, up to the page's top,
+// where the cards around it open, rows the cursor skips included; on the
+// last row, down to the page's end, where they close. Until the
+// terminal's size is known, the top.
 func (m configForm) scrolled() int {
 	if m.height == 0 {
 		return 0
@@ -2178,6 +2179,9 @@ func (m configForm) scrolled() int {
 	page := m.layout()
 	height := m.bodyHeight()
 	first, last := max(page.cursor, 0), max(page.cursorEnd, 0)
+	if len(page.spots) > 0 && page.spots[0] == m.focus && last < height {
+		first = 0
+	}
 	if len(page.spots) > 0 && page.spots[len(page.spots)-1] == m.focus {
 		last = max(last, len(page.lines)-2)
 	}

@@ -107,6 +107,7 @@ Each is a function `sN` in the script, starting fresh. *Started* means started w
 | 21 | `notes` started: `weave`, select `notes`, zoom `code` on `edit` from outside, `p`, `p`, unzoom | Zoomed, the preview shows `edit` alone, named alone in the pane list, its levels below. After `p`, the drawing selects `edit` too. Unzoomed, both panes are back, `edit` still selected. |
 | 22 | `notes` started: `weave`, select `notes`, Tab, `p`, Tab, `p`, `t`, ↓, ↑ | The preview selects `files`, then `edit`; the drawing keeps `edit`, then selects `files`, and the preview keeps `files`. Moving between `ls` and `echo saved` in the task list selects `files` and `edit` in the preview. |
 | 23 | `notes` started, `code` zoomed on `edit`: `weave kill notes` | `notes` is gone and `term` still runs: weave unzooms first, as tmux 3.4 crashes killing a session with a zoomed window, taking every session along. |
+| 24 | `weave`, select `notes`, `e`, ↓ until the project card scrolls out of view, ↑ back to `root` | The project card shows whole again, its border and the `name` row above `root` included, though the cursor never stops on `name`. |
 
 ## Sample projects
 

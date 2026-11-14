@@ -602,6 +602,22 @@ s20() {
 	wait_for 'this browser'
 }
 
+s24() {
+	edit notes || return
+	local i
+	for ((i = 0; i < 60; i++)); do
+		lacks '╭─ project' && break
+		step Down || return
+	done
+	lacks '╭─ project' || fail "the form never scrolled" || return
+	for ((i = 0; i < 60; i++)); do
+		screen | grep -qE -- '› +root' && break
+		step Up || return
+	done
+	wait_for '╭─ project' || return
+	shows '   name      notes' || fail "the name row stayed hidden"
+}
+
 # zoom <session:window> <pane>: the window zoomed on the pane named so.
 zoom() {
 	local pane
