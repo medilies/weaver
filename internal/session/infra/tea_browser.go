@@ -15,8 +15,8 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// TeaBrowser shows the registered projects full screen: their names and
-// roots on the left, narrowed by a filter, the selected one's summary and
+// TeaBrowser shows the registered projects full screen: their names on
+// the left, narrowed by a filter, the selected one's summary and
 // a drawing of its windows in the middle, or the preview of the selected
 // window of its owned session, its tasks on the right, and what the last
 // action did below. It only shows and picks: the use case acts. Shown
@@ -81,9 +81,9 @@ var browserKeys = map[string]app.Action{
 }
 
 var (
-	runningMark  = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("●")
+	runningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	runningMark  = runningStyle.Render("●")
 	cursorStyle  = lipgloss.NewStyle().Reverse(true)
-	rootStyle    = lipgloss.NewStyle().Faint(true)
 	titleStyle   = lipgloss.NewStyle().Bold(true)
 	keysStyle    = lipgloss.NewStyle().Faint(true)
 	problemStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
@@ -528,7 +528,7 @@ func (m browser) frame() (notice, list, tasks string, height, width int) {
 	height = max(m.height-lipgloss.Height(notice)-1-2, 1)
 	if len(m.projects) > 0 {
 		projects := m.list(height)
-		list = column("projects", projects, lipgloss.Width(projects)+cardSides, height, m.look.edge(!m.tasking))
+		list = column(projectListTitle, projects, lipgloss.Width(projects)+cardSides, height, m.look.edge(!m.tasking))
 	}
 	tasks, _ = m.taskColumn(taskListWidth(m.projects, m.width), height)
 	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-lipgloss.Width(tasks)-cardSides, 1)
@@ -648,43 +648,48 @@ func (m browser) keys() (string, []hotspot) {
 	return cut(line+keys, spots, m.width)
 }
 
-// list is the shown projects' names and dimmed roots, the selected one
-// highlighted and kept in view, and a mark for those whose session runs.
-// It takes at most half the width, cutting roots short from the left,
-// and keeps its width when the filter shows no project.
+// list is the shown projects' names, those whose session runs in green
+// after a mark, the selected one highlighted and kept in view, the mark
+// left out of the highlight so that it looks the same on every line. It
+// keeps its width when the filter shows no project.
 func (m browser) list(height int) string {
 	shown := m.shown()
-	nameWidth, rootWidth := m.listColumns()
+	nameWidth := m.nameWidth()
 	first := m.firstShown(height)
 	lines := make([]string, 0, len(shown)-first)
 	for i, project := range shown[first:] {
-		mark := " "
+		mark, style := " ", lipgloss.NewStyle()
 		if project.Running() {
-			mark = runningMark
+			mark, style = runningMark, runningStyle
 		}
-		name := fmt.Sprintf("%s %-*s ", mark, nameWidth, project.Name())
-		path := lipgloss.NewStyle().Width(rootWidth + 1).Render(shortened(root(project), rootWidth))
 		if first+i == m.cursor {
-			lines = append(lines, cursorStyle.Render(name)+cursorStyle.Faint(true).Render(path))
-		} else {
-			lines = append(lines, name+rootStyle.Render(path))
+			style = style.Reverse(true)
 		}
+		lines = append(lines, mark+" "+style.Render(fmt.Sprintf("%-*s ", nameWidth, project.Name())))
 	}
 	if len(m.projects) == 0 {
 		return ""
 	}
-	return lipgloss.NewStyle().Width(nameWidth + rootWidth + 4).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Width(m.listWidth()).Render(strings.Join(lines, "\n"))
 }
 
-// listColumns are the widths of the list's names and roots: of all
-// projects, so filtering keeps the column still, the roots cut so that
-// "● name root " and the card fit in half the width.
-func (m browser) listColumns() (nameWidth, rootWidth int) {
+// projectListTitle is the title of the project list's card.
+const projectListTitle = "projects"
+
+// listWidth is the width of the project list: a mark and a name, or what
+// its card's title needs when wider.
+func (m browser) listWidth() int {
+	return max(m.nameWidth()+3, ansi.StringWidth(projectListTitle)+1)
+}
+
+// nameWidth is the width of the list's names: of all projects, so that
+// filtering keeps the column still.
+func (m browser) nameWidth() int {
+	width := 0
 	for _, project := range m.projects {
-		nameWidth = max(nameWidth, len(project.Name().String()))
-		rootWidth = max(rootWidth, ansi.StringWidth(root(project)))
+		width = max(width, len(project.Name().String()))
 	}
-	return nameWidth, min(rootWidth, max(m.width/2-nameWidth-4-cardSides, 0))
+	return width
 }
 
 // cardsBeside is the width the project list's card and the task list's
@@ -692,8 +697,7 @@ func (m browser) listColumns() (nameWidth, rootWidth int) {
 func (m browser) cardsBeside() int {
 	width := 0
 	if len(m.projects) > 0 {
-		nameWidth, rootWidth := m.listColumns()
-		width += nameWidth + rootWidth + 4 + cardSides
+		width += m.listWidth() + cardSides
 	}
 	if tasks := taskListWidth(m.projects, m.width); tasks > 0 {
 		width += tasks + cardSides
@@ -706,19 +710,6 @@ func (m browser) cardsBeside() int {
 // brings it back, or the list would end before the last line.
 func (m browser) firstShown(height int) int {
 	return max(min(m.top, m.cursor, len(m.shown())-height), m.cursor-height+1, 0)
-}
-
-// shortened is path cut from the left to fit width cells, "…" taking the
-// place of what is cut.
-func shortened(path string, width int) string {
-	over := ansi.StringWidth(path) - width
-	switch {
-	case over <= 0:
-		return path
-	case width == 0:
-		return ""
-	}
-	return ansi.TruncateLeft(path, over+1, "…")
 }
 
 // root is project's root with the home directory as "~", or nothing when

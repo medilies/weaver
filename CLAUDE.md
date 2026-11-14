@@ -37,7 +37,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | clear | Hiding a pane's before commands once they ran: `clear` is typed after them, then the note printed. Set on the project, a window or a pane, the lowest winning; off unless set | `clear:` | `Clearing`, `WithClearing`, `PanePlan.Clears()` |
 | note | Lines printed in a pane before its shell starts, or after its before commands when it clears | `note:` | `Pane.WithNote` |
 | session | A tmux session; a project's session is named after it | `weave bind [session]` | `RunningSession`, `Session*` ports |
-| running / not running | Whether a project's session exists | ● in the browser | `ProjectStatus.Running()` |
+| running / not running | Whether a project's session exists | ● and a green name in the browser | `ProjectStatus.Running()` |
 | owned session | A session weaver started; only those are restored | | `RunningSession.Owned()` |
 | capture | Reading a running session's windows and panes, for bind to start from | `weave bind [session]` | `SessionCapturer.Capture` |
 | plan | The windows and panes opening a project builds | | `SessionPlan`, `WindowPlan`, `PanePlan` |

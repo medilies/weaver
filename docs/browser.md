@@ -5,7 +5,7 @@ selected project's windows drawn as they open.
 
 ## Summary
 
-The browser lists the projects and their roots, a ● marking those whose session runs,
+The browser lists the projects, a ● and a green name marking those whose session runs,
 beside a summary of the selected one: how many of the
 configured windows a running session still has and which ones enter
 restores (a session weaver didn't start is left as it is); the root, or a

@@ -77,7 +77,7 @@ func (m browser) taskColumn(width, height int) (string, []int) {
 
 // taskList is the selected project's tasks under their window and pane,
 // ● before those still running, the selected one highlighted while the
-// cursor is in the list, kept in
+// cursor is in the list, the mark left out of the highlight, kept in
 // view in height lines cut to width; with the task each line shows, or -1.
 func (m browser) taskList(width, height int) ([]string, []int) {
 	// Cut, as every line is, so that each stays one row, as clicks count them.
@@ -94,20 +94,16 @@ func (m browser) taskList(width, height int) ([]string, []int) {
 			lines = append(lines, keysStyle.Render(ansi.Truncate(group, width, "…")))
 			tasks = append(tasks, -1)
 		}
-		indent := "  "
-		runs := m.taskRuns(task.at)
-		if runs {
-			indent = "● "
+		mark := " "
+		if m.taskRuns(task.at) {
+			mark = runningMark
 		}
-		label := ansi.Truncate(indent+task.label, width, "…")
-		switch {
-		case m.tasking && i == m.selectedTask(len(listed)):
+		label := ansi.Truncate(task.label, max(width-2, 0), "…")
+		if m.tasking && i == m.selectedTask(len(listed)) {
 			selected = len(lines)
-			label = cursorStyle.Render(label + strings.Repeat(" ", width-ansi.StringWidth(label)))
-		case runs:
-			label = strings.Replace(label, "●", runningMark, 1)
+			label = cursorStyle.Render(label + strings.Repeat(" ", max(width-2-ansi.StringWidth(label), 0)))
 		}
-		lines = append(lines, label)
+		lines = append(lines, mark+" "+label)
 		tasks = append(tasks, i)
 	}
 	first := max(selected-height+1, 0)
