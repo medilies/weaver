@@ -44,9 +44,11 @@ and turned into splits in the config form, and window miniatures. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-Since v0.6.0: the live preview, designed on 2026-11-14. Building the
-overviews concurrently, so the summary and the ● marks stay as live as
-the preview, waits for a use of its own.
+Since v0.6.0: the live preview, designed on 2026-11-14, start, running a
+task while staying in the browser, and the task list's ● marks kept up
+to date. Building the overviews concurrently, so the summary and the
+project list's ● marks stay as live as the preview, waits for a use of
+its own.
 
 ## Candidates
 

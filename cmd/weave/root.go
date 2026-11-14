@@ -13,19 +13,19 @@ func newRootCommand(weaver application) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "weave [project | .]",
 		Short: "Open a project's tmux session",
-		Long: `weave <project> attaches to the project's tmux session, starting it
+		Long: `weave <project> attaches to the project's tmux session, creating it
 first from ~/.config/weaver/projects/<project>.yml when it
 isn't running, after running the config's setup commands in the root,
 stopping if one fails. Inside tmux, it switches to the session instead.
 
 weave . opens the project whose root contains the current directory.
 
-With --start, weave starts the session, or restores the windows it
+With --start, weave creates the session, or restores the windows it
 lacks, without attaching or switching, and says what it did.
 
 Without a project, weave lists the projects and the selected one's
-summary and config, to open, bind, edit, kill or delete them, or run
-their tasks.`,
+summary and config, to open, start, bind, edit, kill or delete them, or
+run their tasks.`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		SilenceUsage:      true,

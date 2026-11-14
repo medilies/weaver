@@ -775,7 +775,8 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 // their places through the first one found, which names their window, and
 // each shows its visible screen, colours kept, its trailing blank lines
 // dropped: a pane just cleared then shows its prompt at the bottom. The
-// pane weaver runs in isn't captured.
+// pane weaver runs in isn't captured. A zoomed window shows its zoomed
+// pane alone, as tmux draws it.
 func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
@@ -792,52 +793,78 @@ func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (dom
 		}
 	}
 	gone := func(err error) error {
-		if absent(err) {
+		switch {
+		case absent(err):
 			return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+		case lost(err):
+			return fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
 		}
 		return err
 	}
-	out, err := t.run("list-panes", "-t", panes[0].id, "-F",
-		"#{window_width} #{window_height} #{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} "+sized("@label"))
+	out, err := t.run("list-panes", "-t", panes[0].id, "-F", "#{window_width} #{window_height} #{window_zoomed_flag} "+
+		"#{pane_active} #{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} "+sized("@label"))
 	if err != nil {
 		return domain.WindowPreview{}, gone(err)
 	}
+	type paneRow struct {
+		id, label string
+		active    bool
+		place     [4]int // left, top, width and height
+	}
 	var width, height int
-	var previews []domain.PanePreview
+	var zoomed bool
+	var rows []paneRow
 	for line := range strings.Lines(out) {
-		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 8)
-		if len(fields) != 8 {
-			continue
+		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 10)
+		if len(fields) != 10 {
+			return domain.WindowPreview{}, fmt.Errorf("tmux list-panes: unexpected line %q", line)
 		}
-		var place [6]int // the window's width and height, then the pane's left, top, width and height
-		for i, field := range slices.Concat(fields[:2], fields[3:7]) {
-			if place[i], err = strconv.Atoi(field); err != nil {
+		var numbers [8]int // the window's width, height and zoom, the pane's activity, left, top, width and height
+		for i, field := range slices.Concat(fields[:4], fields[5:9]) {
+			if numbers[i], err = strconv.Atoi(field); err != nil {
 				return domain.WindowPreview{}, fmt.Errorf("tmux list-panes: unexpected line %q", line)
 			}
 		}
-		label := fields[7]
-		width, height = place[0], place[1]
-		id := fields[2]
-		pane := domain.NewPanePreview(place[2], place[3], place[4], place[5], verbatim(label), nil)
-		if id == t.opts.Pane {
-			pane = pane.Browsing() // captured, it would hold its own capture, over and over
-		} else {
-			shown, err := t.run("capture-pane", "-p", "-e", "-t", id)
+		width, height, zoomed = numbers[0], numbers[1], numbers[2] == 1
+		rows = append(rows, paneRow{id: fields[4], label: verbatim(fields[9]), active: numbers[3] == 1,
+			place: [4]int{numbers[4], numbers[5], numbers[6], numbers[7]}})
+	}
+	if zoomed { // the zoomed pane covers the others, still listed where they were
+		rows = slices.DeleteFunc(rows, func(row paneRow) bool { return !row.active })
+	}
+	previews := make([]domain.PanePreview, 0, len(rows))
+	for _, row := range rows {
+		var lines []string
+		if row.id != t.opts.Pane {
+			shown, err := t.run("capture-pane", "-p", "-e", "-t", row.id)
 			if err != nil {
 				return domain.WindowPreview{}, gone(err)
 			}
-			lines := strings.Split(shown, "\n")
+			lines = strings.Split(shown, "\n")
 			for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
 				lines = lines[:len(lines)-1]
 			}
-			pane = domain.NewPanePreview(place[2], place[3], place[4], place[5], verbatim(label), lines)
 		}
-		if index, ok := configured[id]; ok {
+		pane := domain.NewPanePreview(row.place[0], row.place[1], row.place[2], row.place[3], row.label, lines)
+		if row.id == t.opts.Pane {
+			pane = pane.RunningWeaver() // captured, it would hold its own capture, over and over
+		}
+		if index, ok := configured[row.id]; ok {
 			pane = pane.Configured(index)
 		}
 		previews = append(previews, pane)
 	}
-	return domain.NewWindowPreview(width, height, previews...), nil
+	if len(previews) == 0 {
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
+	}
+	return domain.NewWindowPreview(width, height, previews...)
+}
+
+// lost reports whether err is tmux not finding a pane or window, closed
+// since weaver found it.
+func lost(err error) bool {
+	failed, ok := errors.AsType[*tmuxError](err)
+	return ok && (strings.HasPrefix(failed.stderr, "can't find pane") || strings.HasPrefix(failed.stderr, "can't find window"))
 }
 
 // labelOf is the label the pane at index of window has in a running

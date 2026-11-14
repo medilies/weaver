@@ -53,12 +53,13 @@ colours, updated every second. The details' title ends in `· preview`.
 Its panes are matched to the config's as tasks find them, so their
 warnings, the levels below and `r` stay; a pane split by hand shows by
 its number, as "not in the config". The pane the browser runs in reads
-"this browser": captured, it would show the preview inside itself. `p` switches to the drawing and
+"this browser": captured, it would show the preview inside itself. A
+zoomed window shows its zoomed pane alone, as tmux draws it. `p` switches to the drawing and
 back, for as long as the browser stays open. The drawing comes back,
 the status line saying why, when the session ends or the window closes,
 and for a window the session lacks, which enter restores. Only the
-preview is live: the summary, the ● marks and the task list are as they
-were when the browser last showed the list.
+preview and the task list's ● marks are live: the summary and the project
+list's ● marks are as they were when the browser last showed the list.
 
 ## Tasks
 

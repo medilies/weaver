@@ -62,11 +62,6 @@ func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Proje
 		return app.Choice{}, err
 	}
 	last := final.(browser)
-	if preview, ok := last.shownPreview(); ok {
-		if index, inConfig := preview.Panes()[last.previewPane].InConfig(); inConfig {
-			last.pane = index
-		}
-	}
 	b.kept.drawings = last.drawings
 	if shown := last.shown(); len(shown) > 0 {
 		*b.kept = browserPlace{project: shown[last.cursor].Name(), window: last.window, pane: last.pane,
@@ -101,27 +96,34 @@ var (
 // drawn, the pane is its selected one, and the task the selected one in
 // the task list.
 type browser struct {
-	look          look
-	projects      []app.ProjectOverview
-	cursor        int
-	top           int
-	window        int
-	pane          int
-	task          int
-	tasking       bool
-	filter        string
-	filtering     bool // typing the filter
-	config        bool // the selected project's config shown instead of its drawing
-	drawings      bool // the drawing shown in place of the preview
-	live          app.LiveSessions
-	preview       previewed // the last preview captured, if hasPreview
-	hasPreview    bool
-	previewPane   int          // the selected pane of the preview, by its index in it
-	running       tasksRunning // the tasks last found running, if hasRunning
-	hasRunning    bool
-	notice        string
-	width, height int
-	choice        app.Choice
+	look       look
+	projects   []app.ProjectOverview
+	cursor     int
+	top        int
+	window     int
+	pane       int
+	task       int
+	tasking    bool
+	filter     string
+	filtering  bool // typing the filter
+	config     bool // the selected project's config shown instead of its drawing
+	drawings   bool // the drawing shown in place of the preview
+	live       app.LiveSessions
+	preview    previewed // the last preview captured, if hasPreview
+	hasPreview bool
+	// previewPane is the selected pane of the preview, by its index in
+	// it; pane follows it when the config has it.
+	previewPane     int
+	previewFailure  string       // why the last preview failed, told once
+	previewAsked    int          // the asks for a preview
+	previewAnswered int          // the last ask answered
+	running         tasksRunning // the tasks last found running, if hasRunning
+	hasRunning      bool
+	tasksAsked      int // the asks for the running tasks
+	tasksAnswered   int // the last ask answered
+	notice          string
+	width, height   int
+	choice          app.Choice
 }
 
 // shown are the projects whose names contain the filter, ignoring case.
@@ -189,8 +191,7 @@ func (m browser) paneMoved(by int) browser {
 		return m
 	}
 	if preview, ok := m.shownPreview(); ok {
-		m.previewPane = steppedIn(previewOrder(preview), m.previewPane, by)
-		return m
+		return m.previewPaneSelected(steppedIn(previewOrder(preview), m.previewPane, by))
 	}
 	window := windows[m.drawn(windows)]
 	order := drawnOrder(window, m.width, max(m.height-1, 1))
@@ -218,10 +219,10 @@ func (m browser) windowsShown() []domain.WindowPlan {
 	return shown[m.cursor].Project().Plan().Windows()
 }
 
-// Init captures the preview and finds the tasks still running, and asks
-// for them again every previewEvery.
+// Init starts the ticks asking for the preview and the running tasks
+// again; the first asks follow the terminal's size.
 func (m browser) Init() tea.Cmd {
-	return tea.Batch(m.fetch(), m.fetchTasks(), tick())
+	return tick()
 }
 
 // Update is m after msg, its list scrolled to keep the cursor in view,
@@ -233,21 +234,46 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next.top = next.firstShown(height)
 	before, beforeWindow, wanted := m.previewKey()
 	after, afterWindow, wants := next.previewKey()
-	if wants && (!wanted || before.Name() != after.Name() || beforeWindow != afterWindow) {
-		cmd = tea.Batch(cmd, next.fetch())
+	if wants != wanted || wants && (before.Name() != after.Name() || beforeWindow != afterWindow) {
+		next.hasPreview = false // kept, it would bring back what was selected in it
+		var fetch tea.Cmd
+		next, fetch = next.fetch()
+		cmd = tea.Batch(cmd, fetch)
 	}
-	if shown, was := next.shown(), m.shown(); len(shown) > 0 && (len(was) == 0 || was[m.cursor].Name() != shown[next.cursor].Name()) {
-		cmd = tea.Batch(cmd, next.fetchTasks())
+	if next.tasksAsked == 0 || next.selectedName() != m.selectedName() {
+		var fetch tea.Cmd
+		next, fetch = next.fetchTasks()
+		cmd = tea.Batch(cmd, fetch)
 	}
 	return next, cmd
+}
+
+// selectedName is the selected project's name, if one is shown.
+func (m browser) selectedName() domain.ProjectName {
+	if shown := m.shown(); len(shown) > 0 {
+		return shown[m.cursor].Name()
+	}
+	return domain.ProjectName{}
 }
 
 func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case previewTick:
-		return m, tea.Batch(m.fetch(), m.fetchTasks(), tick())
+		// An ask still unanswered isn't asked again, so slow answers can't
+		// pile up.
+		var preview, tasks tea.Cmd
+		if m.previewAsked == m.previewAnswered {
+			m, preview = m.fetch()
+		}
+		if m.tasksAsked == m.tasksAnswered {
+			m, tasks = m.fetchTasks()
+		}
+		return m, tea.Batch(preview, tasks, tick())
 	case tasksRunning:
-		m.running, m.hasRunning = msg, true
+		m.tasksAnswered = max(m.tasksAnswered, msg.asked)
+		if msg.asked == m.tasksAsked {
+			m.running, m.hasRunning = msg, true
+		}
 		return m, nil
 	case previewed:
 		return m.withPreview(msg), nil
@@ -294,7 +320,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	case "y":
 		m.config = !m.config
 	case "p":
-		return m.switchedView()
+		return m.switchedView(), nil
 	case "r":
 		windows := m.windowsShown()
 		if !m.selectedExited() {
@@ -452,7 +478,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 		}
 		if spot, ok := hotspotAt(laid.paneSpots, x); ok {
 			if _, previewing := m.shownPreview(); previewing {
-				m.previewPane = spot.item
+				m = m.previewPaneSelected(spot.item)
 			} else {
 				m.pane = spot.item
 			}

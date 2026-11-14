@@ -13,15 +13,18 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// previewEvery is how often the preview of the selected window is
-// captured again.
+// previewEvery is how often the preview of the selected window, and the
+// selected project's running tasks, are found again.
 const previewEvery = time.Second
 
-// previewTick asks for the selected window's preview again.
+// previewTick asks for the selected window's preview and the running
+// tasks again.
 type previewTick struct{}
 
-// previewed is the preview of a project's window, or why there is none.
+// previewed is the preview of a project's window, or why there is none,
+// in answer to the ask numbered asked.
 type previewed struct {
+	asked   int
 	project domain.ProjectName
 	window  domain.WindowName
 	preview domain.WindowPreview
@@ -34,8 +37,9 @@ func tick() tea.Cmd {
 }
 
 // previewKey is the project and window the preview is wanted for: the
-// selected window of the selected project, when the preview is shown and
-// the project's owned session has the window.
+// selected window of the selected project, when the preview is shown, the
+// project's owned session has the window, and the details have the room to
+// draw it.
 func (m browser) previewKey() (app.ProjectOverview, domain.WindowName, bool) {
 	shown := m.shown()
 	if m.drawings || m.config || len(shown) == 0 || m.live == nil {
@@ -43,7 +47,7 @@ func (m browser) previewKey() (app.ProjectOverview, domain.WindowName, bool) {
 	}
 	project := shown[m.cursor]
 	windows := project.Project().Plan().Windows()
-	if !project.Previewable() || len(windows) == 0 {
+	if !project.Previewable() || len(windows) == 0 || !m.roomToDraw() {
 		return app.ProjectOverview{}, domain.WindowName{}, false
 	}
 	window := windows[m.drawn(windows)].Name()
@@ -53,17 +57,18 @@ func (m browser) previewKey() (app.ProjectOverview, domain.WindowName, bool) {
 	return project, window, true
 }
 
-// fetch captures the preview the browser wants, if any, away from the
-// screen's updates.
-func (m browser) fetch() tea.Cmd {
+// fetch is m asking for the preview it wants, if any, away from the
+// screen's updates; an answer to an earlier ask is then dropped.
+func (m browser) fetch() (browser, tea.Cmd) {
 	project, window, ok := m.previewKey()
 	if !ok {
-		return nil
+		return m, nil
 	}
-	live := m.live
-	return func() tea.Msg {
+	m.previewAsked++
+	asked, live := m.previewAsked, m.live
+	return m, func() tea.Msg {
 		preview, err := live.Preview(project, window)
-		return previewed{project: project.Name(), window: window, preview: preview, err: err}
+		return previewed{asked: asked, project: project.Name(), window: window, preview: preview, err: err}
 	}
 }
 
@@ -71,7 +76,7 @@ func (m browser) fetch() tea.Cmd {
 // drawing, if it is the one wanted.
 func (m browser) shownPreview() (domain.WindowPreview, bool) {
 	project, window, ok := m.previewKey()
-	if !ok || !m.hasPreview || m.preview.project != project.Name() || m.preview.window != window || !m.roomToDraw() {
+	if !ok || !m.hasPreview || m.preview.project != project.Name() || m.preview.window != window {
 		return domain.WindowPreview{}, false
 	}
 	return m.preview.preview, true
@@ -81,66 +86,100 @@ func (m browser) shownPreview() (domain.WindowPreview, bool) {
 // selected project's window, rather than list its panes. Miniatures don't
 // change it: they are drawn only with room to spare.
 func (m browser) roomToDraw() bool {
+	shown := m.shown()
+	if len(shown) == 0 {
+		return false
+	}
 	_, _, _, height, width := m.frame()
-	below := height - windowListRow(detailsTop(m.shown()[m.cursor], width)) - 1
+	below := height - windowListRow(detailsTop(shown[m.cursor], width)) - 1
 	return width >= minDrawingWidth && below-1 >= minDrawingHeight
 }
 
-// withPreview is m after msg brought a preview, or why there is none: a
-// preview no longer wanted is dropped; one for a new window selects the
-// pane the drawing selected; a failure falls back to the drawing, saying
-// why, and the next tick tries again.
+// withPreview is m after msg brought a preview, or why there is none. An
+// answer to an earlier ask, or no longer wanted, is dropped. A failure
+// falls back to the drawing, saying why once, and the next tick tries
+// again. The preview's selected pane follows the drawing's, unless it is
+// one the config doesn't have, which stays selected.
 func (m browser) withPreview(msg previewed) browser {
+	m.previewAnswered = max(m.previewAnswered, msg.asked)
 	project, window, ok := m.previewKey()
-	if !ok || project.Name() != msg.project || window != msg.window {
-		return m
-	}
-	_, wasShown := m.shownPreview()
-	if msg.err != nil {
-		m.hasPreview = false
-		switch {
-		case errors.Is(msg.err, domain.ErrSessionNotRunning):
-			if wasShown {
-				m.notice = fmt.Sprintf("preview: %s's session ended", msg.project)
-			}
-		case errors.Is(msg.err, domain.ErrWindowNotRunning):
-			if wasShown {
-				m.notice = fmt.Sprintf("preview: %s's window %s closed", msg.project, msg.window)
-			}
-		default:
-			m.notice = "preview: " + msg.err.Error()
-		}
+	if msg.asked != m.previewAsked || !ok || project.Name() != msg.project || window != msg.window {
 		return m
 	}
 	panes := msg.preview.Panes()
-	if !wasShown {
-		m.previewPane = 0
-		for i, pane := range panes {
-			if index, ok := pane.InConfig(); ok && index == m.pane {
-				m.previewPane = i
-			}
+	if msg.err == nil && len(panes) == 0 {
+		msg.err = fmt.Errorf("%w: %s", domain.ErrEmptyPreview, msg.window)
+	}
+	if msg.err != nil {
+		m.hasPreview = false
+		failure := "preview: " + msg.err.Error()
+		switch {
+		case errors.Is(msg.err, domain.ErrSessionNotRunning):
+			failure = fmt.Sprintf("preview: %s's session ended", msg.project)
+		case errors.Is(msg.err, domain.ErrWindowNotRunning):
+			failure = fmt.Sprintf("preview: %s's window %s closed", msg.project, msg.window)
+		}
+		if failure != m.previewFailure {
+			m.notice, m.previewFailure = failure, failure
+		}
+		return m
+	}
+	before, wasShown := m.shownPreview()
+	m.preview, m.hasPreview, m.previewFailure = msg, true, ""
+	if wasShown && m.previewPane < len(before.Panes()) {
+		if _, inConfig := before.Panes()[m.previewPane].InConfig(); !inConfig {
+			m.previewPane = min(m.previewPane, len(panes)-1)
+			return m
 		}
 	}
-	m.preview, m.hasPreview = msg, true
-	m.previewPane = max(min(m.previewPane, len(panes)-1), 0)
+	return m.previewFollowing()
+}
+
+// previewFollowing is m with the preview's pane selected that is the
+// drawing's selected pane, or its first when the session lacks it.
+func (m browser) previewFollowing() browser {
+	preview, ok := m.shownPreview()
+	if !ok {
+		return m
+	}
+	m.previewPane = 0
+	for i, pane := range preview.Panes() {
+		if index, inConfig := pane.InConfig(); inConfig && index == m.pane {
+			m.previewPane = i
+		}
+	}
 	return m
 }
 
-// switchedView is m after p: the drawing instead of the preview, keeping
-// the pane selected when the config has it, or the preview instead of the
-// drawing, saying why when the selected project has none.
-func (m browser) switchedView() (browser, tea.Cmd) {
-	if preview, ok := m.shownPreview(); ok {
-		if index, inConfig := preview.Panes()[m.previewPane].InConfig(); inConfig {
-			m.pane = index
-		}
-		m.drawings = true
-		return m, nil
+// previewPaneSelected is m with the preview's pane at index selected, and
+// the drawing's too when the config has it.
+func (m browser) previewPaneSelected(index int) browser {
+	preview, ok := m.shownPreview()
+	if !ok || index < 0 || index >= len(preview.Panes()) {
+		return m
 	}
-	m.drawings = false
+	m.previewPane = index
+	if pane, inConfig := preview.Panes()[index].InConfig(); inConfig {
+		m.pane = pane
+	}
+	return m
+}
+
+// switchedView is m after p: the drawing instead of the preview, or the
+// preview instead of the drawing, saying why when the selected project has
+// none. While the config is shown, p does nothing.
+func (m browser) switchedView() browser {
+	if m.config {
+		return m
+	}
+	if _, ok := m.shownPreview(); ok {
+		m.drawings = true
+		return m
+	}
+	m.drawings, m.previewFailure = false, ""
 	shown := m.shown()
 	if len(shown) == 0 {
-		return m, nil
+		return m
 	}
 	project := shown[m.cursor]
 	session, running := project.Session()
@@ -152,7 +191,7 @@ func (m browser) switchedView() (browser, tea.Cmd) {
 	case !m.roomToDraw():
 		m.notice = "preview: the terminal is too small"
 	}
-	return m, m.fetch()
+	return m
 }
 
 // previewNames are the names of preview's panes, as the session names
@@ -190,7 +229,7 @@ func previewAlerts(preview domain.WindowPreview, alerts []alert) []alert {
 // panes of the drawn window of count panes, or false for a pane of the
 // preview the config doesn't have.
 func (m browser) selectedInConfig(count int) (int, bool) {
-	if preview, ok := m.shownPreview(); ok {
+	if preview, ok := m.shownPreview(); ok && m.previewPane < len(preview.Panes()) {
 		return preview.Panes()[m.previewPane].InConfig()
 	}
 	return m.selectedPane(count), true

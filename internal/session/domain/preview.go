@@ -10,9 +10,13 @@ type WindowPreview struct {
 }
 
 // NewWindowPreview is a window of width×height cells holding panes, in
-// the session's order.
-func NewWindowPreview(width, height int, panes ...PanePreview) WindowPreview {
-	return WindowPreview{width: width, height: height, panes: slices.Clone(panes)}
+// the session's order, or ErrEmptyPreview without a size or a pane: a
+// tmux window always has both.
+func NewWindowPreview(width, height int, panes ...PanePreview) (WindowPreview, error) {
+	if width <= 0 || height <= 0 || len(panes) == 0 {
+		return WindowPreview{}, ErrEmptyPreview
+	}
+	return WindowPreview{width: width, height: height, panes: slices.Clone(panes)}, nil
 }
 
 // Size is the window's width and height in cells.
@@ -20,7 +24,7 @@ func (w WindowPreview) Size() (width, height int) {
 	return w.width, w.height
 }
 
-// Panes are the window's panes, in the session's order.
+// Panes are the window's panes, in the session's order: at least one.
 func (w WindowPreview) Panes() []PanePreview {
 	return slices.Clone(w.panes)
 }
@@ -33,7 +37,7 @@ type PanePreview struct {
 	name                string
 	lines               []string
 	configured          int // -1 for a pane the config doesn't have
-	browsing            bool
+	runsWeaver          bool
 }
 
 // NewPanePreview is a pane of width×height cells whose top left cell is
@@ -50,16 +54,16 @@ func (p PanePreview) Configured(index int) PanePreview {
 	return p
 }
 
-// Browsing is p as the pane weaver's browser runs in, which shows no
-// lines: they would show the preview showing them.
-func (p PanePreview) Browsing() PanePreview {
-	p.browsing, p.lines = true, nil
+// RunningWeaver is p as the pane weaver runs in, which shows no lines:
+// they would show the preview showing them, over and over.
+func (p PanePreview) RunningWeaver() PanePreview {
+	p.runsWeaver, p.lines = true, nil
 	return p
 }
 
-// ShowsTheBrowser reports whether weaver's browser runs in the pane.
-func (p PanePreview) ShowsTheBrowser() bool {
-	return p.browsing
+// RunsWeaver reports whether weaver runs in the pane.
+func (p PanePreview) RunsWeaver() bool {
+	return p.runsWeaver
 }
 
 // Place is where the pane is in its window, in cells, its borders left

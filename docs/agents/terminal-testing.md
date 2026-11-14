@@ -83,6 +83,8 @@ Each with what must hold. A failure is a bug in weave only once the keys sent ar
 | 18 | `weave edit notes`, `code`'s `layout` row, →, Ctrl-S, `y` | The `areas`, `columns` and `rows` rows go, and the drawing is unchanged: `files` keeps its width, `edit`'s split being its share of the terminal (about 86% at 213 columns), not of tmux's default 80. The diff removes the grid and adds a `split` to `edit` and `logs`. |
 | 19 | `T switch-client -t term`, `weave`, select `notes`. `T send-keys -t '=notes:code' "printf '\\033[32mgreen\\033[0m\\n'" Enter`, then `T split-window -d -t '=notes:code'`, then Tab to the new pane, `p`, `p`, and `T kill-session -t =notes` | The title reads `notes.yml · preview` and the panes show their shells. Within a second `green` shows, in green (`32m` in `T capture-pane -e`), and a new pane, shown by its number, whose levels read `not in the config`, which the drawing, after `p`, doesn't have. The kill brings the drawing back with `preview: notes's session ended`. |
 | 20 | `weave notes` in `term`, then in `notes`'s `code` window, `weave` in the focused pane, select `notes` | The preview draws the pane weave runs in with `this browser` in it, not the browser again inside itself. |
+| 21 | `weave notes` in `term`, then `T switch-client -t term`, `weave`, select `notes`. `T resize-pane -Z -t '=notes:code'`, then `T resize-pane -Z -t '=notes:code'` again | Zoomed, the preview shows the zoomed pane alone, filling the box; unzoomed, every pane is back in place. Unzoom before killing `notes`: tmux 3.4 crashes killing a session with a zoomed window. |
+| 22 | In the browser on `notes`: Tab to its second pane, `p`, Tab again, `p`; then `t` and ↑ ↓ between tasks of panes in one window | Back in the preview, the pane selected in the drawing is still the one selected, with its levels. Moving between tasks moves the selected pane in the preview too. |
 
 ## Sample projects
 
@@ -129,8 +131,8 @@ windows:
 ```
 
 `notes.yml`: a grid with a column in cells, beside a second window, to
-check cell sizes, miniatures, settings, and editing a grid in the config
-form.
+check cell sizes, miniatures, settings, editing a grid in the config
+form, and tasks of two panes in one window.
 
 ```yaml
 root: /tmp/wvt/notes
@@ -142,7 +144,9 @@ windows:
         - [files, edit]
     panes:
       - name: files
+        tasks: [{command: ls}]
       - name: edit
+        tasks: [{command: echo saved}]
   - name: shell
 ```
 

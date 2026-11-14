@@ -1102,7 +1102,10 @@ func TestBrowseProjectsPreview(t *testing.T) {
 	t.Run("previews a window of an owned session", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.sessions.running["shop"] = domain.NewRunningSession(true, windowName(t, "shop"))
-		want := domain.NewWindowPreview(80, 24, domain.NewPanePreview(0, 0, 80, 24, "", []string{"$ "}))
+		want, err := domain.NewWindowPreview(80, 24, domain.NewPanePreview(0, 0, 80, 24, "", []string{"$ "}))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		s.sessions.previews = map[string]domain.WindowPreview{"shop/shop": want}
 		got, err := preview(t, s, "shop", "shop")
 		if err != nil {
@@ -1147,5 +1150,19 @@ func TestBrowseProjectsStartsAProject(t *testing.T) {
 	}
 	if !slices.Equal(s.sessions.started, []string{"blog"}) {
 		t.Fatalf("got %q started, want blog", s.sessions.started)
+	}
+}
+
+func TestBrowseProjectsTellsWhyAStartFailed(t *testing.T) {
+	s := newBrowseSetup(t, choose(t, app.ActionStart, "blog"))
+	s.workspace = &fakeWorkspace{} // no directory exists
+	if err := s.browse(answer(true)); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if notice := s.browser.last().notice; len(s.browser.shown) != 2 || !strings.Contains(notice, app.ErrMissingDirectory.Error()) {
+		t.Fatalf("got %d views, notice %q; want the browser back saying the directory is missing", len(s.browser.shown), notice)
+	}
+	if len(s.sessions.started) != 0 {
+		t.Fatalf("got %q started, want none", s.sessions.started)
 	}
 }

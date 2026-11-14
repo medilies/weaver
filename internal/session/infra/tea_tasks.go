@@ -138,7 +138,7 @@ func (m browser) taskSelected(index int) browser {
 	m.task = max(min(index, len(listed)-1), 0)
 	task := listed[m.task]
 	m.window, m.pane = task.window, task.at.Pane
-	return m
+	return m.previewFollowing()
 }
 
 // pressInTasks is m after key, pressed with the cursor in the task list:
@@ -157,7 +157,9 @@ func (m browser) pressInTasks(key string) (browser, bool) {
 		return m.runningTask(m.selectedTask(len(m.tasksShown())))
 	case "r":
 		next, chosen := m.runningTask(m.selectedTask(len(m.tasksShown())))
-		next.choice.Action = app.ActionRunTaskStaying
+		if chosen {
+			next.choice.Action = app.ActionRunTaskStaying
+		}
 		return next, chosen
 	}
 	return m, false
@@ -185,21 +187,25 @@ func (m browser) taskRuns(at app.TaskAt) bool {
 	return project.TaskRuns(at)
 }
 
-// tasksRunning are a project's tasks found still running.
+// tasksRunning are a project's tasks found still running, in answer to
+// the ask numbered asked.
 type tasksRunning struct {
+	asked   int
 	project domain.ProjectName
 	tasks   []app.TaskAt
 }
 
-// fetchTasks finds which of the selected project's tasks still run, away
-// from the screen's updates, when its owned session can tell.
-func (m browser) fetchTasks() tea.Cmd {
+// fetchTasks is m asking which of the selected project's tasks still run,
+// away from the screen's updates, when its owned session can tell; an
+// answer to an earlier ask is then dropped.
+func (m browser) fetchTasks() (browser, tea.Cmd) {
 	shown := m.shown()
 	if len(shown) == 0 || m.live == nil || !shown[m.cursor].Previewable() || len(m.tasksShown()) == 0 {
-		return nil
+		return m, nil
 	}
-	project, live := shown[m.cursor], m.live
-	return func() tea.Msg {
-		return tasksRunning{project: project.Name(), tasks: live.RunningTasks(project)}
+	m.tasksAsked++
+	asked, project, live := m.tasksAsked, shown[m.cursor], m.live
+	return m, func() tea.Msg {
+		return tasksRunning{asked: asked, project: project.Name(), tasks: live.RunningTasks(project)}
 	}
 }

@@ -419,7 +419,7 @@ var defaultLook = DefaultSettings().look()
 
 func TestPreviewDrawing(t *testing.T) {
 	// Two panes side by side in a 81x21 window, below a row of top border.
-	preview := domain.NewWindowPreview(81, 21,
+	preview := windowPreview(t, 81, 21,
 		domain.NewPanePreview(0, 1, 40, 20, "api", []string{"one", "two", "three", "$"}),
 		domain.NewPanePreview(41, 1, 40, 20, "", []string{"\x1b[31mred and long enough to be cut\x1b[39m"}),
 	)
@@ -438,7 +438,7 @@ func TestPreviewDrawing(t *testing.T) {
 	})
 
 	t.Run("ends a colour the pane leaves open before the border", func(t *testing.T) {
-		open := domain.NewWindowPreview(81, 20, domain.NewPanePreview(0, 0, 81, 20, "", []string{"\x1b[31mred"}))
+		open := windowPreview(t, 81, 20, domain.NewPanePreview(0, 0, 81, 20, "", []string{"\x1b[31mred"}))
 		row := previewDrawing(defaultLook, open, []string{"1"}, nil, -1, 21, 3)[1]
 		reset, border := strings.Index(row, ansi.ResetStyle), strings.LastIndex(row, "│")
 		if reset < strings.Index(row, "red") || reset > border {
@@ -454,4 +454,40 @@ func mapStrip(lines []string) []string {
 		stripped[i] = ansi.Strip(line)
 	}
 	return stripped
+}
+
+// windowPreview is a preview of a window of width×height cells.
+func windowPreview(t *testing.T, width, height int, panes ...domain.PanePreview) domain.WindowPreview {
+	t.Helper()
+	preview, err := domain.NewWindowPreview(width, height, panes...)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return preview
+}
+
+func TestPreviewNames(t *testing.T) {
+	window := firstWindow(t, `      - name: left
+      - name: right
+        split: { direction: right }
+`)
+	preview := windowPreview(t, 81, 20,
+		domain.NewPanePreview(0, 0, 40, 20, "", nil).Configured(0), // its label lost
+		domain.NewPanePreview(41, 0, 40, 9, "right", nil).Configured(1),
+		domain.NewPanePreview(41, 10, 40, 10, "", nil), // split by hand
+	)
+	if got, want := previewNames(preview, window), []string{"left", "right", "3"}; !slices.Equal(got, want) {
+		t.Fatalf("got %q, want %q: the session's name, else the config's, else the number", got, want)
+	}
+}
+
+func TestPreviewAlerts(t *testing.T) {
+	preview := windowPreview(t, 81, 20,
+		domain.NewPanePreview(0, 0, 40, 20, "", nil),
+		domain.NewPanePreview(41, 0, 40, 20, "", nil).Configured(1),
+	)
+	got := previewAlerts(preview, []alert{dirAlert, programAlert})
+	if want := []alert{noAlert, programAlert}; !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v: the config pane's alert, none for a pane it doesn't have", got, want)
+	}
 }

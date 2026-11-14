@@ -549,6 +549,17 @@ func TestOpenProjectStart(t *testing.T) {
 		}
 	})
 
+	t.Run("fails, restoring nothing, on a missing directory of a window to restore", func(t *testing.T) {
+		sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": owned(t, "shop")}}
+		workspace := everything()
+		delete(workspace.dirs, "/srv/shop/logs")
+		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
+		said, err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleStart("shop")
+		if !errors.Is(err, app.ErrMissingDirectory) || said != "" || len(sessions.restored) != 0 {
+			t.Fatalf("got %q, %v, restored %q; want ErrMissingDirectory and nothing restored", said, err, sessions.restored)
+		}
+	})
+
 	t.Run("starts the project whose root contains a directory", func(t *testing.T) {
 		sessions := &fakeSessions{}
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}

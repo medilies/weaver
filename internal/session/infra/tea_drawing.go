@@ -205,7 +205,7 @@ func previewDrawing(look look, preview domain.WindowPreview, names []string, ale
 			titles[i] = names[i]
 		}
 		contents[i] = pane.Lines()
-		if pane.ShowsTheBrowser() {
+		if pane.RunsWeaver() {
 			contents[i] = []string{keysStyle.Render("this browser")}
 		}
 	}

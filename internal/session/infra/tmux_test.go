@@ -1594,7 +1594,7 @@ func TestTmuxPreview(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if pane := preview.Panes()[1]; !pane.ShowsTheBrowser() || len(pane.Lines()) > 0 {
+		if pane := preview.Panes()[1]; !pane.RunsWeaver() || len(pane.Lines()) > 0 {
 			t.Fatalf("got %q, want no lines from the browser's pane", pane.Lines())
 		}
 	})
@@ -1610,6 +1610,19 @@ func TestTmuxPreview(t *testing.T) {
 		}
 		if len(preview.Panes()) != 3 || outside != 1 {
 			t.Fatalf("got %d panes, %d of them outside the config; want 3, 1 outside", len(preview.Panes()), outside)
+		}
+	})
+
+	t.Run("shows a zoomed pane alone, as tmux draws it", func(t *testing.T) {
+		zoom := func() { server.query(t, "resize-pane", "-Z", "-t", server.paneLabelled(t, "peek", "server")) }
+		zoom()
+		defer zoom() // tmux 3.4 crashes killing a session with a zoomed window
+		preview := previewShowing(t, api, "ready")
+		if len(preview.Panes()) != 1 {
+			t.Fatalf("got %d panes, want the zoomed one alone", len(preview.Panes()))
+		}
+		if pane := preview.Panes()[0]; pane.Name() != "server" {
+			t.Fatalf("got %q, want server", pane.Name())
 		}
 	})
 

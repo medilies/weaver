@@ -196,8 +196,9 @@ func NewBrowseProjects(
 	}
 }
 
-// Handle shows the browser until the user opens a project, runs a task,
-// reruns a command, or quits; a project bound from it is rooted at workingDir.
+// Handle shows the browser until the user opens a project, runs a task
+// and goes where it runs, reruns a command, or quits; a project bound from
+// it is rooted at workingDir.
 func (uc BrowseProjects) Handle(workingDir string) error {
 	var selected domain.ProjectName
 	notice := ""

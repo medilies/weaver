@@ -20,7 +20,7 @@ var (
 	ErrAmbiguousProject = errors.New("several projects share this directory's root")
 )
 
-// OpenProject puts the user in a project's tmux session, starting it
+// OpenProject puts the user in a project's tmux session, creating it
 // first, after its setup commands, when it isn't running, or re-creating
 // the windows it lacks when weaver started it. Started, it does the same
 // but leaves the user where they are.
@@ -54,7 +54,8 @@ func (uc OpenProject) Handle(rawName string) error {
 	return uc.open(project)
 }
 
-// HandleStart starts the project named rawName, and says what it did: "Started shop.", "Restored "logs" in shop." or "shop is already
+// HandleStart starts the project named rawName, and says what it did:
+// "Started shop.", "Restored "logs" in shop." or "shop is already
 // running."
 func (uc OpenProject) HandleStart(rawName string) (string, error) {
 	name, err := domain.NewProjectName(rawName)
@@ -188,8 +189,11 @@ func (uc OpenProject) ready(project domain.Project) (string, error) {
 		return fmt.Sprintf("Started %s.", name), nil
 	case session.Owned():
 		restored, err := uc.restore(project, session)
-		if err != nil || len(restored) == 0 {
-			return fmt.Sprintf("%s is already running.", name), err
+		switch {
+		case err != nil:
+			return "", err
+		case len(restored) == 0:
+			return fmt.Sprintf("%s is already running.", name), nil
 		}
 		return fmt.Sprintf("Restored %s in %s.", strings.Join(restored, ", "), name), nil
 	}
