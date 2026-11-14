@@ -1,0 +1,18 @@
+root: ROOT/shop
+env: { APP_ENV: local, LOG: info }
+setup: [echo setting up shop]
+teardown: [echo tearing down, "false"]
+windows:
+  - name: shell
+  - name: api
+    focus: true
+    env: { APP_ENV: staging }
+    panes:
+      - name: logs
+        command: sleep 3
+        tasks: [{name: wait, command: sleep 300}, {command: echo hi}]
+      - name: back
+        focus: true
+        dir: back
+        env: { APP_ENV: dev }
+        split: { direction: right, size: 60% }

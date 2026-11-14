@@ -1,0 +1,13 @@
+root: ROOT/notes
+windows:
+  - name: code
+    grid:
+      columns: [30, 1fr]
+      areas:
+        - [files, edit]
+    panes:
+      - name: files
+        tasks: [{command: ls}]
+      - name: edit
+        tasks: [{command: echo saved}]
+  - name: shell

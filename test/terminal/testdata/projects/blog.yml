@@ -1,0 +1,14 @@
+root: ROOT/blog
+windows:
+  - name: write
+    grid:
+      columns: [60%, 40%]
+      rows: [70%, 30%]
+      areas:
+        - [editor, preview]
+        - [editor, shell]
+    panes:
+      - name: editor
+      - name: preview
+        focus: true
+      - name: shell

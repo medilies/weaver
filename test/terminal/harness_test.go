@@ -1,0 +1,407 @@
+//go:build terminal
+
+// Package terminal tests the weave binary as a user runs it: in a real
+// terminal emulator, attached to a private tmux server.
+package terminal
+
+import (
+	"bytes"
+	"flag"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	tuitest "github.com/microsoft/tui-test/bindings/go"
+)
+
+const cols, rows = 160, 45
+
+var (
+	weaveDir = flag.String("weave", "", "test DIR/weave instead of building ./cmd/weave")
+	keep     = flag.Bool("keep", false, "keep a failed test's directory and tmux server")
+	shots    = flag.String("shots", "", "write a PNG of the screen each test ends on to DIR")
+)
+
+// weave is the binary under test, set by TestMain.
+var weave string
+
+func TestMain(m *testing.M) {
+	flag.Parse()
+	code, err := run(m)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	os.Exit(code)
+}
+
+func run(m *testing.M) (int, error) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		return 0, fmt.Errorf("tmux not found")
+	}
+	if *weaveDir != "" {
+		weave = filepath.Join(*weaveDir, "weave")
+		return m.Run(), nil
+	}
+	dir, err := os.MkdirTemp("", "wvt-bin-")
+	if err != nil {
+		return 0, err
+	}
+	defer os.RemoveAll(dir)
+	weave = filepath.Join(dir, "weave")
+	build := exec.Command("go", "build", "-o", weave, "./cmd/weave")
+	build.Dir = "../.."
+	if out, err := build.CombinedOutput(); err != nil {
+		return 0, fmt.Errorf("building weave: %v\n%s", err, out)
+	}
+	return m.Run(), nil
+}
+
+// harness is one test's world: a directory, a tmux server in it, and a
+// terminal emulator whose client is attached to that server's term
+// session, where weave runs.
+type harness struct {
+	t      *testing.T
+	dir    string
+	sock   string
+	env    []string
+	screen *tuitest.Client
+}
+
+// start sets up a test's world, running beside the others, and tears it
+// down when the test ends.
+func start(t *testing.T) *harness {
+	t.Helper()
+	t.Parallel()
+	// Not t.TempDir(): its long paths can pass the 108 bytes a socket's
+	// path is limited to.
+	dir, err := os.MkdirTemp("/tmp", "wvt-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &harness{t: t, dir: dir, sock: filepath.Join(dir, "tmux.sock")}
+	tmuxBin, _ := exec.LookPath("tmux")
+	// Every tmux command and the client run in the test's environment,
+	// not the caller's: tmux gives the panes a command creates the
+	// environment of the client sending it, PATH included.
+	h.env = []string{
+		"HOME=" + filepath.Join(dir, "home"), "HISTFILE=", "LANG=C.UTF-8", "LC_ALL=C.UTF-8",
+		"TERM=tmux-256color", "TMUX_TMPDIR=" + filepath.Join(dir, "tmux"),
+		"XDG_CONFIG_HOME=" + filepath.Join(dir, "cfg"),
+		"PATH=" + filepath.Dir(weave) + ":" + filepath.Dir(tmuxBin) + ":/usr/bin:/bin",
+	}
+	h.files()
+	t.Cleanup(h.clean)
+
+	h.tmux("-f", filepath.Join(dir, "tmux.conf"), "new-session", "-d", "-s", "term",
+		"-x", fmt.Sprint(cols), "-y", fmt.Sprint(rows), "bash", "--norc", "--noprofile")
+	screen, err := tuitest.Ephemeral("weave", tuitest.ClientOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.screen = screen
+	// The client sees the terminal the emulator is, not tmux's.
+	client := append([]string{"-i"}, h.env...)
+	client = append(client, "TERM=xterm-256color", "tmux", "-S", h.sock, "attach", "-t", "term")
+	if _, err := screen.Run("env", client, tuitest.SpawnOptions{
+		Cols: tuitest.Ptr(uint16(cols)), Rows: tuitest.Ptr(uint16(rows)), WaitReady: tuitest.Ptr(false),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.eventually("a client attaches to term", func() bool { return h.clientOn() == "term" })
+	h.promptIn("term")
+	h.typed("command -v weave")
+	h.sees(weave)
+	return h
+}
+
+// files writes the home, the sample projects and tmux's config.
+func (h *harness) files() {
+	h.t.Helper()
+	for _, d := range []string{"home", "tmux", "cfg/weaver/projects", "shop/back", "blog", "notes"} {
+		if err := os.MkdirAll(filepath.Join(h.dir, d), 0o700); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	samples, err := filepath.Glob("testdata/projects/*.yml")
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	for _, sample := range samples {
+		config, err := os.ReadFile(sample)
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		config = bytes.ReplaceAll(config, []byte("ROOT"), []byte(h.dir))
+		h.write(filepath.Join("cfg/weaver/projects", filepath.Base(sample)), string(config))
+	}
+	// The panes weave creates run bash whatever the login shell is, with
+	// a plain prompt and no login banner.
+	h.write("home/.bashrc", "PS1='\\$ '\n")
+	h.write("home/.bash_profile", ". ~/.bashrc\n")
+	h.write("home/.hushlogin", "")
+	bash, _ := exec.LookPath("bash")
+	h.write("tmux.conf", "set -g default-terminal tmux-256color\nset -g default-shell "+bash+"\nset -g mouse on\nset -g status-right ''\n")
+}
+
+func (h *harness) write(name, content string) {
+	h.t.Helper()
+	if err := os.WriteFile(filepath.Join(h.dir, name), []byte(content), 0o600); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (h *harness) clean() {
+	if *shots != "" && h.screen != nil {
+		name := filepath.Join(*shots, h.t.Name()+".png")
+		if _, err := h.screen.Screenshot(name, tuitest.ScreenshotOptions{}); err != nil {
+			h.t.Logf("screenshot: %v", err)
+		}
+	}
+	if h.t.Failed() && *keep {
+		h.t.Logf("kept %s; look with: tmux -S %s attach", h.dir, h.sock)
+		if h.screen != nil {
+			h.screen.CloseQuiet()
+		}
+		return
+	}
+	exec.Command("tmux", "-S", h.sock, "kill-server").Run()
+	if h.screen != nil {
+		h.screen.CloseQuiet()
+	}
+	os.RemoveAll(h.dir)
+}
+
+// tmux runs a tmux command on the test's server, in the test's
+// environment, and returns its output.
+func (h *harness) tmux(args ...string) string {
+	h.t.Helper()
+	out, err := h.tmuxErr(args...)
+	if err != nil {
+		h.t.Fatalf("tmux %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return out
+}
+
+func (h *harness) tmuxErr(args ...string) (string, error) {
+	cmd := exec.Command("tmux", append([]string{"-S", h.sock}, args...)...)
+	cmd.Env, cmd.Dir = h.env, h.dir
+	out, err := cmd.CombinedOutput()
+	return strings.TrimRight(string(out), "\n"), err
+}
+
+// clientOn is the session the client is on, or "" without a client.
+func (h *harness) clientOn() string {
+	out, _ := h.tmuxErr("list-clients", "-F", "#{client_session}")
+	return out
+}
+
+// --- Keys, mouse and screen -------------------------------------------------
+
+// keys presses keys in the terminal, as a user does: "Enter", "Ctrl+s",
+// "Down", or text.
+func (h *harness) keys(keys ...string) {
+	h.t.Helper()
+	if err := h.screen.Press(keys...); err != nil {
+		h.t.Fatalf("pressing %q: %v", keys, err)
+	}
+}
+
+// typed types text then presses Enter.
+func (h *harness) typed(text string) {
+	h.t.Helper()
+	if err := h.screen.Type(text); err != nil {
+		h.t.Fatalf("typing %q: %v", text, err)
+	}
+	h.keys("Enter")
+}
+
+// clicks clicks the middle of the one place text shows.
+func (h *harness) clicks(text string) {
+	h.t.Helper()
+	if err := h.screen.GetByText(text, tuitest.TextSelectorOptions{}).Click(tuitest.LocatorClickOptions{}); err != nil {
+		h.fatal("clicking %q: %v", text, err)
+	}
+}
+
+// sees waits until text shows.
+func (h *harness) sees(text string) {
+	h.t.Helper()
+	if err := h.at(text).Expect(tuitest.LocatorExpectOptions{}); err != nil {
+		h.fatal("%q never showed", text)
+	}
+}
+
+// at is where text shows, once or more.
+func (h *harness) at(text string) *tuitest.Locator {
+	return h.screen.GetByText(text, tuitest.TextSelectorOptions{}).Any()
+}
+
+// text is the screen, less its blank lines.
+func (h *harness) text() string {
+	screen, err := h.screen.Text(tuitest.TextOptions{})
+	if err != nil {
+		return fmt.Sprintf("(no screen: %v)", err)
+	}
+	var lines []string
+	for _, line := range strings.Split(screen, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lines = append(lines, "  | "+strings.TrimRight(line, " "))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// fatal fails the test with what was found, then the screen.
+func (h *harness) fatal(format string, args ...any) {
+	h.t.Helper()
+	h.t.Fatalf(format+"\n%s", append(args, h.text())...)
+}
+
+// eventually waits until done, polling every 100 ms for 5 s.
+func (h *harness) eventually(what string, done func() bool) {
+	h.t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if done() {
+			return
+		}
+	}
+	h.fatal("%s: never happened", what)
+}
+
+// promptIn waits until the session's active pane runs its shell.
+func (h *harness) promptIn(target string) {
+	h.t.Helper()
+	h.eventually(target+" runs bash", func() bool {
+		out, _ := h.tmuxErr("display", "-p", "-t", target, "#{pane_current_command}")
+		return out == "bash"
+	})
+}
+
+// browse opens the browser in the pane the client shows, on the project the filter selects
+// unless project is empty.
+func (h *harness) browse(project string) {
+	h.t.Helper()
+	h.promptIn(h.here())
+	h.typed("clear; weave")
+	h.sees("q quit")
+	if project == "" {
+		return
+	}
+	h.keys("/")
+	h.screen.Type(project)
+	h.keys("Enter")
+	h.sees(project + ".yml")
+}
+
+// --- Rendering --------------------------------------------------------------
+
+// laidOut fails the test when the screen's cards aren't closed and
+// aligned, or a line is wider than the terminal.
+func (h *harness) laidOut() {
+	h.t.Helper()
+	screen, err := h.screen.Text(tuitest.TextOptions{})
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	if problem := layoutProblem(screen); problem != "" {
+		h.fatal("the layout is broken: %s", problem)
+	}
+}
+
+// layoutProblem is the first thing wrong with the screen's cards: a ╭
+// with no ╮ on its line, no │ or ╰ under it, or a line wider than the
+// terminal; "" when there is none.
+func layoutProblem(screen string) string {
+	lines := strings.Split(screen, "\n")
+	grid := make([][]rune, len(lines))
+	for i, line := range lines {
+		grid[i] = []rune(line)
+		if len(grid[i]) > cols {
+			return fmt.Sprintf("line %d is %d cells wide", i+1, len(grid[i]))
+		}
+	}
+	at := func(y, x int) rune {
+		if y < len(grid) && x < len(grid[y]) {
+			return grid[y][x]
+		}
+		return ' '
+	}
+	for y, line := range grid {
+		for x, r := range line {
+			if r != '╭' {
+				continue
+			}
+			right := x + 1
+			for right < len(line) && line[right] != '╮' {
+				right++
+			}
+			if right == len(line) {
+				return fmt.Sprintf("the card at line %d, column %d has no top-right corner", y+1, x+1)
+			}
+			bottom := y + 1
+			for ; bottom < len(grid); bottom++ {
+				if at(bottom, x) == '╰' {
+					break
+				}
+				if at(bottom, x) != '│' || at(bottom, right) != '│' {
+					return fmt.Sprintf("the card at line %d, column %d has a broken side at line %d", y+1, x+1, bottom+1)
+				}
+			}
+			if bottom == len(grid) || at(bottom, right) != '╯' {
+				return fmt.Sprintf("the card at line %d, column %d isn't closed under its top", y+1, x+1)
+			}
+		}
+	}
+	return ""
+}
+
+// colourOf is the colour text is drawn in where it shows once: a
+// palette index such as "6", a name or an RGB colour.
+func (h *harness) colourOf(text string) string {
+	h.t.Helper()
+	match, err := h.screen.GetByText(text, tuitest.TextSelectorOptions{}).Location()
+	if err != nil {
+		h.fatal("%q isn't on the screen once: %v", text, err)
+	}
+	cells, err := h.screen.Cells(uint16(match.Start.Column), uint16(match.Start.Row), 1, 1)
+	if err != nil || len(cells) == 0 {
+		h.fatal("no cell under %q: %v", text, err)
+	}
+	return string(cells[0].FG)
+}
+
+// started starts a project from term, with weave <project> --detached,
+// and waits for weave to be done with it, back at term's prompt.
+func (h *harness) started(project string) {
+	h.t.Helper()
+	h.promptIn("term")
+	h.typed("clear; weave " + project + " --detached")
+	h.eventually(project+" starts", func() bool { return h.running(project) })
+	h.promptIn("term")
+}
+
+// running is whether the session exists.
+func (h *harness) running(session string) bool {
+	_, err := h.tmuxErr("has-session", "-t", "="+session)
+	return err == nil
+}
+
+// switchTo puts the client on a session's window, as a user's tmux
+// keys would.
+func (h *harness) switchTo(session, window string) {
+	h.t.Helper()
+	h.tmux("switch-client", "-t", "="+session)
+	h.tmux("select-window", "-t", "="+session+":"+window)
+	h.eventually("the client switches to "+session, func() bool { return h.clientOn() == session })
+}
+
+// here is the pane the client shows.
+func (h *harness) here() string {
+	out, _ := h.tmuxErr("list-clients", "-F", "#{pane_id}")
+	return out
+}
