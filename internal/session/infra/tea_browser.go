@@ -17,10 +17,12 @@ import (
 
 // TeaBrowser shows the registered projects full screen: their names and
 // roots on the left, narrowed by a filter, the selected one's summary and
-// a drawing of its windows in the middle, its tasks on the right, and
-// what the last action did below. It only shows and picks: the use case
-// acts. Shown again on the same project, it keeps the window, pane and
-// task selected, and the cursor in the task list.
+// a drawing of its windows in the middle, or the preview of the selected
+// window of its owned session, its tasks on the right, and what the last
+// action did below. It only shows and picks: the use case acts. Shown
+// again on the same project, it keeps the window, pane and task selected,
+// and the cursor in the task list; shown again at all, the drawing when it
+// was switched to.
 type TeaBrowser struct {
 	kept *browserPlace
 	look look
@@ -31,6 +33,7 @@ type browserPlace struct {
 	project            domain.ProjectName
 	window, pane, task int
 	tasking            bool
+	drawings           bool // the drawing switched to in place of the preview
 }
 
 // NewTeaBrowser constructs a TeaBrowser showing what is selected in the
@@ -40,8 +43,8 @@ func NewTeaBrowser(settings Settings) TeaBrowser {
 }
 
 // Browse implements app.ProjectBrowser.
-func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string) (app.Choice, error) {
-	model := browser{projects: projects, notice: notice, look: b.look}
+func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.WindowPreviewer) (app.Choice, error) {
+	model := browser{projects: projects, notice: notice, look: b.look, previews: previews, drawings: b.kept.drawings}
 	for i, project := range projects {
 		if project.Name() == selected {
 			model.cursor = i
@@ -59,9 +62,15 @@ func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Proje
 		return app.Choice{}, err
 	}
 	last := final.(browser)
+	if preview, ok := last.shownPreview(); ok {
+		if index, inConfig := preview.Panes()[last.previewPane].InConfig(); inConfig {
+			last.pane = index
+		}
+	}
+	b.kept.drawings = last.drawings
 	if shown := last.shown(); len(shown) > 0 {
 		*b.kept = browserPlace{project: shown[last.cursor].Name(), window: last.window, pane: last.pane,
-			task: last.task, tasking: last.tasking}
+			task: last.task, tasking: last.tasking, drawings: last.drawings}
 	}
 	choice := last.choice
 	if choice.Action == 0 {
@@ -103,6 +112,11 @@ type browser struct {
 	filter        string
 	filtering     bool // typing the filter
 	config        bool // the selected project's config shown instead of its drawing
+	drawings      bool // the drawing shown in place of the preview
+	previews      app.WindowPreviewer
+	preview       previewed // the last preview captured, if hasPreview
+	hasPreview    bool
+	previewPane   int // the selected pane of the preview, by its index in it
 	notice        string
 	width, height int
 	choice        app.Choice
@@ -172,6 +186,10 @@ func (m browser) paneMoved(by int) browser {
 	if len(windows) == 0 {
 		return m
 	}
+	if preview, ok := m.shownPreview(); ok {
+		m.previewPane = steppedIn(previewOrder(preview), m.previewPane, by)
+		return m
+	}
 	window := windows[m.drawn(windows)]
 	order := drawnOrder(window, m.width, max(m.height-1, 1))
 	m.pane = steppedIn(order, m.selectedPane(len(window.Panes())), by)
@@ -198,21 +216,32 @@ func (m browser) windowsShown() []domain.WindowPlan {
 	return shown[m.cursor].Project().Plan().Windows()
 }
 
+// Init captures the preview, and asks for it again every previewEvery.
 func (m browser) Init() tea.Cmd {
-	return nil
+	return tea.Batch(m.fetch(), tick())
 }
 
-// Update is m after msg, its list scrolled to keep the cursor in view.
+// Update is m after msg, its list scrolled to keep the cursor in view,
+// and the preview captured at once when another one is wanted.
 func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
 	next := model.(browser)
 	_, _, _, height, _ := next.frame()
 	next.top = next.firstShown(height)
+	before, beforeWindow, wanted := m.previewKey()
+	after, afterWindow, wants := next.previewKey()
+	if wants && (!wanted || before.Name() != after.Name() || beforeWindow != afterWindow) {
+		cmd = tea.Batch(cmd, next.fetch())
+	}
 	return next, cmd
 }
 
 func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case previewTick:
+		return m, tea.Batch(m.fetch(), tick())
+	case previewed:
+		return m.withPreview(msg), nil
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case tea.MouseClickMsg:
@@ -255,14 +284,17 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m.filtering = true
 	case "y":
 		m.config = !m.config
+	case "p":
+		return m.switchedView()
 	case "r":
 		windows := m.windowsShown()
 		if !m.selectedExited() {
 			break // only an exited command reruns
 		}
 		window := windows[m.drawn(windows)]
+		pane, _ := m.selectedInConfig(len(window.Panes()))
 		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Name(),
-			Pane: app.PaneAt{Window: window.Name(), Pane: m.selectedPane(len(window.Panes()))}}
+			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
 		return m, tea.Quit
 	case "t":
 		if len(m.tasksShown()) > 0 {
@@ -410,7 +442,11 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if spot, ok := hotspotAt(laid.paneSpots, x); ok {
-			m.pane = spot.item
+			if _, previewing := m.shownPreview(); previewing {
+				m.previewPane = spot.item
+			} else {
+				m.pane = spot.item
+			}
 		}
 		return m, nil
 	}
@@ -514,6 +550,10 @@ var (
 	taskKey    = keyTold{"t", "tasks"}
 	configKey  = keyTold{"y", "config"}
 	drawingKey = keyTold{"y", "drawing"}
+	// previewKey p, or previewDrawingKey while the preview is shown, when
+	// the selected project's session can be previewed.
+	previewKey        = keyTold{"p", "preview"}
+	previewDrawingKey = keyTold{"p", "drawing"}
 )
 
 // taskingKeys are told while the cursor is in the task list.
@@ -534,7 +574,9 @@ func (m browser) keys() (string, []hotspot) {
 		spots = append(spots, hotspot{from: 0, to: ansi.StringWidth("/" + m.filter), key: "/"})
 		line, told = "/"+m.filter+keysStyle.Render(" · "), filteredKeys
 	}
-	if windows := m.windowsShown(); !m.filtering && len(windows) > 0 && len(windows[m.drawn(windows)].Panes()) > 1 {
+	preview, previewing := m.shownPreview()
+	if windows := m.windowsShown(); !m.filtering && len(windows) > 0 &&
+		(previewing && len(preview.Panes()) > 1 || !previewing && len(windows[m.drawn(windows)].Panes()) > 1) {
 		told = slices.Insert(slices.Clone(told), len(told)-2, paneKey)
 	}
 	if !m.filtering && m.selectedExited() {
@@ -542,6 +584,13 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if !m.filtering && len(m.tasksShown()) > 0 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, taskKey)
+	}
+	if !m.filtering && len(m.shown()) > 0 && m.shown()[m.cursor].Previewable() && !m.config {
+		key := previewKey
+		if previewing {
+			key = previewDrawingKey
+		}
+		told = slices.Insert(slices.Clone(told), len(told)-2, key)
 	}
 	if !m.filtering && len(m.shown()) > 0 {
 		key := configKey
@@ -690,9 +739,11 @@ type detailsLayout struct {
 func (m browser) laidOut(project app.ProjectOverview, windows []domain.WindowPlan, width, height int) detailsLayout {
 	top := detailsTop(project, width)
 	index := m.drawn(windows)
-	pane := m.selectedPane(len(windows[index].Panes()))
 	below := height - windowListRow(top) - 1 // the window list
-	levelLines := levels(project.Project(), index, pane, width)
+	levelLines := []string{keysStyle.Render("not in the config")}
+	if pane, inConfig := m.selectedInConfig(len(windows[index].Panes())); inConfig {
+		levelLines = levels(project.Project(), index, pane, width)
+	}
 	var miniatures []string
 	if below-miniatureHeight-1 >= minDrawingHeight+1+min(len(levelLines), 3) {
 		miniatures = m.miniatures(project, windows, index, width)
@@ -767,6 +818,12 @@ func (m browser) panesShown(project app.ProjectOverview, index, width, below, le
 	if width < minDrawingWidth || below-1 < minDrawingHeight {
 		return undrawnPanes(window, root, alerts(project, window), pane, width, below), "", nil
 	}
+	if preview, ok := m.shownPreview(); ok {
+		drawn := previewDrawing(m.look, preview, previewNames(preview, window), previewAlerts(preview, alerts(project, window)),
+			m.previewPane, width, max(below-1-levelHeight, minDrawingHeight))
+		line, spots := namesList(m.look, previewNames(preview, window), previewOrder(preview), m.previewPane, width)
+		return drawn, line, spots
+	}
 	// A session opens at the browser's size, less tmux's status line.
 	drawn := drawing(m.look, window, root, alerts(project, window), pane, false, m.width, max(m.height-1, 1),
 		width, max(below-1-levelHeight, minDrawingHeight))
@@ -788,7 +845,10 @@ func (m browser) selectedExited() bool {
 		return false
 	}
 	window := windows[m.drawn(windows)]
-	pane := m.selectedPane(len(window.Panes()))
+	pane, inConfig := m.selectedInConfig(len(window.Panes()))
+	if !inConfig {
+		return false
+	}
 	for _, warning := range m.shown()[m.cursor].Warnings() {
 		if errors.Is(warning, app.ErrCommandExited) && warning.Concerns(window.Name(), pane) {
 			return true
@@ -826,10 +886,14 @@ func (m browser) detailsTitle() string {
 	if len(shown) == 0 {
 		return ""
 	}
+	title := shown[m.cursor].Name().String()
 	if file := shown[m.cursor].Config().File; file != "" {
-		return file
+		title = file
 	}
-	return shown[m.cursor].Name().String()
+	if _, ok := m.shownPreview(); ok {
+		title += " · preview"
+	}
+	return title
 }
 
 // detailsTop is project's summary, or why its config can't be read,

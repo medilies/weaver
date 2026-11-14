@@ -416,3 +416,42 @@ func TestDrawnOrder(t *testing.T) {
 
 // defaultLook is the selected colour without settings.
 var defaultLook = DefaultSettings().look()
+
+func TestPreviewDrawing(t *testing.T) {
+	// Two panes side by side in a 81x21 window, below a row of top border.
+	preview := domain.NewWindowPreview(81, 21,
+		domain.NewPanePreview(0, 1, 40, 20, "api", []string{"one", "two", "three", "$"}),
+		domain.NewPanePreview(41, 1, 40, 20, "", []string{"\x1b[31mred and long enough to be cut\x1b[39m"}),
+	)
+
+	t.Run("shows each pane's last lines under its name", func(t *testing.T) {
+		got := previewDrawing(defaultLook, preview, []string{"api", "2"}, nil, -1, 21, 4)
+		want := []string{
+			"┌─ api ───┬─ 2 ─────┐",
+			"│ three   │ red an… │",
+			"│ $       │         │",
+			"└─────────┴─────────┘",
+		}
+		if stripped := mapStrip(got); !slices.Equal(stripped, want) {
+			t.Fatalf("got\n%s\nwant\n%s", strings.Join(stripped, "\n"), strings.Join(want, "\n"))
+		}
+	})
+
+	t.Run("ends a colour the pane leaves open before the border", func(t *testing.T) {
+		open := domain.NewWindowPreview(81, 20, domain.NewPanePreview(0, 0, 81, 20, "", []string{"\x1b[31mred"}))
+		row := previewDrawing(defaultLook, open, []string{"1"}, nil, -1, 21, 3)[1]
+		reset, border := strings.Index(row, ansi.ResetStyle), strings.LastIndex(row, "│")
+		if reset < strings.Index(row, "red") || reset > border {
+			t.Fatalf("got %q, want the colour reset between the text and the border", row)
+		}
+	})
+}
+
+// mapStrip is lines without their escape sequences.
+func mapStrip(lines []string) []string {
+	stripped := make([]string, len(lines))
+	for i, line := range lines {
+		stripped[i] = ansi.Strip(line)
+	}
+	return stripped
+}

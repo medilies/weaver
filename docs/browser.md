@@ -44,6 +44,21 @@ With several windows and the lines to spare, each window is drawn small
 under its name, a miniature, the selected one in the selected colour;
 click one to select its window.
 
+## Preview
+
+When the selected project's session runs and weaver started it, the
+selected window shows as it is now instead of as it opens: its panes
+where tmux has them, each showing the bottom of its screen in its
+colours, updated every second. The details' title ends in `· preview`.
+Its panes are matched to the config's as tasks find them, so their
+warnings, the levels below and `r` stay; a pane split by hand shows by
+its number, as "not in the config". `p` switches to the drawing and
+back, for as long as the browser stays open. The drawing comes back,
+the status line saying why, when the session ends or the window closes,
+and for a window the session lacks, which enter restores. Only the
+preview is live: the summary, the ● marks and the task list are as they
+were when the browser last showed the list.
+
 ## Tasks
 
 Beside the project list, the task list shows the selected project's tasks under
@@ -82,6 +97,7 @@ or that leaves a quote open, marks its pane.
 | ← → | select a window to draw |
 | tab or shift+tab | select the next or previous pane of the selected window, in the pane list's order |
 | r | rerun the selected pane's command once it exited: typed into the pane again, as a task is, then you are put in that pane. Only in a session weaver started, on a pane run with `command`, not `prefill` |
+| p | switch between the preview of the selected window and its drawing, for as long as the browser stays open. Only in a session weaver started |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it, esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |

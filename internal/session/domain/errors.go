@@ -142,6 +142,9 @@ var (
 	// ErrPaneNotRunning is returned when running a task in a pane its
 	// project's running session lacks.
 	ErrPaneNotRunning = errors.New("the running session lacks this pane")
+	// ErrWindowNotRunning is returned when previewing a window its
+	// project's running session lacks.
+	ErrWindowNotRunning = errors.New("the running session lacks this window")
 	// ErrNotInsideTmux is returned when asking for the session weaver runs
 	// in while it runs outside tmux.
 	ErrNotInsideTmux = errors.New("not inside tmux")

@@ -119,6 +119,18 @@ type Choice struct {
 type ProjectBrowser interface {
 	// Browse shows projects, the one named selected highlighted and
 	// notice in a status line, and returns the user's choice, or
-	// ErrAborted when they quit.
-	Browse(projects []ProjectOverview, selected domain.ProjectName, notice string) (Choice, error)
+	// ErrAborted when they quit. While it shows a project whose
+	// Previewable reports true, it keeps asking previews for the preview
+	// of the selected window.
+	Browse(projects []ProjectOverview, selected domain.ProjectName, notice string, previews WindowPreviewer) (Choice, error)
+}
+
+// WindowPreviewer previews the windows of projects' owned sessions.
+type WindowPreviewer interface {
+	// Preview is the window named window of project's owned session as
+	// it is now. An error wraps domain.ErrSessionNotRunning when no
+	// session runs, domain.ErrSessionNotOwned when weaver didn't start it,
+	// domain.ErrWindowNotFound when the project has no such window, or
+	// domain.ErrWindowNotRunning when the session lacks it.
+	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
 }

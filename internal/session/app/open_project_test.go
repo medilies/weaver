@@ -20,6 +20,18 @@ type fakeSessions struct {
 	attached []string
 	idle     map[string]map[domain.WindowName][]int // by project, the panes whose shell idles
 	commands map[string][]domain.RunningCommand     // by project, the commands weaver typed still running
+	previews map[string]domain.WindowPreview        // by project and window, "shop/api"
+}
+
+func (s *fakeSessions) Preview(name domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
+	if _, ok := s.running[name.String()]; !ok {
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	preview, ok := s.previews[name.String()+"/"+window.Name().String()]
+	if !ok {
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
+	}
+	return preview, nil
 }
 
 func (s *fakeSessions) RunningCommands(name domain.ProjectName, _ []domain.WindowPlan) ([]domain.RunningCommand, error) {

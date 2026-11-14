@@ -137,6 +137,12 @@ func (w Warning) Concerns(window domain.WindowName, pane int) bool {
 	return slices.Contains(w.panes, paneAt{window: window, pane: pane})
 }
 
+// Previewable reports whether the project's session runs and weaver
+// started it, so that its windows can be previewed.
+func (o ProjectOverview) Previewable() bool {
+	return o.found && o.session.Owned()
+}
+
 // WindowCount is how many of the configured windows the running session
 // has, and how many are configured; both zero unless weaver started the
 // session, since only then are its windows compared with the config.
@@ -200,7 +206,7 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 		if err != nil {
 			return err
 		}
-		choice, err := uc.browser.Browse(overviews, selected, notice)
+		choice, err := uc.browser.Browse(overviews, selected, notice, uc)
 		if errors.Is(err, ErrAborted) {
 			return nil
 		}
@@ -217,6 +223,22 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 			notice = err.Error()
 		}
 	}
+}
+
+// Preview implements WindowPreviewer, for the browser.
+func (uc BrowseProjects) Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error) {
+	switch {
+	case !project.found:
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project.Name())
+	case !project.session.Owned():
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrSessionNotOwned, project.Name())
+	}
+	for _, plan := range project.project.Plan().Windows() {
+		if plan.Name() == window {
+			return uc.sessions.Preview(project.Name(), plan)
+		}
+	}
+	return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotFound, window)
 }
 
 // overviews are the registered projects, with their configs, where they

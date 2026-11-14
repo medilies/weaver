@@ -48,12 +48,12 @@ func (l lazyConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 
 type lazyBrowser func() (infra.TeaBrowser, error)
 
-func (l lazyBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string) (app.Choice, error) {
+func (l lazyBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.WindowPreviewer) (app.Choice, error) {
 	browser, err := l()
 	if err != nil {
 		return app.Choice{}, err
 	}
-	return browser.Browse(projects, selected, notice)
+	return browser.Browse(projects, selected, notice, previews)
 }
 
 var (

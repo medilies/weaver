@@ -2000,10 +2000,19 @@ func formWindowList(look look, windows []domain.Window, selected int, width int)
 // click it. When they
 // don't fit in width, the first ones make way for the selected one.
 func paneList(look look, window domain.Window, order []int, selected int, width int) (string, []hotspot) {
+	names := make([]string, len(window.Panes()))
+	for i, pane := range window.Panes() {
+		names[i] = pane.Name().String()
+	}
+	return namesList(look, names, order, selected, width)
+}
+
+// namesList is names, or their numbers for those empty, listed as
+// paneList lists a window's panes.
+func namesList(look look, names []string, order []int, selected int, width int) (string, []hotspot) {
 	labels := make([]string, 0, len(order))
 	for _, i := range order {
-		pane := window.Panes()[i]
-		name := pane.Name().String()
+		name := names[i]
 		if name == "" {
 			name = strconv.Itoa(i + 1)
 		}

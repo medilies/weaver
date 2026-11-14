@@ -70,7 +70,7 @@ Each with what must hold. A failure is a bug in weave only once the keys sent ar
 | 5 | `t`, Enter on `wait` | The command is typed into `logs` and the client moves there. A new `weave` shows `● wait`. |
 | 6 | `t`, `echo hi`, Enter, `y` | The dialog says `logs is busy`. A throwaway window `echo` opens with `@weaver_throwaway` 1 and `@weaver_task_of` set to the ID of `logs`, showing `hi`. |
 | 7 | Ctrl-C in `logs`, then `weave`, select `shop`, → | `wait` has no ● any more. |
-| 8 | `y`, then `y` again | The YAML shows as stored, then the drawing comes back. |
+| 8 | `y`, then `y` again | The YAML shows as stored, then the preview comes back. |
 | 9 | `r` on `logs` | `sleep 3` is typed into `logs` again and the client moves there. |
 | 10 | `weave edit shop`, the `shell` window's `focus` row, Enter, Ctrl-S, `y` | The diff removes `focus: true` from `api` and keeps the pane's. `Saved shop.` The file has a single `focus: true`, on `back`. |
 | 11 | `weave bind blog`, Ctrl-S, `n`, Ctrl-U, type a new name, Enter, Ctrl-S, `y` | Saving under `blog` asks `Replace blog's registered config with this?` under the diff, once; `n` goes back to the form typing the name, under it `blog is already registered`. The saved config has `focus: true` on `preview`, and no window but `write`. |
@@ -81,6 +81,7 @@ Each with what must hold. A failure is a bug in weave only once the keys sent ar
 | 16 | Set `keys: { remove: u }` in `settings.yml`, `weave edit --raw notes`, then `weave list`, `weave --version` and `weave completion bash` | `weave edit` prints `Error: …/settings.yml: keys.remove: key taken: "u" already does undo`, before the editor opens, and nothing else runs; the others run as usual. Remove `settings.yml` afterwards. |
 | 17 | `weave edit notes`, `code`'s `areas` row, Enter, Ctrl-U, type `files, edit / files, logs`, Enter, Ctrl-S, `y` | The drawing adds `logs` under `edit` as it is typed. The diff adds the row and a pane `logs`, last. The saved config keeps `columns: [30, 1fr]` and lists `files`, `edit`, `logs`. |
 | 18 | `weave edit notes`, `code`'s `layout` row, →, Ctrl-S, `y` | The `areas`, `columns` and `rows` rows go, and the drawing is unchanged: `files` keeps its width, `edit`'s split being its share of the terminal (about 86% at 213 columns), not of tmux's default 80. The diff removes the grid and adds a `split` to `edit` and `logs`. |
+| 19 | `T switch-client -t term`, `weave`, select `notes`. `T send-keys -t '=notes:code' "printf '\\033[32mgreen\\033[0m\\n'" Enter`, then `T split-window -d -t '=notes:code'`, then Tab to the new pane, `p`, `p`, and `T kill-session -t =notes` | The title reads `notes.yml · preview` and the panes show their shells. Within a second `green` shows, in green (`32m` in `T capture-pane -e`), and a new pane, shown by its number, whose levels read `not in the config`, which the drawing, after `p`, doesn't have. The kill brings the drawing back with `preview: notes's session ended`. |
 
 ## Sample projects
 

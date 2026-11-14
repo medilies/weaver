@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
@@ -767,6 +769,69 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 		windows[tag] = append(windows[tag], listedPane{id: paneID, pid: pid, label: verbatim(label), number: n})
 	}
 	return windows, nil
+}
+
+// Preview implements domain.SessionInspector. The panes are listed with
+// their places through the first one found, which names their window, and
+// each shows its visible screen, colours kept, its trailing blank lines
+// dropped: a pane just cleared then shows its prompt at the bottom.
+func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
+	listed, err := t.projectPanes(project)
+	if err != nil {
+		return domain.WindowPreview{}, err
+	}
+	panes := listed[window.Name().String()]
+	if len(panes) == 0 {
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
+	}
+	configured := map[string]int{} // by pane ID
+	for index := range window.Panes() {
+		if pane, ok := pick(panes, window, index); ok {
+			configured[pane.id] = index
+		}
+	}
+	gone := func(err error) error {
+		if absent(err) {
+			return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+		}
+		return err
+	}
+	out, err := t.run("list-panes", "-t", panes[0].id, "-F",
+		"#{window_width} #{window_height} #{pane_id} #{pane_left} #{pane_top} #{pane_width} #{pane_height} "+sized("@label"))
+	if err != nil {
+		return domain.WindowPreview{}, gone(err)
+	}
+	var width, height int
+	var previews []domain.PanePreview
+	for line := range strings.Lines(out) {
+		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 8)
+		if len(fields) != 8 {
+			continue
+		}
+		var place [6]int // the window's width and height, then the pane's left, top, width and height
+		for i, field := range slices.Concat(fields[:2], fields[3:7]) {
+			if place[i], err = strconv.Atoi(field); err != nil {
+				return domain.WindowPreview{}, fmt.Errorf("tmux list-panes: unexpected line %q", line)
+			}
+		}
+		label := fields[7]
+		width, height = place[0], place[1]
+		id := fields[2]
+		shown, err := t.run("capture-pane", "-p", "-e", "-t", id)
+		if err != nil {
+			return domain.WindowPreview{}, gone(err)
+		}
+		lines := strings.Split(shown, "\n")
+		for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
+			lines = lines[:len(lines)-1]
+		}
+		pane := domain.NewPanePreview(place[2], place[3], place[4], place[5], verbatim(label), lines)
+		if index, ok := configured[id]; ok {
+			pane = pane.Configured(index)
+		}
+		previews = append(previews, pane)
+	}
+	return domain.NewWindowPreview(width, height, previews...), nil
 }
 
 // labelOf is the label the pane at index of window has in a running

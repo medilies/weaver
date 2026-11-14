@@ -1522,3 +1522,96 @@ func TestTmuxIdle(t *testing.T) {
 		}
 	})
 }
+
+func TestTmuxPreview(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "peek", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "api", "panes": [
+			{"name": "shell"},
+			{"name": "server", "command": "printf '\\033[31mready\\033[0m\\n'", "split": {"direction": "right"}}
+		]},
+		{"name": "logs", "panes": [{}]}
+	]}`, t.TempDir()))
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	project, api, logs := plan.Name(), plan.Windows()[0], plan.Windows()[1]
+
+	// previewShowing waits until the preview of window has a pane showing
+	// text, and returns it.
+	previewShowing := func(t *testing.T, window domain.WindowPlan, text string) domain.WindowPreview {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			preview, err := server.tmux().Preview(project, window)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			for _, pane := range preview.Panes() {
+				if strings.Contains(strings.Join(pane.Lines(), "\n"), text) {
+					return preview
+				}
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("no pane of %s ever showed %q", window.Name(), text)
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	t.Run("places the panes as tmux lays them out, matched to the config", func(t *testing.T) {
+		preview := previewShowing(t, api, "ready")
+		if width, height := preview.Size(); width != 200 || height != 50 {
+			t.Fatalf("got a %dx%d window, want 200x50", width, height)
+		}
+		var got []string
+		for _, pane := range preview.Panes() {
+			x, y, width, height := pane.Place()
+			index, ok := pane.InConfig()
+			got = append(got, fmt.Sprintf("%s %d,%d %dx%d %d %v", pane.Name(), x, y, width, height, index, ok))
+		}
+		// The top border, showing the panes' labels, takes the first row.
+		want := []string{"shell 0,1 100x49 0 true", "server 101,1 99x49 1 true"}
+		if !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("shows a pane's lines in their colours, without the blank ones below", func(t *testing.T) {
+		lines := previewShowing(t, api, "ready").Panes()[1].Lines()
+		if !slices.ContainsFunc(lines, func(line string) bool { return strings.Contains(line, "\x1b[31mready") }) {
+			t.Fatalf("got %q, want ready in red", lines)
+		}
+		if last := lines[len(lines)-1]; strings.TrimSpace(last) == "" {
+			t.Fatalf("got %q, want the prompt last", lines)
+		}
+	})
+
+	t.Run("leaves a pane split by hand out of the config", func(t *testing.T) {
+		server.query(t, "split-window", "-d", "-t", server.paneLabelled(t, "peek", "shell"))
+		preview := previewShowing(t, api, "ready")
+		var outside int
+		for _, pane := range preview.Panes() {
+			if _, ok := pane.InConfig(); !ok {
+				outside++
+			}
+		}
+		if len(preview.Panes()) != 3 || outside != 1 {
+			t.Fatalf("got %d panes, %d of them outside the config; want 3, 1 outside", len(preview.Panes()), outside)
+		}
+	})
+
+	t.Run("reports a window the session lacks", func(t *testing.T) {
+		server.query(t, "kill-window", "-t", "=peek:logs")
+		if _, err := server.tmux().Preview(project, logs); !errors.Is(err, domain.ErrWindowNotRunning) {
+			t.Fatalf("got %v, want ErrWindowNotRunning", err)
+		}
+	})
+
+	t.Run("reports a session that isn't running", func(t *testing.T) {
+		server.query(t, "kill-session", "-t", "=peek")
+		if _, err := server.tmux().Preview(project, api); !errors.Is(err, domain.ErrSessionNotRunning) {
+			t.Fatalf("got %v, want ErrSessionNotRunning", err)
+		}
+	})
+}

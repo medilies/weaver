@@ -15,8 +15,9 @@ import (
 // scriptedBrowser is an app.ProjectBrowser making the next scripted choice
 // on each call, then quitting, and recording what each call showed.
 type scriptedBrowser struct {
-	choices []app.Choice
-	shown   []browserView
+	choices  []app.Choice
+	shown    []browserView
+	previews app.WindowPreviewer // the last call's
 }
 
 // browserView is what one call to Browse showed.
@@ -26,7 +27,8 @@ type browserView struct {
 	notice   string
 }
 
-func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string) (app.Choice, error) {
+func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.WindowPreviewer) (app.Choice, error) {
+	b.previews = previews
 	b.shown = append(b.shown, browserView{projects: projects, selected: selected, notice: notice})
 	if len(b.choices) == 0 {
 		return app.Choice{}, app.ErrAborted
@@ -80,6 +82,10 @@ func (s unfindableSessions) Idle(domain.ProjectName, []domain.WindowPlan) (map[d
 
 func (s unfindableSessions) RunningCommands(domain.ProjectName, []domain.WindowPlan) ([]domain.RunningCommand, error) {
 	return nil, s.err
+}
+
+func (s unfindableSessions) Preview(domain.ProjectName, domain.WindowPlan) (domain.WindowPreview, error) {
+	return domain.WindowPreview{}, s.err
 }
 
 // uninspectableSessions is fakeSessions failing to tell which panes idle.
@@ -987,7 +993,7 @@ func isProjectNotFound(err error) bool {
 // failingBrowser is an app.ProjectBrowser that can't show anything.
 type failingBrowser struct{ err error }
 
-func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string) (app.Choice, error) {
+func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string, app.WindowPreviewer) (app.Choice, error) {
 	return app.Choice{}, b.err
 }
 
@@ -1044,4 +1050,56 @@ func paneName(t *testing.T, raw string) domain.PaneName {
 		t.Fatalf("NewPaneName(%q): %v", raw, err)
 	}
 	return name
+}
+
+func TestBrowseProjectsPreview(t *testing.T) {
+	// preview asks the browser's previewer for a window of the project
+	// named name, as the browser last showed it.
+	preview := func(t *testing.T, s browseSetup, name, window string) (domain.WindowPreview, error) {
+		t.Helper()
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		overview, ok := s.browser.last().overview(name)
+		if !ok {
+			t.Fatalf("%s not shown", name)
+		}
+		return s.browser.previews.Preview(overview, windowName(t, window))
+	}
+
+	t.Run("previews a window of an owned session", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = domain.NewRunningSession(true, windowName(t, "shop"))
+		want := domain.NewWindowPreview(80, 24, domain.NewPanePreview(0, 0, 80, 24, "", []string{"$ "}))
+		s.sessions.previews = map[string]domain.WindowPreview{"shop/shop": want}
+		got, err := preview(t, s, "shop", "shop")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if width, height := got.Size(); width != 80 || height != 24 || len(got.Panes()) != 1 {
+			t.Fatalf("got a %dx%d window of %d panes, want the session's", width, height, len(got.Panes()))
+		}
+	})
+
+	t.Run("doesn't preview a session weaver didn't start", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		if _, err := preview(t, s, "shop", "shop"); !errors.Is(err, domain.ErrSessionNotOwned) {
+			t.Fatalf("got %v, want ErrSessionNotOwned", err)
+		}
+	})
+
+	t.Run("doesn't preview a project that isn't running", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		if _, err := preview(t, s, "blog", "blog"); !errors.Is(err, domain.ErrSessionNotRunning) {
+			t.Fatalf("got %v, want ErrSessionNotRunning", err)
+		}
+	})
+
+	t.Run("doesn't preview a window the project doesn't have", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.sessions.running["shop"] = domain.NewRunningSession(true, windowName(t, "shop"))
+		if _, err := preview(t, s, "shop", "admin"); !errors.Is(err, domain.ErrWindowNotFound) {
+			t.Fatalf("got %v, want ErrWindowNotFound", err)
+		}
+	})
 }

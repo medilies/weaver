@@ -18,7 +18,11 @@ import (
 // a window of cols×rows cells places them: top to bottom, then left to
 // right.
 func drawnOrder(window domain.WindowPlan, cols, rows int) []int {
-	boxes := layOut(window, cols, rows)
+	return placedOrder(layOut(window, cols, rows))
+}
+
+// placedOrder is the indexes of boxes, top to bottom, then left to right.
+func placedOrder(boxes []box) []int {
 	order := make([]int, len(boxes))
 	for i := range order {
 		order[i] = i
@@ -167,6 +171,65 @@ var alertStyles = map[alert]lipgloss.Style{
 // colour, the worst winning on a border boxes share, and over the
 // selected colour.
 func drawing(look look, window domain.WindowPlan, root string, alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
+	panes := window.Panes()
+	titles := make([]string, len(panes))
+	contents := make([][]string, len(panes))
+	for i, pane := range panes {
+		titles[i] = paneTitle(pane, len(panes))
+		contents[i] = paneLines(pane, root)
+	}
+	return drawnBoxes(look, layOut(window, cols, rows), titles, contents, false, alerts, selected, heavy, cols, rows, width, height)
+}
+
+// previewDrawing is a window's preview drawn as boxes in width×height
+// cells, as drawing draws a window, each box showing the last lines its
+// pane shows, in their colours, under its name, from names, when the
+// window has several. The rows above the topmost pane, which tmux gives
+// to the top border showing the panes' names, are left out.
+func previewDrawing(look look, preview domain.WindowPreview, names []string, alerts []alert, selected, width, height int) []string {
+	cols, rows := preview.Size()
+	panes := preview.Panes()
+	boxes := previewBoxes(preview)
+	if len(boxes) > 0 {
+		top := slices.MinFunc(boxes, func(a, b box) int { return cmp.Compare(a.y, b.y) }).y
+		for i := range boxes {
+			boxes[i].y -= top
+		}
+		rows -= top
+	}
+	titles := make([]string, len(panes))
+	contents := make([][]string, len(panes))
+	for i, pane := range panes {
+		if len(panes) > 1 {
+			titles[i] = names[i]
+		}
+		contents[i] = pane.Lines()
+	}
+	return drawnBoxes(look, boxes, titles, contents, true, alerts, selected, false, cols, rows, width, height)
+}
+
+// previewBoxes are the cells each pane of preview covers.
+func previewBoxes(preview domain.WindowPreview) []box {
+	panes := preview.Panes()
+	boxes := make([]box, len(panes))
+	for i, pane := range panes {
+		x, y, width, height := pane.Place()
+		boxes[i] = box{x: x, y: y, width: width, height: height}
+	}
+	return boxes
+}
+
+// previewOrder is the indexes of preview's panes in the order its drawing
+// places them: top to bottom, then left to right.
+func previewOrder(preview domain.WindowPreview) []int {
+	return placedOrder(previewBoxes(preview))
+}
+
+// drawnBoxes draws boxes, of a window of cols×rows cells, in width×height
+// cells, as drawing describes, each titled by titles and showing the lines
+// of contents: its first ones that fit, or its last when fromBottom is set.
+func drawnBoxes(look look, boxes []box, titles []string, contents [][]string, fromBottom bool,
+	alerts []alert, selected int, heavy bool, cols, rows, width, height int) []string {
 	grid := newGrid(width, height)
 	// A line between cells, from -1 (the window's outer border) to cols or
 	// rows (the other one), maps to the same drawn line for every box it
@@ -175,7 +238,6 @@ func drawing(look look, window domain.WindowPlan, root string, alerts []alert, s
 	row := func(line int) int { return scaled(line+1, rows+1, height-1) }
 
 	type frame struct{ left, top, right, bottom int }
-	boxes := layOut(window, cols, rows)
 	frames := make([]frame, len(boxes))
 	for i, b := range boxes {
 		f := frame{column(b.x - 1), row(b.y - 1), column(b.x + b.width), row(b.y + b.height)}
@@ -188,22 +250,24 @@ func drawing(look look, window domain.WindowPlan, root string, alerts []alert, s
 	}
 	grid.drawBorders()
 
-	panes := window.Panes()
-	for i, pane := range panes {
-		f := frames[i]
-		title := paneTitle(pane, len(panes))
+	for i, f := range frames {
+		title := titles[i]
 		if alertOf(alerts, i) != noAlert {
 			title = strings.TrimSpace("⚠ " + title)
 		}
 		room := f.right - f.left - 3
 		open, closing := " ", " "
-		if i == selected && !heavy && len(panes) > 1 && room >= 5 { // else no room for the brackets
+		if i == selected && !heavy && len(boxes) > 1 && room >= 5 { // else no room for the brackets
 			open, closing = "[ ", " ]"
 		}
 		if width := room - len(open) - len(closing); title != "" && width > 0 {
 			grid.write(f.left+2, f.top, open+ansi.Truncate(title, width, "…")+closing, room)
 		}
-		for j, text := range paneLines(pane, root) {
+		lines := contents[i]
+		if fit := max(f.bottom-f.top-1, 0); fromBottom && len(lines) > fit {
+			lines = lines[len(lines)-fit:]
+		}
+		for j, text := range lines {
 			if f.top+1+j >= f.bottom {
 				break
 			}
@@ -405,7 +469,7 @@ func (g grid) drawBorders() {
 }
 
 // write puts text at (x, y), tabs as spaces, cut to width cells with "…"
-// in place of the rest. The text is kept whole in its first cell, the
+// in place of the rest, its colours, if any, ended after it. The text is kept whole in its first cell, the
 // cells it covers left empty, so the terminal measures it, combining
 // marks and all.
 func (g grid) write(x, y int, text string, width int) {
@@ -416,6 +480,9 @@ func (g grid) write(x, y int, text string, width int) {
 	cells := ansi.StringWidth(text)
 	if cells == 0 {
 		return
+	}
+	if strings.Contains(text, "\x1b") {
+		text += ansi.ResetStyle // a colour cut short mustn't run on
 	}
 	for i := x; i < x+cells; i++ {
 		g.cells[y][i] = ""
