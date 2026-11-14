@@ -1587,6 +1587,18 @@ func TestTmuxPreview(t *testing.T) {
 		}
 	})
 
+	t.Run("doesn't capture the pane weaver runs in", func(t *testing.T) {
+		inside := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true,
+			Pane: server.paneLabelled(t, "peek", "server")})
+		preview, err := inside.Preview(project, api)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if pane := preview.Panes()[1]; !pane.ShowsTheBrowser() || len(pane.Lines()) > 0 {
+			t.Fatalf("got %q, want no lines from the browser's pane", pane.Lines())
+		}
+	})
+
 	t.Run("leaves a pane split by hand out of the config", func(t *testing.T) {
 		server.query(t, "split-window", "-d", "-t", server.paneLabelled(t, "peek", "shell"))
 		preview := previewShowing(t, api, "ready")

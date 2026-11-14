@@ -49,7 +49,8 @@ type SessionInspector interface {
 	RunningCommands(project ProjectName, windows []WindowPlan) ([]RunningCommand, error)
 	// Preview is window in the project's running session as it is now:
 	// the window tagged with its name, each pane showing the bottom of its
-	// screen, and matched to window's panes as TaskRunner finds them. An
+	// screen, but for the one weaver runs in, and matched to window's
+	// panes as TaskRunner finds them. An
 	// error wrapping ErrSessionNotRunning when no session runs, or
 	// ErrWindowNotRunning when the session lacks the window.
 	Preview(project ProjectName, window WindowPlan) (WindowPreview, error)

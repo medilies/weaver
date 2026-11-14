@@ -184,8 +184,9 @@ func drawing(look look, window domain.WindowPlan, root string, alerts []alert, s
 // previewDrawing is a window's preview drawn as boxes in width×height
 // cells, as drawing draws a window, each box showing the last lines its
 // pane shows, in their colours, under its name, from names, when the
-// window has several. The rows above the topmost pane, which tmux gives
-// to the top border showing the panes' names, are left out.
+// window has several; the pane the browser runs in says so instead. The
+// rows above the topmost pane, which tmux gives to the top border showing
+// the panes' names, are left out.
 func previewDrawing(look look, preview domain.WindowPreview, names []string, alerts []alert, selected, width, height int) []string {
 	cols, rows := preview.Size()
 	panes := preview.Panes()
@@ -204,6 +205,9 @@ func previewDrawing(look look, preview domain.WindowPreview, names []string, ale
 			titles[i] = names[i]
 		}
 		contents[i] = pane.Lines()
+		if pane.ShowsTheBrowser() {
+			contents[i] = []string{keysStyle.Render("this browser")}
+		}
 	}
 	return drawnBoxes(look, boxes, titles, contents, true, alerts, selected, false, cols, rows, width, height)
 }

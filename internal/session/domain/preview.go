@@ -33,6 +33,7 @@ type PanePreview struct {
 	name                string
 	lines               []string
 	configured          int // -1 for a pane the config doesn't have
+	browsing            bool
 }
 
 // NewPanePreview is a pane of width×height cells whose top left cell is
@@ -47,6 +48,18 @@ func NewPanePreview(x, y, width, height int, name string, lines []string) PanePr
 func (p PanePreview) Configured(index int) PanePreview {
 	p.configured = index
 	return p
+}
+
+// Browsing is p as the pane weaver's browser runs in, which shows no
+// lines: they would show the preview showing them.
+func (p PanePreview) Browsing() PanePreview {
+	p.browsing, p.lines = true, nil
+	return p
+}
+
+// ShowsTheBrowser reports whether weaver's browser runs in the pane.
+func (p PanePreview) ShowsTheBrowser() bool {
+	return p.browsing
 }
 
 // Place is where the pane is in its window, in cells, its borders left

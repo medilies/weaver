@@ -774,7 +774,8 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 // Preview implements domain.SessionInspector. The panes are listed with
 // their places through the first one found, which names their window, and
 // each shows its visible screen, colours kept, its trailing blank lines
-// dropped: a pane just cleared then shows its prompt at the bottom.
+// dropped: a pane just cleared then shows its prompt at the bottom. The
+// pane weaver runs in isn't captured.
 func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
@@ -817,15 +818,20 @@ func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (dom
 		label := fields[7]
 		width, height = place[0], place[1]
 		id := fields[2]
-		shown, err := t.run("capture-pane", "-p", "-e", "-t", id)
-		if err != nil {
-			return domain.WindowPreview{}, gone(err)
+		pane := domain.NewPanePreview(place[2], place[3], place[4], place[5], verbatim(label), nil)
+		if id == t.opts.Pane {
+			pane = pane.Browsing() // captured, it would hold its own capture, over and over
+		} else {
+			shown, err := t.run("capture-pane", "-p", "-e", "-t", id)
+			if err != nil {
+				return domain.WindowPreview{}, gone(err)
+			}
+			lines := strings.Split(shown, "\n")
+			for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
+				lines = lines[:len(lines)-1]
+			}
+			pane = domain.NewPanePreview(place[2], place[3], place[4], place[5], verbatim(label), lines)
 		}
-		lines := strings.Split(shown, "\n")
-		for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
-			lines = lines[:len(lines)-1]
-		}
-		pane := domain.NewPanePreview(place[2], place[3], place[4], place[5], verbatim(label), lines)
 		if index, ok := configured[id]; ok {
 			pane = pane.Configured(index)
 		}

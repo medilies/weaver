@@ -52,7 +52,8 @@ where tmux has them, each showing the bottom of its screen in its
 colours, updated every second. The details' title ends in `· preview`.
 Its panes are matched to the config's as tasks find them, so their
 warnings, the levels below and `r` stay; a pane split by hand shows by
-its number, as "not in the config". `p` switches to the drawing and
+its number, as "not in the config". The pane the browser runs in reads
+"this browser": captured, it would show the preview inside itself. `p` switches to the drawing and
 back, for as long as the browser stays open. The drawing comes back,
 the status line saying why, when the session ends or the window closes,
 and for a window the session lacks, which enter restores. Only the
