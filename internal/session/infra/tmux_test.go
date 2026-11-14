@@ -1458,6 +1458,24 @@ func TestTmuxRunningCommands(t *testing.T) {
 		server.query(t, "send-keys", "-t", server.paneLabelled(t, "running", "shell"), "C-c")
 		running(t, "api/1: sleep 301")
 	})
+
+	t.Run("doesn't find a command in the pane weaver runs in, which weaver keeps busy", func(t *testing.T) {
+		shell := server.paneLabelled(t, "running", "shell")
+		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command()); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		running(t, "api/0: sleep 300", "api/1: sleep 301")
+		inside := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true, Pane: shell})
+		commands, err := inside.RunningCommands(project, plan.Windows())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, c := range commands {
+			if c.Pane() == 0 {
+				t.Fatalf("got %s/%d running, want the pane weaver runs in left out", c.Window(), c.Pane())
+			}
+		}
+	})
 }
 
 func TestTmuxIdle(t *testing.T) {

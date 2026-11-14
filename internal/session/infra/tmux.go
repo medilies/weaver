@@ -604,7 +604,8 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 // RunApart tagged with it and with the pane it ran apart from, isn't idle
 // as idleShells tells: it may be another job by then, which can't be told
 // apart. A pane whose process ps doesn't report isn't counted: the mark
-// is a hint, left out when it can't be told.
+// is a hint, left out when it can't be told. Nor is the pane weaver runs
+// in, which weaver keeps busy itself.
 func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.WindowPlan) ([]domain.RunningCommand, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
@@ -637,7 +638,7 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 	running := map[string]typed{} // by process
 	for line := range strings.Lines(out) {
 		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
-		if len(fields) != 4 {
+		if len(fields) != 4 || fields[0] == t.opts.Pane {
 			continue
 		}
 		source := fields[0]

@@ -69,7 +69,8 @@ list's ● marks are as they were when the browser last showed the list.
 Beside the project list, the task list shows the selected project's tasks under
 `window › pane`, in the order its panes are created, ● before one still
 running in its pane or its throwaway window (weaver can't tell it from
-another job started there after it ended), checked again every second.
+another job started there after it ended, and never in the pane the
+browser runs in, which it keeps busy itself), checked again every second.
 Running one needs the project's
 session running, started by weaver: when the pane's shell is idle at its
 prompt, the task's command is typed into it and run, after cutting
