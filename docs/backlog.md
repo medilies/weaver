@@ -116,16 +116,41 @@ output.
 pane is still doing its job, or a task's output is wanted without
 leaving the browser.
 
-Like tmux's `choose-tree` preview: `capture-pane` each pane of a
-running session and fill the drawing's boxes with their last lines,
-drawn from tmux's real geometry instead of the plan, so panes closed or
-added show against the config. `infra/tmux_layout.go` already parses
-`#{window_layout}` for bind, so the geometry costs almost nothing;
-what is left is `capture-pane` on the tmux port and a refresh while the
-browser is open. The refresh loop is when to build the overviews
-concurrently: the browser rebuilds every overview, one after another,
-before each view, which is fast while they only check directories and
-programs.
+Like tmux's `choose-tree` preview. Designed on 2026-11-14:
+
+- **What**: the *preview* (glossary) of the selected window, in place
+  of its drawing, shown by default; `p` switches between the two for the
+  rest of the browser's run, with no setting. Only for a running owned
+  session; other projects keep the drawing.
+- **Geometry**: tmux's `#{window_layout}` (`infra/tmux_layout.go`),
+  not the plan. Panes named by `@label`, or their number without one.
+  No diff against the config: the ○ mark and the summary say what is
+  missing.
+- **Matching**: session panes are matched to the config by `pick`
+  (`infra/tmux.go`), as tasks and the exited-command warning are.
+  Matched panes keep their warning colours and ⚠, and Tab or a click
+  shows their levels below; a pane split by hand is drawn plain, and
+  shows "not in the config". The pane list names the session's panes,
+  in the order the preview places them.
+- **Content**: `capture-pane -p -e`, colours kept: the bottom of the
+  visible screen, not the scrollback, trailing blank lines dropped,
+  lines cut with `…` by `ansi.Truncate`, a reset after each line so a
+  cut colour doesn't bleed. Check with a scratch test whether tmux 3.4's
+  `-e` restates attributes at each line's start.
+- **Refresh**: about once a second, the selected window only, never
+  the other windows or the miniatures. Only the preview is live: the ●
+  marks, summary and task list stay a snapshot until the next action.
+  Building the overviews concurrently waits for a use of its own.
+- **Ports**: `ProjectBrowser.Browse` gets an `app` port the browser
+  calls each tick (`Preview(project, window)`); the use case checks the
+  session is owned and asks a domain port, whose tmux adapter returns a
+  `WindowPreview` (a `LayoutCell` and each pane's name and lines). Not a
+  refresh `Choice`, which would restart the browser each second.
+- **Falling back** to the drawing, the notice saying why: when the
+  session ends or the window closes while shown; when a capture fails
+  (tried again next tick); for a window the session lacks ("not in the
+  session; enter restores it" above it); and in a terminal too small to
+  draw ("preview: the terminal is too small").
 
 ### `wait` (M)
 
