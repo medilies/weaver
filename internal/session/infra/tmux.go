@@ -432,8 +432,9 @@ const throwawayTag = "@weaver_throwaway"
 
 // Busy implements domain.TaskRunner: a pane is busy when it is in a mode,
 // such as copy mode, which would take typed keys as its commands, or when
-// a job other than its shell is in its terminal's foreground, or that
-// can't be told.
+// a job other than its shell is in its terminal's foreground, a command
+// its shell was replaced with by exec included, or that ps can't tell.
+// An error is the session's options failing to read.
 func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index int) (bool, error) {
 	id, pid, err := t.paneOf(project, window, index)
 	if err != nil {
@@ -446,11 +447,11 @@ func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index i
 	if inMode != "0" {
 		return true, nil
 	}
-	group, err := exec.Command("ps", "-o", "tpgid=", "-p", pid).Output()
+	idle, _, err := t.idleShells(project, []string{pid})
 	if err != nil {
-		return true, nil // the shell may be gone: ask rather than type
+		return false, err
 	}
-	return strings.TrimSpace(string(group)) != pid, nil
+	return !idle[pid], nil // a shell ps can't see may be gone: ask rather than type
 }
 
 // Type implements domain.TaskRunner. Whatever is at the prompt, as a

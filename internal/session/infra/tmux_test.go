@@ -1337,6 +1337,27 @@ func TestTmuxTasks(t *testing.T) {
 	})
 }
 
+func TestTmuxBusyFindsACommandItsShellWasReplacedWith(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "execd", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "srv", "panes": [{"command": "exec cat"}]}
+	]}`, t.TempDir()))
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for server.query(t, "display-message", "-p", "-t", "=execd:srv", "#{pane_current_command}") != "cat" {
+		if time.Now().After(deadline) {
+			t.Fatal("the pane never ran cat")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	busy, err := server.tmux().Busy(plan.Name(), plan.Windows()[0], 0)
+	if err != nil || !busy {
+		t.Fatalf("got busy %t (err %v), want busy", busy, err)
+	}
+}
+
 func TestTmuxRunningCommands(t *testing.T) {
 	server := newTmuxServer(t)
 	plan := planOf(t, "running", fmt.Sprintf(`{"root": %q, "windows": [
