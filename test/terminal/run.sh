@@ -16,11 +16,16 @@
 # Or watch a run, read-only, from any terminal of 160x45 or more:
 #   tmux -S /tmp/wvt/screen.sock attach -r
 # Sourced, after a run with -k, it defines its functions and runs
-# nothing: unset TMUX; . test/terminal/run.sh; fresh; browse shop
+# nothing; set its locale first, as a run does:
+#   unset TMUX; export LC_ALL=C.UTF-8; . test/terminal/run.sh; fresh; browse shop
 #
 # Never touches the user's tmux: every tmux command names its socket.
-set -u
-export LC_ALL=C.UTF-8 # characters, not bytes, in ${#…} and grep
+# Linux: GNU tools, the C.UTF-8 locale and tmux's tmux-256color terminfo.
+
+TMUX_BIN=$(type -P tmux) || {
+	echo "tmux not found" >&2
+	return 2 2>/dev/null || exit 2
+}
 
 W=/tmp/wvt
 SOCK=$W/tmux/tmux-$(id -u)/default
@@ -30,9 +35,9 @@ COLS=160 ROWS=45
 # Every tmux command runs in the test's environment, not the caller's:
 # tmux gives the panes a command creates the environment of the client
 # sending it, PATH included.
-TEST_ENV=(HOME="$W/home" LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=tmux-256color
+TEST_ENV=(HOME="$W/home" HISTFILE= LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM=tmux-256color
 	TMUX_TMPDIR="$W/tmux" XDG_CONFIG_HOME="$W/cfg"
-	PATH="$W/bin:$(dirname "$(command -v tmux)"):/usr/bin:/bin")
+	PATH="$W/bin:$(dirname "$TMUX_BIN"):/usr/bin:/bin")
 T() { (cd "$W" && env -i "${TEST_ENV[@]}" tmux -S "$SOCK" "$@"); }
 S() { (cd "$W" && env -i "${TEST_ENV[@]}" tmux -S "$SCREEN" "$@"); }
 
@@ -126,10 +131,13 @@ form() {
 }
 
 # split_at: the column the drawing's second pane starts at, its prompt
-# on the same line as the first's.
+# on the same line as the first's; 0 when no line has two prompts.
 split_at() {
 	local line
-	line=$(screen | grep -m1 -E '\$ █.*\$ █')
+	line=$(screen | grep -m1 -E '\$ █.*\$ █') || {
+		echo 0
+		return
+	}
 	line=${line%\$ █*}
 	echo ${#line}
 }
@@ -202,11 +210,15 @@ setup() {
 		go build -o "$W/bin/weave" ./cmd/weave || exit 2
 	fi
 	write_projects
-	# The same shells on every machine: a home of their own, whose
-	# .bashrc runs after the system's, a plain prompt, no login banner.
+	# The same shells on every machine. term's is bash reading no rc file.
+	# Those of the projects' panes are bash whatever the login shell is,
+	# with a home of their own, whose .bashrc runs after the system's: a
+	# plain prompt, no login banner.
 	printf '%s\n' "PS1='\\$ '" >"$W/home/.bashrc"
+	# tmux starts them as login shells, which read .bash_profile instead.
+	printf '%s\n' '. ~/.bashrc' >"$W/home/.bash_profile"
 	touch "$W/home/.hushlogin"
-	printf '%s\n' 'set -g default-terminal tmux-256color' >"$W/tmux.conf"
+	printf '%s\n' 'set -g default-terminal tmux-256color' "set -g default-shell $(command -v bash)" >"$W/tmux.conf"
 	T -f "$W/tmux.conf" new-session -d -s term -x $COLS -y $ROWS bash --norc --noprofile
 	# The terminal attaching and switching: a pane of a second server, of
 	# a fixed size whoever watches it, attaching again when a kill ends
@@ -238,13 +250,24 @@ fresh() {
 	local s
 	AT==term:
 	for s in $(T list-sessions -F '#{session_name}'); do
-		[ "$s" = term ] || T kill-session -t "=$s"
+		[ "$s" = term ] || unzoomed_kill "$s"
 	done
 	write_projects
 	S resize-window -t screen -x $COLS -y $ROWS
 	wait_on term || return
 	T respawn-pane -k -t =term: bash --norc --noprofile
 	wait_runs =term: bash
+}
+
+# unzoomed_kill <session>: the session killed, its zoomed windows
+# unzoomed first: tmux 3.4 crashes, taking term along, killing a session
+# with a zoomed window.
+unzoomed_kill() {
+	local w
+	for w in $(T list-windows -t "=$1" -F '#{window_id}' 2>/dev/null); do
+		T if-shell -F -t "$w" '#{window_zoomed_flag}' "resize-pane -Z -t $w" 2>/dev/null
+	done
+	T kill-session -t "=$1"
 }
 
 # started <project>: the project's session, started from term.
@@ -320,6 +343,7 @@ s3() {
 	logs_idle || return
 	local back
 	back=$(pane_of shop:api back)
+	[ -n "$back" ] || fail "shop has no back pane" || return
 	T send-keys -t "$LOGS" 'echo "env=$APP_ENV $LOG"' Enter
 	T send-keys -t "$back" 'echo "env=$APP_ENV $LOG"' Enter
 	AT=$LOGS wait_for 'env=staging info' || return
@@ -494,9 +518,14 @@ s15() {
 
 s16() {
 	settings 'keys: { remove: u }'
-	run 'weave edit --raw notes' || return
+	local before
+	before=$(config notes)
+	run "VISUAL='touch $W/edited' weave edit --raw notes; echo exit=\$?" || return
 	wait_for 'Error: /tmp/wvt/cfg/weaver/settings.yml: keys.remove: key taken: "u" already does undo' || return
-	run 'weave list | cut -d" " -f1 | paste -sd" "' || return
+	until_ 5 has_line "$AT" exit=1 || fail "weave edit didn't exit 1" || return
+	test ! -e "$W/edited" || fail "the editor opened" || return
+	expect "the config" "$(config notes)" "$before" || return
+	run 'weave list | cut -d" " -f1 | paste -sd" " -' || return
 	until_ 5 has_line "$AT" 'blog notes shop' || fail "weave list didn't list the projects" || return
 	run 'weave --version >/dev/null && weave completion bash >/dev/null && echo both-ran' || return
 	until_ 5 has_line "$AT" both-ran || fail "--version or completion failed"
@@ -524,6 +553,7 @@ s18() {
 	cursor_to layout || return
 	local before size
 	before=$(split_at)
+	[ "$before" -gt 0 ] || fail "no two prompts side by side in the drawing" || return
 	keys Right
 	wait_gone ' areas ' || return
 	expect "the column edit starts at" "$(split_at)" "$before" || return
@@ -566,6 +596,73 @@ s20() {
 	wait_for 'this browser'
 }
 
+# zoom <session:window> <pane>: the window zoomed on the pane named so.
+zoom() {
+	local pane
+	pane=$(pane_of "$1" "$2")
+	[ -n "$pane" ] || fail "$1 has no pane $2" || return
+	T resize-pane -Z -t "$pane"
+}
+
+s21() {
+	started notes || return
+	browse notes || return
+	wait_for 'notes.yml · preview' || return
+	zoom notes:code edit || return
+	wait_gone '[ files ]' || return
+	wait_for 'edit  /tmp/wvt/notes' || return
+	until_ 5 zoomed_alone || fail "the preview shows more than the zoomed pane" || return
+	keys p
+	wait_gone '· preview' || return
+	wait_for '[ edit ]' || return
+	keys p
+	wait_for '· preview' || return
+	T resize-pane -Z -t =notes:code
+	until_ 5 unzoomed_back || fail "not the preview of both panes, edit selected"
+}
+
+# zoomed_alone: the pane list names edit alone.
+zoomed_alone() { screen | grep -qE '│  edit +│$'; }
+
+# unzoomed_back: the preview again, of both panes, edit selected, all on
+# one capture.
+unzoomed_back() {
+	local s
+	s=$(screen)
+	grep -qF 'notes.yml · preview' <<<"$s" && grep -qF '[ edit ]' <<<"$s" && grep -qE '│  files +edit +│$' <<<"$s"
+}
+
+s22() {
+	started notes || return
+	browse notes || return
+	wait_for 'notes.yml · preview' || return
+	wait_for '[ files ]' || return
+	keys Tab
+	wait_for '[ edit ]' || return
+	keys p
+	wait_gone '· preview' || return
+	wait_for '[ edit ]' || return
+	keys Tab
+	wait_for '[ files ]' || return
+	keys p
+	wait_for '· preview' || return
+	wait_for '[ files ]' || return
+	keys t
+	wait_for 'enter run, go' || return
+	keys Down
+	wait_for '[ edit ]' || return
+	keys Up
+	wait_for '[ files ]'
+}
+
+s23() {
+	started notes || return
+	zoom notes:code edit || return
+	run 'weave kill notes' || return
+	until_ 5 ended notes || fail "notes is still running" || return
+	T has-session -t =term 2>/dev/null || fail "term went with notes: the server crashed"
+}
+
 # --- Running ----------------------------------------------------------------
 
 main() {
@@ -579,6 +676,8 @@ main() {
 		esac
 	done
 	shift $((OPTIND - 1))
+	set -u
+	export LC_ALL=C.UTF-8 # characters, not bytes, in ${#…} and grep
 	cd "$(dirname "$0")/../.." || exit 2
 	unset TMUX
 	if [ $# -gt 0 ]; then
@@ -586,8 +685,13 @@ main() {
 	else
 		for n in $(declare -F | awk '$3 ~ /^s[0-9]+$/ {print substr($3, 2)}' | sort -n); do all+=("$n"); done
 	fi
-	# What a run kept with -k goes first.
+	# What a run kept with -k goes first. The directory is made anew, so
+	# nothing planted there in the shared /tmp is followed.
 	clean
+	mkdir -m 700 "$W" || {
+		echo "$W is still there; remove it" >&2
+		exit 2
+	}
 	# Cleaned up however the run ends, unless kept.
 	[ -n "$keep" ] || trap clean EXIT
 	setup "$bin"

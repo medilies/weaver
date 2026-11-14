@@ -524,7 +524,7 @@ func (m browser) render() string {
 // cards above the notice and the keys, and the width the details' card
 // has for its content right of the task list's.
 func (m browser) frame() (notice, list, tasks string, height, width int) {
-	notice = lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
+	notice = m.noticeLine()
 	height = max(m.height-lipgloss.Height(notice)-1-2, 1)
 	if len(m.projects) > 0 {
 		projects := m.list(height)
@@ -532,6 +532,12 @@ func (m browser) frame() (notice, list, tasks string, height, width int) {
 	}
 	tasks, _ = m.taskColumn(taskListWidth(m.projects, m.width), height)
 	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-lipgloss.Width(tasks)-cardSides, 1)
+}
+
+// noticeLine is the notice as frame lays it out, on as many lines as
+// the width makes it.
+func (m browser) noticeLine() string {
+	return lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
 }
 
 // cardSides is the cells across a card's borders and the spaces inside

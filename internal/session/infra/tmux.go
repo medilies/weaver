@@ -405,7 +405,10 @@ func (t Tmux) Kill(name domain.ProjectName) error {
 	}
 	for line := range strings.Lines(out) {
 		if id, zoomed := strings.CutPrefix(strings.TrimSuffix(line, "\n"), "1 "); zoomed {
-			if _, err := t.run("resize-pane", "-Z", "-t", id); err != nil {
+			// Only if it is still zoomed: resize-pane -Z zooms an unzoomed
+			// window. A window closed meanwhile needs nothing.
+			_, err := t.run("if-shell", "-F", "-t", id, "#{window_zoomed_flag}", "resize-pane -Z -t "+id)
+			if err != nil && !lost(err) && !absent(err) {
 				return err
 			}
 		}
@@ -795,12 +798,19 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 // pane weaver runs in isn't captured. A zoomed window shows its zoomed
 // pane alone, as tmux draws it.
 func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
-	preview, err := t.preview(project, window)
-	if lost(err) { // a pane closed while it was read: read the window again
-		preview, err = t.preview(project, window)
+	return readAgainIfLost(window.Name(), func() (domain.WindowPreview, error) { return t.preview(project, window) })
+}
+
+// readAgainIfLost is what read reads of the window named window, read
+// again when a pane or window closed while it was read, and the window
+// closed, ErrWindowNotRunning, when that happens twice.
+func readAgainIfLost(window domain.WindowName, read func() (domain.WindowPreview, error)) (domain.WindowPreview, error) {
+	preview, err := read()
+	if lost(err) {
+		preview, err = read()
 	}
 	if lost(err) {
-		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window.Name())
+		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotRunning, window)
 	}
 	return preview, err
 }

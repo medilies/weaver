@@ -3,7 +3,7 @@
 How to check weave end to end before or after a release: the browser, the config form and the confirmation dialog aren't unit-tested, and neither is how they behave together in a real terminal. [`test/terminal/run.sh`](../../test/terminal/run.sh) runs every scenario below against a throwaway tmux server and prints one line per scenario, with the screen of any that fails:
 
 ```sh
-test/terminal/run.sh          # all of them, about 45 seconds
+test/terminal/run.sh          # all of them, about 50 seconds
 test/terminal/run.sh 7 15     # some; each sets up what it needs
 test/terminal/run.sh -w       # watched in a terminal window that opens for it
 test/terminal/run.sh -k 11    # the servers and /tmp/wvt kept once done, to look around
@@ -13,7 +13,7 @@ test/terminal/run.sh -k 11    # the servers and /tmp/wvt kept once done, to look
 PASS 1
 FAIL 2: the active pane is 'editor', not 'preview'
   | (the screen, less its blank lines)
-19/20 passed, failed: 2
+22/23 passed, failed: 2
 ```
 
 Read only that output: a passing scenario needs nothing more, and a failing one shows its screen. A failure is a bug in weave only once the scenario's keys are known to be the right ones: rerun it alone, with `-k`, and look.
@@ -56,8 +56,9 @@ flowchart LR
 ```
 
 - **A terminal without a display.** weave attaches and switches a client, so the test server needs one. A second tmux server, `screen`, fixed at 160x45 whoever watches it, runs it in a loop that attaches again when a kill ends it.
-- **The same environment on every machine.** Every tmux command runs under `env -i` with the test's `HOME`, `XDG_CONFIG_HOME`, `TMUX_TMPDIR`, locale, `TERM` and a `PATH` starting with the weave under test, from `/tmp/wvt`. This isn't only tidiness: tmux gives the panes a command creates the environment of the client sending it, so without it the shells inherit the caller's `PATH` and run their installed weave. The setup checks that `term`'s shell finds the weave under test. Its shells get a home of their own, with a plain prompt and no login banner.
-- **Each scenario starts fresh.** No session but `term`, a new shell in it, the client on it at full size, the sample projects as written and no settings. One failure doesn't take the next scenarios with it, and any one runs alone.
+- **The same environment on every machine.** Every tmux command runs under `env -i` with the test's `HOME`, `XDG_CONFIG_HOME`, `TMUX_TMPDIR`, locale, `TERM` and a `PATH` starting with the weave under test, from `/tmp/wvt`. This isn't only tidiness: tmux gives the panes a command creates the environment of the client sending it, so without it the shells inherit the caller's `PATH` and run their installed weave. The setup checks that `term`'s shell finds the weave under test. `term` runs bash reading no rc file. The panes weave creates run bash whatever your login shell is, with a home of their own whose `.bashrc` gives a plain prompt, and no login banner.
+- **Linux.** GNU tools, the `C.UTF-8` locale and tmux's `tmux-256color` terminfo.
+- **Each scenario starts fresh.** No session but `term`, the others killed once unzoomed, as tmux 3.4 needs, a new shell in it, the client on it at full size, the sample projects as written and no settings. One failure doesn't take the next scenarios with it, and any one runs alone.
 - **Waiting for what must show, never for a time.** Every check polls, ten times a second up to a few seconds, for a text on the screen, a client's session, a pane's running command or a file. Keys sent together are safe, as Bubble Tea reads them in order; only a program just started needs waiting for, until its key line shows. A screen being redrawn, after a resize, can match half-made: check what must and must not show on one capture.
 
 ## Never touch the user's tmux
@@ -103,6 +104,9 @@ Each is a function `sN` in the script, starting fresh. *Started* means started w
 | 18 | `weave edit notes`, `code`'s `layout` row, →, Ctrl-S, `y` | The `areas`, `columns` and `rows` rows go, and the drawing is unchanged: `edit` starts at the same column. The diff removes the grid. `edit`'s saved split is its share of the terminal, about 81% (129 of 160 columns), not of tmux's default 80 (61%). |
 | 19 | `notes` started: `weave`, select `notes`. Print `green` in green in `code`'s first pane, split `code` from outside, Tab twice to the new pane, `p`, `p`, then kill `notes` from outside | The title reads `notes.yml · preview`. `green` shows, in green (`32m`), and the new pane's levels read `not in the config`. After `p`, the drawing has neither. `p` brings the preview back, and the kill the drawing with `preview: notes's session ended`. |
 | 20 | `weave notes`, then in `code`'s focused pane, zoomed: `weave`, select `notes` | The preview draws the pane weave runs in with `this browser` in it, not the browser again inside itself. |
+| 21 | `notes` started: `weave`, select `notes`, zoom `code` on `edit` from outside, `p`, `p`, unzoom | Zoomed, the preview shows `edit` alone, named alone in the pane list, its levels below. After `p`, the drawing selects `edit` too. Unzoomed, both panes are back, `edit` still selected. |
+| 22 | `notes` started: `weave`, select `notes`, Tab, `p`, Tab, `p`, `t`, ↓, ↑ | The preview selects `files`, then `edit`; the drawing keeps `edit`, then selects `files`, and the preview keeps `files`. Moving between `ls` and `echo saved` in the task list selects `files` and `edit` in the preview. |
+| 23 | `notes` started, `code` zoomed on `edit`: `weave kill notes` | `notes` is gone and `term` still runs: weave unzooms first, as tmux 3.4 crashes killing a session with a zoomed window, taking every session along. |
 
 ## Sample projects
 

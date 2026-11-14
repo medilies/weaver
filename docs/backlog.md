@@ -59,7 +59,7 @@ Each says what it is for; picked by judgement, not by a trigger.
 **Use**: the config form's logic (undo and redo, the diff, a grid
 turned into splits, fields checked as typed) is only checked by the
 scenarios in `docs/agents/terminal-testing.md`, which take a tmux
-server and a minute or two. Most of it needs no tmux at all.
+server and about 50 seconds. Most of it needs no tmux at all.
 
 - Two ways. Plain Go: build the model, call `Update` with
   `tea.KeyPressMsg`s, check `View()` holds the text expected, as

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -73,10 +74,12 @@ func (m browser) fetch() (browser, tea.Cmd) {
 }
 
 // shownPreview is the preview drawn in place of the selected window's
-// drawing, if it is the one wanted.
+// drawing: the one wanted, with the room to draw it as the screen is laid
+// out, its notice however long.
 func (m browser) shownPreview() (domain.WindowPreview, bool) {
 	project, window, ok := m.previewKey()
-	if !ok || !m.hasPreview || m.preview.project != project.Name() || m.preview.window != window {
+	if !ok || !m.hasPreview || m.preview.project != project.Name() || m.preview.window != window ||
+		!m.roomWith(lipgloss.Height(m.noticeLine())) {
 		return domain.WindowPreview{}, false
 	}
 	return m.preview.preview, true
@@ -88,13 +91,23 @@ func (m browser) shownPreview() (domain.WindowPreview, bool) {
 // stop the preview it tells about. Miniatures don't change it: they are
 // drawn only with room to spare.
 func (m browser) roomToDraw() bool {
-	shown := m.shown()
-	if len(shown) == 0 {
+	return m.roomWith(1)
+}
+
+// roomWith reports whether the details have the room to draw the selected
+// project's window, as frame lays them out with a notice of noticeLines.
+func (m browser) roomWith(noticeLines int) bool {
+	if len(m.shown()) == 0 {
 		return false
 	}
-	height := m.height - 1 - 1 - 2 // the notice, the keys and the cards' borders
-	width := m.width - m.cardsBeside() - cardSides
-	below := height - windowListRow(detailsTop(shown[m.cursor], width)) - 1
+	height := m.height - noticeLines - 1 - 2 // the notice, the keys and the cards' borders
+	return m.roomIn(m.width-m.cardsBeside()-cardSides, height)
+}
+
+// roomIn reports whether details width×height cells have the room to
+// draw the selected project's window, below its summary and window list.
+func (m browser) roomIn(width, height int) bool {
+	below := height - windowListRow(detailsTop(m.shown()[m.cursor], width)) - 1
 	return width >= minDrawingWidth && below-1 >= minDrawingHeight
 }
 
@@ -183,6 +196,9 @@ func (m browser) switchedView() browser {
 	if _, _, wanted := m.previewKey(); wanted && m.previewFailure == "" {
 		m.drawings = true
 		return m
+	}
+	if m.previewFailure != "" && m.notice == m.previewFailure {
+		m.notice = "" // told again if it fails again
 	}
 	m.drawings, m.previewFailure = false, ""
 	shown := m.shown()
