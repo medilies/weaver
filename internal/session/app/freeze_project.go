@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"slices"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
@@ -35,7 +34,6 @@ type FreezeProject struct {
 	capturer  domain.SessionCapturer
 	workspace domain.Workspace
 	form      ProjectForm
-	confirm   Confirmer
 }
 
 // NewFreezeProject constructs the use case against its ports.
@@ -44,52 +42,24 @@ func NewFreezeProject(
 	capturer domain.SessionCapturer,
 	workspace domain.Workspace,
 	form ProjectForm,
-	confirm Confirmer,
 ) FreezeProject {
 	return FreezeProject{
-		projects: projects, capturer: capturer, workspace: workspace, form: form, confirm: confirm,
+		projects: projects, capturer: capturer, workspace: workspace, form: form,
 	}
 }
 
-// Handle runs the form and saves the project, asking before replacing a
-// registered one. Declining opens the form again on the project as filled
-// in, typing its name, so another can be given.
+// Handle runs the form and saves the project. The form shows what saving
+// under a registered name replaces, and asks before it does.
 func (uc FreezeProject) Handle(request FreezeRequest) (domain.Project, error) {
 	draft, err := uc.draft(request)
 	if err != nil {
 		return domain.Project{}, err
 	}
-	for {
-		project, err := uc.form.Fill(draft)
-		if err != nil {
-			return domain.Project{}, err
-		}
-		names, err := uc.projects.Names()
-		if err != nil {
-			return domain.Project{}, err
-		}
-		if !slices.Contains(names, project.Name()) {
-			return project, uc.projects.Save(project)
-		}
-		replace, err := uc.confirm.Confirm(fmt.Sprintf("%s is already registered. Replace it?", project.Name()))
-		if err != nil {
-			return domain.Project{}, err
-		}
-		if replace {
-			return project, uc.projects.Save(project)
-		}
-		draft = ProjectDraft{
-			Name:     project.Name().String(),
-			Retype:   fmt.Errorf("%s is already registered: type another name, or keep it to replace it", project.Name()),
-			Root:     project.Root().String(),
-			Env:      project.Env(),
-			Before:   project.Before(),
-			Clearing: project.Clearing(),
-			Setup:    project.Setup(),
-			Teardown: project.Teardown(),
-			Windows:  project.Windows(),
-		}
+	project, err := uc.form.Fill(draft)
+	if err != nil {
+		return domain.Project{}, err
 	}
+	return project, uc.projects.Save(project)
 }
 
 func (uc FreezeProject) draft(request FreezeRequest) (ProjectDraft, error) {

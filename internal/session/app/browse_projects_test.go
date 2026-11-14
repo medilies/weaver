@@ -136,7 +136,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		s.browser, confirm, s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace, &fakeCommands{}),
-		app.NewFreezeProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form, confirm),
+		app.NewFreezeProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form),
 		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
 		app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}),
 		app.NewRunTask(s.configs, &fakeTasks{fakeSessions: s.sessions}, confirm),

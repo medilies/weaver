@@ -43,9 +43,9 @@ func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments
 // once the user has seen what saving changes in the draft's config, or
 // ErrAborted when the user leaves it unchanged or discards it. A draft
 // without a Config, as freezing gives, is unsaved until then, and saving
-// it under a registered name shows what it changes in that config. A name to
-// type that isn't valid, or that the draft says to retype, opens the form
-// typing it.
+// it under a registered name shows what it changes in that config and asks
+// before replacing it; declining opens the form typing the name, so another
+// can be given. A name to type that isn't valid opens the form typing it.
 func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	name, nameErr := domain.NewProjectName(draft.Name)
 	if nameErr != nil && draft.NameStays {
@@ -81,9 +81,6 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 		model.unnamed = true
 		model, model.start = model.typeInto(model.focus, draft.Name, true)
 		model.edit.err = nameErr
-	} else if draft.Retype != nil && !draft.NameStays {
-		model, model.start = model.typeInto(model.focus, draft.Name, true)
-		model.edit.err = draft.Retype
 	}
 	final, err := tea.NewProgram(model).Run()
 	if err != nil {
@@ -447,7 +444,8 @@ func (m configForm) replaced() ([]byte, bool, error) {
 }
 
 // reviewed is m after key, pressed on what saving changes: y, enter or
-// ctrl+s saves, n or esc goes back to the form, ↑↓ scroll.
+// ctrl+s saves, n or esc goes back to the form, typing the name when
+// saving would replace a registered project's config, ↑↓ scroll.
 func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 	top := m.reviewing.top
 	switch key {
@@ -455,8 +453,14 @@ func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 		m.saved = true
 		return m, tea.Quit
 	case "n", "N", "esc", "ctrl+c":
+		replaces := m.reviewing.replaces
 		m.reviewing = nil
-		return m, nil
+		if !replaces {
+			return m, nil
+		}
+		m, cmd := m.typeInto(projectNameAt, m.project.Name().String(), false)
+		m.edit.err = fmt.Errorf("%s is already registered: type another name, or keep it to replace it", m.project.Name())
+		return m, cmd
 	case "up", "k":
 		top--
 	case "down", "j":

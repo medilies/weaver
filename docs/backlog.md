@@ -274,8 +274,10 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   document the macOS path, or resolve `$XDG_CONFIG_HOME` (falling back
   to `~/.config`) on every OS, which moves existing macOS configs and
   would have to keep reading the old directory. On a case-insensitive
-  filesystem, freezing `shop` when `Shop.yml` exists overwrites it
-  without the replace prompt (the TODO in `domain/project.go`). CI
+  filesystem, `shop` and `Shop` are one config (the TODO in
+  `domain/project.go`): freezing `shop` when `Shop.yml` exists finds
+  that config and asks before replacing it, but the two names still
+  overwrite each other. CI
   builds only for Linux, though darwin binaries ship.
 - **Any tmux but 3.4.** CI and releases run on ubuntu-24.04 for Ubuntu's
   tmux 3.4, not ubuntu-latest; re-pin when GitHub retires that runner.

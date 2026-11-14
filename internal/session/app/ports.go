@@ -19,8 +19,7 @@ var ErrAborted = errors.New("aborted")
 // editing it, whose name stays.
 type ProjectDraft struct {
 	Name      string
-	NameStays bool  // editing: only a new config can be named otherwise
-	Retype    error // why the name must be typed again; the form opens typing it
+	NameStays bool // editing: only a new config can be named otherwise
 	Root      string
 	Env       domain.Env
 	Before    []domain.Command
@@ -33,7 +32,9 @@ type ProjectDraft struct {
 
 // ProjectForm lets the user describe a project, starting from a draft.
 type ProjectForm interface {
-	// Fill returns the project the user described, or ErrAborted.
+	// Fill returns the project the user described, or ErrAborted. Given a
+	// draft whose name doesn't stay, it returns a project only once the
+	// user has agreed to replace any config registered under its name.
 	Fill(draft ProjectDraft) (domain.Project, error)
 }
 
