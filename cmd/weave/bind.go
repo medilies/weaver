@@ -39,6 +39,9 @@ run it.`,
 			return sessions, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := weaver.readSettings(); err != nil {
+				return err
+			}
 			dir, err := os.Getwd()
 			if err != nil {
 				return err

@@ -28,6 +28,11 @@ their tasks.`,
 			if len(args) == 1 && args[0] != "." {
 				return weaver.openProject.Handle(args[0])
 			}
+			if len(args) == 0 {
+				if err := weaver.readSettings(); err != nil {
+					return err
+				}
+			}
 			dir, err := os.Getwd()
 			if err != nil {
 				return err

@@ -13,11 +13,14 @@ keys:
   split-below: "-"
 ```
 
-weave saves `settings.schema.json` beside it once that folder exists, so
-an editor with a YAML language server completes and checks the file.
-weave refuses to start while the file is invalid, naming the file and
-the field. Failing to save the schema, in a folder weave can't write
-to, only warns.
+The settings are read by what they change: the browser (`weave`), and
+the config form and the confirmation dialog (`weave bind`, `weave
+edit`). Each of those saves `settings.schema.json` beside the file once
+that folder exists, so an editor with a YAML language server completes
+and checks it, and refuses to start while the file is invalid, naming
+the file and the field. The other commands, the help, the version and
+completion run either way. Failing to save the schema, in a folder
+weave can't write to, only warns.
 
 ## `selected-colour`
 

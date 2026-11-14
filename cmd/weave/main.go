@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -24,11 +25,25 @@ type application struct {
 	documents app.ProjectDocuments
 	// sessions lists running tmux sessions, to complete `bind`.
 	sessions domain.SessionLister
+	// settings reads the settings, once.
+	settings func() (infra.Settings, error)
+}
+
+// readSettings stops a command showing the confirmation dialog, the
+// config form or the browser before it does anything, while the settings
+// are invalid, rather than once the user has typed what would be lost.
+func (a application) readSettings() error {
+	if a.settings == nil {
+		return nil
+	}
+	_, err := a.settings()
+	return err
 }
 
 // wire builds the use cases against this machine: settings and configs
 // under the user config directory, and the user's tmux server. Invalid
-// settings stop weave.
+// settings stop only what shows the confirmation dialog, the config form
+// or the browser.
 func wire() (application, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -36,10 +51,7 @@ func wire() (application, error) {
 	}
 
 	weaverDir := filepath.Join(configDir, "weaver")
-	settings, err := infra.LoadSettings(weaverDir, os.Stderr)
-	if err != nil {
-		return application{}, err
-	}
+	settings := sync.OnceValues(func() (infra.Settings, error) { return infra.LoadSettings(weaverDir, os.Stderr) })
 	projects := infra.NewFileProjectRegistry(filepath.Join(weaverDir, "projects")).WithWarnings(os.Stderr)
 	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
 	// counts with $TMUX, which names the server it belongs to. A popup or
@@ -53,7 +65,10 @@ func wire() (application, error) {
 	workspace := infra.NewLocalWorkspace()
 	commands := infra.NewShellRunner(os.Stdin, os.Stdout, os.Stderr)
 
-	confirm, configForm := infra.NewTeaConfirmer(settings), infra.NewTeaConfigForm(workspace, projects, settings)
+	confirm := lazyConfirmer(builtOnce(settings, infra.NewTeaConfirmer))
+	configForm := lazyConfigForm(builtOnce(settings, func(s infra.Settings) infra.TeaConfigForm {
+		return infra.NewTeaConfigForm(workspace, projects, s)
+	}))
 
 	weaver := application{
 		bindProject:  app.NewBindProject(projects, tmux, workspace, configForm),
@@ -63,8 +78,9 @@ func wire() (application, error) {
 		killProject:  app.NewKillProject(tmux, tmux, projects, commands, infra.NewLineAcknowledger(os.Stdin, os.Stderr)),
 		listProjects: app.NewListProjects(projects, tmux),
 		documents:    projects,
+		settings:     settings,
 	}
-	weaver.browseProjects = app.NewBrowseProjects(infra.NewTeaBrowser(settings), confirm, projects, projects, workspace, tmux,
+	weaver.browseProjects = app.NewBrowseProjects(lazyBrowser(builtOnce(settings, infra.NewTeaBrowser)), confirm, projects, projects, workspace, tmux,
 		weaver.listProjects, weaver.openProject, weaver.bindProject, weaver.editProject, weaver.killProject,
 		app.NewRunTask(projects, tmux, confirm), app.NewRerunCommand(projects, tmux))
 	return weaver, nil

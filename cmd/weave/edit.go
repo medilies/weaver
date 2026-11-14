@@ -28,6 +28,9 @@ reopens the editor on what you wrote.`,
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeProjects(weaver),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := weaver.readSettings(); err != nil {
+				return err
+			}
 			changed := true
 			var err error
 			if raw {
