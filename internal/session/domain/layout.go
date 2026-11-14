@@ -464,9 +464,15 @@ func (p Pane) WithClearing(c Clearing) Pane {
 }
 
 // WithNote prints lines in the pane before its shell starts, or after its
-// before commands when it clears them.
+// before commands when it clears them. A line holding newlines, \n or
+// \r\n, is the lines it prints, without the empty one a newline at its
+// end would leave, as a YAML block keeps.
 func (p Pane) WithNote(lines ...string) Pane {
-	p.note = slices.Clone(lines)
+	p.note = nil
+	for _, line := range lines {
+		line = strings.TrimSuffix(strings.ReplaceAll(line, "\r\n", "\n"), "\n")
+		p.note = append(p.note, strings.Split(line, "\n")...)
+	}
 	return p
 }
 

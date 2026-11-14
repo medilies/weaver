@@ -14,7 +14,7 @@ Severity is High, Med or Low, and fix size XS, S or M, as in the backlog. Each i
 | --- | --- | --- | --- | --- |
 | 17 | A task is typed into a command that replaced its pane's shell with `exec` | Med | S | **Fixed** |
 | 18 | Invalid settings also stop `--help`, `--version` and completion | Low | S | **Open** |
-| 19 | A note line holding a newline breaks the drawing | Low | XS | **Open** |
+| 19 | A note line holding a newline breaks the drawing | Low | XS | **Fixed** |
 | 20 | A config named `<name>.yaml` is skipped without a warning | Low | XS | **Open** |
 | — | Three stale comments and docs | Low | XS | **Fixed** in `16050e8`, two of them; the third isn't named |
 | — | Binding under a registered name asks twice | Low | S | **Fixed** in `4a85158` |

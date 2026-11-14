@@ -63,7 +63,7 @@ windows:
 | `clear` (pane) | Whether the pane clears its `before` commands, over its window's and project's `clear`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. |
-| `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. |
+| `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. A line holding newlines, such as a `\|` block, prints as the lines it holds. |
 | `env` (pane) | Overrides the window's and the project's, per variable. |
 | `tasks` | Commands the pane offers to run from the browser, in a session weaver started: each a `command` and, optionally, a `name` to show instead. No two share a name, nor two unnamed ones a command. See [tasks in the browser](browser.md#tasks). |
 

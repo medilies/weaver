@@ -293,6 +293,14 @@ func TestPaneNote(t *testing.T) {
 			t.Fatalf("got %q, want the original lines", got)
 		}
 	})
+
+	t.Run("splits a line holding newlines into the lines it prints", func(t *testing.T) {
+		pane := domain.NewPane().WithNote("first\r\nsecond\n", "", "third")
+
+		if got := pane.Note(); !slices.Equal(got, []string{"first", "second", "", "third"}) {
+			t.Fatalf("got %q, want first, second, an empty line and third", got)
+		}
+	})
 }
 
 func TestWindowNamed(t *testing.T) {
