@@ -44,11 +44,13 @@ and turned into splits in the config form, and window miniatures. The
 backlog's triggers are dropped: what comes next is picked from the
 [Candidates](#candidates) by judgement, each still with a concrete use.
 
-Since v0.6.0: the live preview, designed on 2026-11-14, start, running a
-task while staying in the browser, and the task list's ● marks kept up
-to date. Building the overviews concurrently, so the summary and the
-project list's ● marks stay as live as the preview, waits for a use of
-its own.
+Since v0.6.0, ready for v0.7.0: the live preview, designed on
+2026-11-14, start, running a task while staying in the browser, the task
+list's ● marks kept up to date, running projects marked by a green name,
+`weave kill` safe with a zoomed window on tmux 3.4, and the terminal
+scenarios scripted in `test/terminal/run.sh`. Building the overviews
+concurrently, so the summary and the project list's ● marks stay as live
+as the preview, waits for a use of its own.
 
 ## Candidates
 
@@ -78,6 +80,22 @@ server and about 50 seconds. Most of it needs no tmux at all.
 - Changes a rule: `CLAUDE.md` says the dialog, the config form and the
   browser aren't unit-tested.
 
+### A time limit on tmux calls (S)
+
+**Use**: a tmux server that stops answering, under load or stuck,
+freezes weave with no word: `Tmux.run` waits as long as tmux does. In
+the browser, the preview and the task list's ● marks then stop
+refreshing silently, since a tick doesn't ask again while an ask is
+unanswered; elsewhere `weave` hangs.
+
+- `exec.CommandContext` with a time limit in `Tmux.run`, the error
+  saying tmux didn't answer in time. One place, every call covered.
+- The limit must leave room for slow calls that are fine: `Start` on a
+  large project, `capture-pane` of a busy pane. A few seconds, the same
+  for all, until a call needs more.
+- In the browser, a capture that times out is a failure like any other:
+  told once, tried again on the next tick.
+
 ### A clean shutdown when killing (M)
 
 **Use**: a dev server leaves state behind (a lock file, a stale PID,
@@ -104,7 +122,9 @@ the least code:
   session list and among the sessions `weave bind` offers to capture;
   weaver would start a session that isn't a project's, so *owned
   session* must leave it out; and whether it is killed or kept once a
-  project opens. Needs a glossary entry first.
+  project opens. Needs a glossary entry first. Not needed for the
+  preview: run in a project's pane, the browser leaves its own pane out
+  of it (2026-11-14), which is less code than a session of its own.
 
 ### Secrets read at start (M)
 
@@ -357,12 +377,16 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   commands, and any later hook.
 - The idle-shell check serves tasks (`Busy`), the exited-command
   warning (`Idle`) and the clean shutdown after teardown.
-- One tmux pane listing (`projectPanes`) serves the exited-command
-  warning and tasks; `Capture` could use it too, but still asks tmux four
-  or five times per pane: not worth changing while bind is
-  interactive, since splitting free-text paths and labels out of one
-  line adds parsing risk.
+- One tmux pane listing (`projectPanes`) and its matching rule (`pick`)
+  serve the exited-command warning, tasks and the preview; `Capture`
+  could use it too, but still asks tmux four or five times per pane:
+  not worth changing while bind is interactive, since splitting
+  free-text paths and labels out of one line adds parsing risk.
 - A second CLI argument serves lazy windows.
+- The browser's tick (`previewTick`), with its numbered asks, serves the
+  preview and the task list's marks, and would serve live overviews.
+- Unzooming before a kill (`Tmux.Kill`, `unzoomed_kill` in the
+  scenarios) serves any later code that kills a session.
 - The reserved-name rule, decided on 2026-11-09 for the first new
   subcommand: when a registered project's name clashes with it, weave
   refuses with an error naming the config file to rename, and only when
