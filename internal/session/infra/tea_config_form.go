@@ -1661,8 +1661,9 @@ func (s *section) text(line string) {
 	s.lines = append(s.lines, line)
 }
 
-// boxed adds child in a card titled title, width cells wide.
-func (s *section) boxed(title string, child section, width int, heavy bool) {
+// boxed adds child in a card titled title, width cells wide, its border
+// drawn in edge.
+func (s *section) boxed(title string, child section, width int, edge lipgloss.Style) {
 	if child.cursor >= 0 { // below the card's top border
 		s.cursor, s.cursorEnd = len(s.lines)+1+child.cursor, len(s.lines)+1+child.cursorEnd
 	}
@@ -1671,25 +1672,35 @@ func (s *section) boxed(title string, child section, width int, heavy bool) {
 		h.spots = shifted(h.spots, 2)
 		s.hits = append(s.hits, h)
 	}
-	s.lines = append(s.lines, card(title, child.lines, width, heavy)...)
+	s.lines = append(s.lines, card(title, child.lines, width, edge)...)
 	s.spots = append(s.spots, child.spots...)
 }
 
-// card is body in a box width cells wide, title in its top border, heavy
-// for the card being edited.
-func card(title string, body []string, width int, heavy bool) []string {
+// card is body in a rounded box width cells wide, title in its top
+// border, the border drawn in edge.
+func card(title string, body []string, width int, edge lipgloss.Style) []string {
 	border := lipgloss.RoundedBorder()
-	if heavy {
-		border = lipgloss.ThickBorder()
-	}
 	inner := max(width-4, 1)
-	head := ansi.Truncate(border.TopLeft+border.Top+" "+title+" ", max(width-1, 0), "")
-	head += strings.Repeat(border.Top, max(width-1-ansi.StringWidth(head), 0)) + border.TopRight
+	head := edge.Render(border.TopLeft + strings.Repeat(border.Top, max(width-2, 0)) + border.TopRight)
+	if title != "" {
+		title = ansi.Truncate(title, max(width-5, 0), "")
+		head = edge.Render(border.TopLeft+border.Top+" ") + title +
+			edge.Render(" "+strings.Repeat(border.Top, max(width-5-ansi.StringWidth(title), 0))+border.TopRight)
+	}
 	out := []string{head}
 	for _, line := range body {
-		out = append(out, border.Left+" "+padded(ansi.Truncate(line, inner, "…"), inner)+" "+border.Right)
+		out = append(out, edge.Render(border.Left)+" "+padded(ansi.Truncate(line, inner, "…"), inner)+" "+edge.Render(border.Right))
 	}
-	return append(out, border.BottomLeft+strings.Repeat(border.Bottom, max(width-2, 0))+border.BottomRight)
+	return append(out, edge.Render(border.BottomLeft+strings.Repeat(border.Bottom, max(width-2, 0))+border.BottomRight))
+}
+
+// edge is the style of a card's border: the selected colour for the
+// innermost card holding the cursor, as marked says it is.
+func (l look) edge(marked bool) lipgloss.Style {
+	if marked {
+		return l.picked
+	}
+	return lipgloss.NewStyle()
 }
 
 // gutterWidth and labelWidth are the cells before a row's value: the
@@ -1819,14 +1830,20 @@ func (m configForm) layout() section {
 	shown.project = m.shown()
 	width := max(m.width, 30)
 	page := newSection()
-	page.boxed("project", shown.projectCard(), width, m.focus.window < 0)
+	page.boxed("project", shown.projectCard(), width, m.look.edge(m.focus.window < 0))
 	picked := shown.selection()
 	listAt := spot{window: picked.window, pane: -1, field: fieldWindowList}
 	focused := m.focus == listAt
 	line, spots := formWindowList(m.look, shown.project.Windows(), picked.window, width-gutterWidth)
 	page.listRow(gutter(focused)+line, listAt, focused, gutterWidth, spots)
-	page.boxed("windows", shown.windowsCard(width-4), width, m.focus.window >= 0)
+	page.boxed("windows", shown.windowsCard(width-4), width, m.look.edge(m.focus.window >= 0 && !m.inPaneCard(picked)))
 	return page
+}
+
+// inPaneCard reports whether the cursor is in the card of the pane
+// picked, or on the pane list above it.
+func (m configForm) inPaneCard(picked spot) bool {
+	return m.focus.window == picked.window && m.focus.pane == picked.pane && m.focus.pane >= 0 && m.focus.field != fieldDrawing
 }
 
 // gutter is the cells before a row: the cursor's mark when focused.
@@ -1951,8 +1968,7 @@ func (m configForm) windowsCard(width int) section {
 	s.text("")
 	pane := window.Panes()[picked.pane]
 
-	inPane := m.focus.window == picked.window && m.focus.pane == picked.pane && m.focus.field != fieldDrawing
-	s.boxed(paneHeading(pane), m.paneCard(picked.window, picked.pane), width, inPane)
+	s.boxed(paneHeading(pane), m.paneCard(picked.window, picked.pane), width, m.look.edge(m.inPaneCard(picked)))
 	return s
 }
 

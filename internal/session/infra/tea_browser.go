@@ -363,14 +363,15 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	shown := m.shown()
 	notice, list, taskColumn, height, width := m.frame()
 	listWidth, tasksWidth := lipgloss.Width(list), lipgloss.Width(taskColumn)
-	if y == height+lipgloss.Height(notice) {
+	if y == height+2+lipgloss.Height(notice) { // below the cards
 		_, spots := m.keys()
 		if spot, ok := hotspotAt(spots, x); ok {
 			return m.act(spot)
 		}
 		return m, nil
 	}
-	if len(shown) == 0 || y >= height {
+	y-- // below the cards' top borders
+	if len(shown) == 0 || y < 0 || y >= height {
 		return m, nil
 	}
 	if x >= listWidth && x < listWidth+tasksWidth { // in the task list's column
@@ -382,7 +383,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if x < listWidth-1 { // left of the list's border
+	if x < listWidth { // in the project list's card
 		if i := m.firstShown(height) + y; i < len(shown) {
 			return m.moved(i - m.cursor), nil
 		}
@@ -395,7 +396,7 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 	}
 	m.tasking = false // a window or pane clicked is no longer the task's
 	laid := m.laidOut(project, windows, width, height)
-	x -= listWidth + tasksWidth + detailsPadding
+	x -= listWidth + tasksWidth + cardSides/2
 	var spots []hotspot
 	switch row := y - windowListRow(laid.top); {
 	case row == 0:
@@ -441,27 +442,39 @@ func (m browser) render() string {
 	}
 	notice, list, tasks, height, width := m.frame()
 	keysLine, _ := m.keys()
-	details := lipgloss.NewStyle().PaddingLeft(detailsPadding).Width(width + detailsPadding).
-		Height(height).MaxHeight(height).Render(m.details(width, height))
+	details := column(m.detailsTitle(), m.details(width, height), width+cardSides, height, m.look.edge(false))
 	return lipgloss.JoinVertical(lipgloss.Left, lipgloss.JoinHorizontal(lipgloss.Top, list, tasks, details), notice, keysLine)
 }
 
-// frame is the notice, the list with its border and the task list's
-// column beside it, as render lays them out, the height they leave the
-// list, the task list and the details above the notice and the keys, and
-// the width the details' content has right of the task list.
+// frame is the notice, the project list's card and the task list's
+// beside it, as render lays them out, the lines they leave inside the
+// cards above the notice and the keys, and the width the details' card
+// has for its content right of the task list's.
 func (m browser) frame() (notice, list, tasks string, height, width int) {
 	notice = lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
-	height = max(m.height-lipgloss.Height(notice)-1, 1)
-	list = lipgloss.NewStyle().Height(height).MaxHeight(height).
-		Border(lipgloss.NormalBorder(), false, true, false, false).Render(m.list(height))
+	height = max(m.height-lipgloss.Height(notice)-1-2, 1)
+	if len(m.projects) > 0 {
+		projects := m.list(height)
+		list = column("projects", projects, lipgloss.Width(projects)+cardSides, height, m.look.edge(!m.tasking))
+	}
 	tasks, _ = m.taskColumn(taskListWidth(m.projects, m.width), height)
-	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-detailsPadding-lipgloss.Width(tasks), 1)
+	return notice, list, tasks, height, max(m.width-lipgloss.Width(list)-lipgloss.Width(tasks)-cardSides, 1)
 }
 
-// detailsPadding is the cells between the border left of the details and
-// their content.
-const detailsPadding = 1
+// cardSides is the cells across a card's borders and the spaces inside
+// them take.
+const cardSides = 4
+
+// column is content in a card titled title, width cells wide, its lines
+// cut or filled to height, its border drawn in edge.
+func column(title, content string, width, height int, edge lipgloss.Style) string {
+	lines := strings.Split(content, "\n")
+	lines = lines[:min(len(lines), height)]
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return strings.Join(card(title, lines, width, edge), "\n")
+}
 
 // keyTold is a key the keys line tells, and what it does.
 type keyTold struct {
@@ -559,8 +572,8 @@ func (m browser) list(height int) string {
 		nameWidth = max(nameWidth, len(project.Name().String()))
 		rootWidth = max(rootWidth, ansi.StringWidth(root(project)))
 	}
-	// " ● name root " and the border fit in half the width.
-	rootWidth = min(rootWidth, max(m.width/2-nameWidth-6, 0))
+	// "● name root " and the card fit in half the width.
+	rootWidth = min(rootWidth, max(m.width/2-nameWidth-4-cardSides, 0))
 	first := m.firstShown(height)
 	lines := make([]string, 0, len(shown)-first)
 	for i, project := range shown[first:] {
@@ -568,7 +581,7 @@ func (m browser) list(height int) string {
 		if project.Running() {
 			mark = runningMark
 		}
-		name := fmt.Sprintf(" %s %-*s ", mark, nameWidth, project.Name())
+		name := fmt.Sprintf("%s %-*s ", mark, nameWidth, project.Name())
 		path := lipgloss.NewStyle().Width(rootWidth + 1).Render(shortened(root(project), rootWidth))
 		if first+i == m.cursor {
 			lines = append(lines, cursorStyle.Render(name)+cursorStyle.Faint(true).Render(path))
@@ -579,7 +592,7 @@ func (m browser) list(height int) string {
 	if len(m.projects) == 0 {
 		return ""
 	}
-	return lipgloss.NewStyle().Width(nameWidth + rootWidth + 5).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Width(nameWidth + rootWidth + 4).Render(strings.Join(lines, "\n"))
 }
 
 // firstShown is the first project the list shows in height lines: top,
@@ -806,18 +819,27 @@ func alerts(project app.ProjectOverview, window domain.WindowPlan) []alert {
 	return panes
 }
 
-// detailsTop is project's config file, then its summary or why its
-// config can't be read, wrapped to width.
-func detailsTop(project app.ProjectOverview, width int) string {
-	title := project.Config().File
-	if title == "" {
-		title = project.Name().String()
+// detailsTitle titles the details' card: the selected project's config
+// file, or its name; nothing when no project is shown.
+func (m browser) detailsTitle() string {
+	shown := m.shown()
+	if len(shown) == 0 {
+		return ""
 	}
+	if file := shown[m.cursor].Config().File; file != "" {
+		return file
+	}
+	return shown[m.cursor].Name().String()
+}
+
+// detailsTop is project's summary, or why its config can't be read,
+// wrapped to width.
+func detailsTop(project app.ProjectOverview, width int) string {
 	header := summary(project)
 	if err := project.Problem(); err != nil {
 		header = problemStyle.Render(err.Error())
 	}
-	return lipgloss.NewStyle().Width(width).Render(titleStyle.Render(title) + "\n\n" + header)
+	return lipgloss.NewStyle().Width(width).Render(header)
 }
 
 // windowList is the names of windows, the selected one in a block of the

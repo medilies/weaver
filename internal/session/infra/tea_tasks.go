@@ -3,7 +3,6 @@ package infra
 import (
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/medilies/weaver/internal/session/app"
@@ -41,11 +40,6 @@ func tasksOf(project domain.Project) []listedTask {
 	return listed
 }
 
-// taskListPadding is the cells around the task list's lines, in its
-// column between the project list and the details: a space on the left,
-// a space and a border on the right.
-const taskListPadding = 3
-
 // taskListTitle heads the task list.
 const taskListTitle = "tasks"
 
@@ -64,20 +58,18 @@ func taskListWidth(projects []app.ProjectOverview, width int) int {
 		return 0
 	}
 	widest = max(widest, ansi.StringWidth(taskListTitle))
-	return min(widest, max(width/4-taskListPadding, 1))
+	return min(widest, max(width/4-cardSides, 1))
 }
 
-// taskColumn is the task list in its column, height lines tall, its
-// lines width cells wide, with the task each line shows, or -1; none when
-// width is 0.
+// taskColumn is the task list in its card, its lines height tall and
+// width cells wide, with the task each line shows, or -1; none when width
+// is 0.
 func (m browser) taskColumn(width, height int) (string, []int) {
 	if width == 0 {
 		return "", nil
 	}
 	lines, tasks := m.taskList(width, height)
-	return lipgloss.NewStyle().Width(width+taskListPadding).Height(height).MaxHeight(height).
-		Border(lipgloss.NormalBorder(), false, true, false, false).Padding(0, 1).
-		Render(strings.Join(lines, "\n")), tasks
+	return column(taskListTitle, strings.Join(lines, "\n"), width+cardSides, height, m.look.edge(m.tasking)), tasks
 }
 
 // taskList is the selected project's tasks under their window and pane,
@@ -86,11 +78,11 @@ func (m browser) taskColumn(width, height int) (string, []int) {
 // view in height lines cut to width; with the task each line shows, or -1.
 func (m browser) taskList(width, height int) ([]string, []int) {
 	// Cut, as every line is, so that each stays one row, as clicks count them.
-	lines := []string{titleStyle.Render(ansi.Truncate(taskListTitle, width, "…"))}
-	tasks := []int{-1}
+	var lines []string
+	var tasks []int
 	listed := m.tasksShown()
 	if len(listed) == 0 {
-		return append(lines, keysStyle.Render("none")), append(tasks, -1)
+		return []string{keysStyle.Render("none")}, []int{-1}
 	}
 	selected, group := 0, ""
 	for i, task := range listed {
