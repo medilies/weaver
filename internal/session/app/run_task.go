@@ -43,7 +43,7 @@ func NewRunTask(projects domain.ProjectRegistry, tasks domain.TaskRunner, confir
 // browser runs in with ErrPaneRunsWeaver; declining to run the task apart
 // is ErrAborted.
 func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() error) error {
-	window, _, task, err := uc.found(name, at)
+	window, pane, task, err := uc.found(name, at)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() erro
 		if err := uc.tasks.Reach(name, copies[0]); err != nil {
 			return fmt.Errorf("%s: %w", task.Label(), err)
 		}
-	} else if _, _, err := uc.started(name, at, true, func(string) {}); err != nil {
+	} else if _, err := uc.run(name, window, at.Pane, pane, task, true, func(string) {}); err != nil {
 		return err
 	}
 	if err := leaving(); err != nil {

@@ -455,8 +455,11 @@ func (m configForm) replaced() ([]byte, bool, error) {
 // saving would replace a registered project's config, ↑↓ scroll.
 func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 	top := m.reviewing.top
-	if m.keymap.pressed(inForm, key) == "ctrl+s" {
+	switch m.keymap.pressed(inForm, key) {
+	case "ctrl+s":
 		key = "ctrl+s" // the save key, wherever the settings put it
+	case "":
+		return m, nil // ctrl+s, the save key moved elsewhere
 	}
 	switch key {
 	case "y", "Y", "enter", "ctrl+s":
@@ -2322,7 +2325,10 @@ func (m configForm) keys() string {
 	case m.reviewing != nil:
 		told = []keyTold{{"↑↓", "scroll"}, {"y", "save"}, {"n", "back to the form"}}
 	case m.editing:
-		told = []keyTold{{"enter", "keep"}, {"esc", "cancel"}, {save, "save"}}
+		told = []keyTold{{"enter", "keep"}, {"esc", "cancel"}}
+		if !typesText(save) { // typed into the field instead
+			told = append(told, keyTold{save, "save"})
+		}
 		if m.edit.at.field == fieldCommand && m.edit.input.Value() == "" {
 			told = append([]keyTold{{"←→", "starts"}}, told...)
 		}

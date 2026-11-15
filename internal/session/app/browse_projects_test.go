@@ -96,6 +96,9 @@ func (v browserView) overview(name string) (app.ProjectOverview, bool) {
 type tmuxServer struct{ *fakeSessions }
 
 func (s tmuxServer) Running() ([]string, error) {
+	if s.unlisted != nil {
+		return nil, s.unlisted
+	}
 	return slices.Sorted(maps.Keys(s.running)), nil
 }
 
@@ -574,28 +577,65 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("tells the browser which projects run now, building only the selected one again", func(t *testing.T) {
+	t.Run("tells the browser which projects run now", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		delete(s.sessions.running, "shop")
+		s.sessions.running["blog"] = owned(t, "blog")
+		running := map[string]bool{}
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "shop")) {
+			running[project.Name().String()] = project.Running()
+		}
+		if running["shop"] || !running["blog"] {
+			t.Fatalf("got running %v, want only blog", running)
+		}
+	})
+
+	t.Run("builds the selected project again", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["blog"] = serving(t, "", "hugo server")
 		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		if got := liveOne(t, s, blog).Warnings(); len(got) != 1 {
+			t.Fatalf("got %v, want hugo server exited", got)
+		}
+	})
+
+	t.Run("builds again a project whose session ended", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		delete(s.sessions.running, "shop")
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "blog")) {
+			if project.Name().String() == "shop" && project.Previewable() {
+				t.Fatal("got shop previewable, want its overview built again without a session")
+			}
+		}
+	})
+
+	t.Run("leaves the projects as they were when the sessions can't be listed", func(t *testing.T) {
+		s := newBrowseSetup(t)
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shown := s.browser.last().projects
 		delete(s.sessions.running, "shop")
-		s.sessions.running["blog"] = owned(t, "blog")
-		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
-		blogName, _ := domain.NewProjectName("blog")
-		running := map[string]bool{}
-		var blogWarnings int
-		for _, project := range s.browser.previews.Live(shown, blogName) {
-			running[project.Name().String()] = project.Running()
-			if project.Name() == blogName {
-				blogWarnings = len(project.Warnings())
+		s.sessions.unlisted = errors.New("tmux: no server")
+		for _, project := range s.browser.previews.Live(shown, projectName(t, "shop")) {
+			if project.Name().String() == "shop" && !project.Running() {
+				t.Fatal("got shop not running, want it as it was")
 			}
-		}
-		if running["shop"] || !running["blog"] || blogWarnings == 0 {
-			t.Fatalf("got running %v and %d warnings for blog, want only blog running, built again", running, blogWarnings)
 		}
 	})
 
@@ -1489,4 +1529,13 @@ func TestBrowseProjectsTellsWhyAStartFailed(t *testing.T) {
 	if len(s.sessions.started) != 0 {
 		t.Fatalf("got %q started, want none", s.sessions.started)
 	}
+}
+
+func projectName(t *testing.T, raw string) domain.ProjectName {
+	t.Helper()
+	name, err := domain.NewProjectName(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return name
 }

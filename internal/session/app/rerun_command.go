@@ -88,14 +88,21 @@ func paneOf(project domain.Project, at PaneAt) (domain.WindowPlan, domain.PanePl
 // project's session runs, and ErrSessionNotOwned unless weaver started
 // it, as only then can its panes be told apart.
 func requireOwned(sessions domain.SessionFinder, name domain.ProjectName) error {
+	_, err := ownedSession(sessions, name)
+	return err
+}
+
+// ownedSession is the project's running session, as requireOwned
+// requires it.
+func ownedSession(sessions domain.SessionFinder, name domain.ProjectName) (domain.RunningSession, error) {
 	session, running, err := sessions.Find(name)
 	switch {
 	case err != nil:
-		return err
+		return domain.RunningSession{}, err
 	case !running:
-		return fmt.Errorf("%s: %w: open or start it first", name, domain.ErrSessionNotRunning)
+		return domain.RunningSession{}, fmt.Errorf("%s: %w: open or start it first", name, domain.ErrSessionNotRunning)
 	case !session.Owned():
-		return fmt.Errorf("%s: %w: its panes can't be told apart", name, domain.ErrSessionNotOwned)
+		return domain.RunningSession{}, fmt.Errorf("%s: %w: its panes can't be told apart", name, domain.ErrSessionNotOwned)
 	}
-	return nil
+	return session, nil
 }

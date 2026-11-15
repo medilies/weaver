@@ -241,8 +241,9 @@ func (uc BrowseProjects) Handle(workingDir string) (err error) {
 }
 
 // Live implements LiveSessions, for the browser: one listing of the
-// sessions tells which projects run, and only selected's overview is
-// built again in full. When the listing fails, projects are as they were.
+// sessions tells which projects run, and only selected's overview, and
+// those of projects whose session started or ended, are built again in
+// full. When the listing fails, projects are as they were.
 func (uc BrowseProjects) Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview {
 	statuses, err := uc.list.Handle()
 	if err != nil {
@@ -257,7 +258,7 @@ func (uc BrowseProjects) Live(projects []ProjectOverview, selected domain.Projec
 		status, ok := byName[project.Name()]
 		switch {
 		case !ok:
-		case project.Name() == selected:
+		case project.Name() == selected || status.Running() != project.Running():
 			live[i] = uc.overview(status)
 		default:
 			live[i].status = status

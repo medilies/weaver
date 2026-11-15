@@ -66,28 +66,24 @@ func (uc Reload) HandleWindow(name domain.ProjectName, window domain.WindowName)
 	for _, w := range project.Plan().Windows() {
 		if w.Name() == window {
 			plan, found = w, true
+			break
 		}
 	}
 	if !found {
 		return "", fmt.Errorf("%w: %q", domain.ErrWindowNotFound, window)
 	}
-	session, running, err := uc.sessions.Find(name)
+	session, err := ownedSession(uc.sessions, name)
 	if err != nil {
 		return "", err
 	}
-	if err := requireOwned(uc.sessions, name); err != nil {
-		return "", err
-	}
-	if running {
-		for _, placement := range project.Restoration(session.Windows()) {
-			if placement.Window().Name() != window {
-				continue
-			}
-			if err := uc.sessions.Restore(name, []domain.WindowPlacement{placement}); err != nil {
-				return "", fmt.Errorf("%s: %w", window, err)
-			}
-			return fmt.Sprintf("Restored %s.", window), nil
+	for _, placement := range project.Restoration(session.Windows()) {
+		if placement.Window().Name() != window {
+			continue
 		}
+		if err := uc.sessions.Restore(name, []domain.WindowPlacement{placement}); err != nil {
+			return "", fmt.Errorf("%s: %w", window, err)
+		}
+		return fmt.Sprintf("Restored %s.", window), nil
 	}
 	err = uc.sessions.ReloadWindow(name, plan)
 	switch {

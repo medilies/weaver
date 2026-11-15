@@ -3,6 +3,7 @@ package infra
 import (
 	"fmt"
 	"maps"
+	"unicode/utf8"
 )
 
 // keyAction is an action a key setting can move to another key: the
@@ -70,6 +71,13 @@ var formFixedKeys = map[string]string{
 	"up": "move", "down": "move", "k": "move", "j": "move",
 	"left": "change", "right": "change", "h": "change", "l": "change",
 	"enter": "edit", "o": "add", "d": "delete", "esc": "leave", "ctrl+c": "leave",
+	"y": "answer yes", "Y": "answer yes", "n": "answer no", "N": "answer no",
+}
+
+// typesText reports whether key, pressed in a field being typed, types
+// text into it.
+func typesText(key string) bool {
+	return utf8.RuneCountInString(key) == 1 || key == "space"
 }
 
 // browserFixedKeys are the browser's keys no setting changes, and what

@@ -70,7 +70,7 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 	if slices.Contains(listed, t.opts.Pane) {
 		return domain.ErrPaneRunsWeaver
 	}
-	active, err := t.run("display-message", "-p", "-t", old, "#{window_active}")
+	current, err := t.run("display-message", "-p", "-t", session+":", "#{window_id}")
 	if err != nil {
 		return err
 	}
@@ -99,10 +99,12 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 	if _, err := t.run("kill-window", "-t", old); err != nil {
 		return err
 	}
-	if active == "1" {
-		if _, err := t.run("select-window", "-t", created); err != nil {
-			return err
-		}
+	// swap-window makes the window swapped in current, -d or not.
+	if current == old {
+		current = created
+	}
+	if _, err := t.run("select-window", "-t", current); err != nil {
+		return err
 	}
 	return t.retie(project, window, oldPanes)
 }

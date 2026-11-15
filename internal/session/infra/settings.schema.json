@@ -32,7 +32,7 @@
     "editor": {
       "description": "The editor E opens a config in, written as $VISUAL is, such as \"code --wait\": the config's path is added after it. $VISUAL, else $EDITOR, else vi unless set.",
       "type": "string",
-      "minLength": 1
+      "pattern": "\\S"
     },
     "tmux-timeout": {
       "description": "How long weave waits on a tmux command before giving up: a duration from \"500ms\" to \"1m\", such as \"10s\". \"5s\" unless set.",
@@ -44,7 +44,7 @@
       "type": "boolean"
     },
     "keys": {
-      "description": "The keys of the browser's and the config form's actions, one key each, their own unless set. Moving, enter, esc, Tab and ctrl+c stay fixed. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c) for the drawing keys, and two actions available at once can't share a key.",
+      "description": "The keys of the browser's and the config form's actions, one key each, their own unless set. Moving, enter, esc, Tab and ctrl+c stay fixed. In the config form, o, d, h/j/k/l, y and n stay fixed too. Two actions available at once can't share a key: the config form's, drawing keys included, the browser's project list's, or its task list's.",
       "type": "object",
       "additionalProperties": false,
       "properties": {

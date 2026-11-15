@@ -22,6 +22,7 @@ type fakeSessions struct {
 	commands map[string][]domain.RunningCommand     // by project, the commands weaver typed still running
 	previews map[string]domain.WindowPreview        // by project and window, "shop/api"
 	onAttach func()                                 // called as each attach happens
+	unlisted error                                  // why listing the sessions fails, if it does
 }
 
 func (s *fakeSessions) Preview(name domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {

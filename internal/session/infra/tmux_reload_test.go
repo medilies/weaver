@@ -69,6 +69,25 @@ func TestTmuxReload(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves the current window current when reloading another", func(t *testing.T) {
+		server.query(t, "select-window", "-t", "=reload:first")
+		if err := server.tmux().ReloadWindow(project, api); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if current := server.query(t, "display-message", "-p", "-t", "=reload:", "#{window_name}"); current != "first" {
+			t.Fatalf("the current window is %q, want first", current)
+		}
+	})
+
+	t.Run("restarts a pane without a command or env as a plain shell", func(t *testing.T) {
+		first := plan.Windows()[0]
+		pane := server.query(t, "display-message", "-p", "-t", "=reload:first", "#{pane_id}")
+		if err := server.tmux().ReloadPane(project, first, 0); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		server.waitFor(t, pane, "$")
+	})
+
 	t.Run("refuses the window weaver runs in", func(t *testing.T) {
 		inside := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true, Pane: server.paneLabelled(t, "reload", "back")})
 		if err := inside.ReloadWindow(project, api); !errors.Is(err, domain.ErrPaneRunsWeaver) {

@@ -300,6 +300,18 @@ func TestUndoMovedByTheSettings(t *testing.T) {
 	d.doesntSee("● unsaved")
 }
 
+func TestSaveKeyTypingTextIsNotOfferedWhileTyping(t *testing.T) {
+	d := editing(t, "notes", notesConfig)
+	d.form.keymap = newKeymap(formActions, map[string]string{"save": "S"})
+	d.cursorTo("root")
+	d.keys("enter")
+
+	d.keys("S")
+
+	d.doesntSee("S save")
+	d.sees("enter keep")
+}
+
 func TestUndoWithNothingToUndoSaysSo(t *testing.T) {
 	d := editing(t, "notes", notesConfig)
 

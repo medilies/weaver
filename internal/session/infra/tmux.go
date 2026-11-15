@@ -452,7 +452,8 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 }
 
 // Popup runs weave with args again in a tmux popup the size of the
-// client, in dir, with env, and waits for it to end. Inside the popup,
+// client, in dir, with env, and waits for it to end. The popup closes
+// when weave succeeds, and stays open on a failure, showing why. Inside the popup,
 // weave has no pane of its own, so it doesn't open another one. It
 // waits as long as the popup is open: tmux's limit doesn't apply.
 func (t Tmux) Popup(args []string, dir string, env []string) error {
@@ -460,7 +461,7 @@ func (t Tmux) Popup(args []string, dir string, env []string) error {
 	if err != nil {
 		return err
 	}
-	argv := append(slices.Clone(t.opts.Global), "display-popup", "-E", "-w", "100%", "-h", "100%", "-d", dir)
+	argv := append(slices.Clone(t.opts.Global), "display-popup", "-EE", "-w", "100%", "-h", "100%", "-d", dir)
 	for _, v := range env {
 		argv = append(argv, "-e", v)
 	}
@@ -641,6 +642,9 @@ func (t Tmux) InterruptRun(project domain.ProjectName, run domain.RunningCommand
 // is in the project's session.
 func (t Tmux) ownedBy(project domain.ProjectName, id string) error {
 	session, err := t.run("display-message", "-p", "-t", id, "#{session_name}")
+	if err != nil && !absent(err) {
+		return err
+	}
 	if err != nil || session != project.String() {
 		return fmt.Errorf("%w: it ended", domain.ErrPaneNotRunning)
 	}

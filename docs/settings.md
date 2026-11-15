@@ -70,8 +70,8 @@ server that stops answering can't freeze it. A duration in quotes from
 
 Whether the browser (`weave`) and the config form (`weave bind`),
 started in a tmux pane, show in a tmux popup the size of the window
-rather than in that pane. The popup closes when they end. `false` unless
-set.
+rather than in that pane. The popup closes when they end, or stays open
+to show why they failed. `false` unless set.
 
 ## `keys`
 
@@ -81,7 +81,8 @@ such as `space`, `f5`, `ctrl+x` or `alt+s`. A key written otherwise
 (`" "`, `ctrl-x`) is refused. Once moved, an action's own key does
 nothing, and the keys line shows the new one.
 
-Moving, `enter`, `esc`, Tab and `ctrl+c` can't be changed. Two actions
+Moving, `enter`, `esc`, Tab and `ctrl+c` can't be changed, nor, in the
+config form, `o`, `d`, `y` and `n`. Two actions
 available at once can't share a key: in the browser, those of the
 project list, or those of the task list.
 
@@ -98,8 +99,8 @@ tmux's keys unless set.
 | `grow` | make the selected pane larger | `L` |
 
 A key the config form already uses (the arrows, `h` `j` `k` `l`,
-`enter`, `o`, `d`, `esc`, `ctrl+c`, or one of the keys below) is
-refused, as are two drawing keys on the same key.
+`enter`, `o`, `d`, `y`, `n`, `esc`, `ctrl+c`, or one of the keys below)
+is refused, as are two drawing keys on the same key.
 weave reads only this file, never your tmux bindings: see
 [ADR 0001](adr/0001-drawing-keys-are-a-setting-not-read-from-tmux.md).
 

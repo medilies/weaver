@@ -195,7 +195,8 @@ type LiveSessions interface {
 	// domain.ErrWindowNotRunning when the session lacks it.
 	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
 	// Live is projects as they are now: whether each one's session runs,
-	// and the one named selected as Browse would show it now, its config
-	// read again, its warnings and running tasks found again.
+	// and the one named selected, and those whose session started or
+	// ended, as Browse would show them now, their configs read again,
+	// their warnings and running tasks found again.
 	Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview
 }

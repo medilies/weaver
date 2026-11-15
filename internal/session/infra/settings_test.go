@@ -252,6 +252,12 @@ func TestFormKeys(t *testing.T) {
 		}
 	})
 
+	t.Run("refuse a key answering the form's questions", func(t *testing.T) {
+		if _, err := settingsIn(t, "keys:\n  save: n\n"); !errors.Is(err, ErrKeyTaken) {
+			t.Fatalf("got %v, want n refused", err)
+		}
+	})
+
 	t.Run("refuse a drawing key on a key the form's actions moved to", func(t *testing.T) {
 		_, err := settingsIn(t, "keys:\n  undo: x\n")
 		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.undo: key taken: "x" already does keys.remove`) {
