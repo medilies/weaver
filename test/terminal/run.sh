@@ -720,6 +720,14 @@ s26() {
 	on term || fail "r left the browser"
 }
 
+s27() {
+	edit notes || return
+	keys Escape
+	wait_for 'q quit' || return
+	shows '/notes' || fail "the filter went with the config form" || return
+	lacks '  shop' || fail "the list isn't filtered"
+}
+
 # --- Running ----------------------------------------------------------------
 
 main() {

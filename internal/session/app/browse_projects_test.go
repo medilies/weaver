@@ -21,7 +21,16 @@ type scriptedBrowser struct {
 	previews app.LiveSessions // the last call's
 	confirm  app.Confirmer
 	onScreen bool
-	events   []string // "asked on screen", "asked off screen", "left"
+	events   []string // "asked on screen", "left", "ran off screen"…
+}
+
+// note records that what happened, on screen or off it.
+func (b *scriptedBrowser) note(what string) {
+	if b.onScreen {
+		b.events = append(b.events, what+" on screen")
+	} else {
+		b.events = append(b.events, what+" off screen")
+	}
 }
 
 // asking is b answering questions as confirm does.
@@ -50,11 +59,7 @@ func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain
 }
 
 func (b *scriptedBrowser) Confirm(question string) (bool, error) {
-	if b.onScreen {
-		b.events = append(b.events, "asked on screen")
-	} else {
-		b.events = append(b.events, "asked off screen")
-	}
+	b.note("asked")
 	return b.confirm.Confirm(question)
 }
 
@@ -147,14 +152,17 @@ type browseSetup struct {
 	form      *fakeForm
 	editor    *scriptedEditor
 	browser   *scriptedBrowser
+	tasks     *fakeTasks
 }
 
 func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 	t.Helper()
+	sessions := &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}
 	return browseSetup{
 		configs:   inMemoryRegistry{projects: map[string]domain.Project{"blog": project(t, "blog"), "shop": shop(t)}},
 		documents: storedDocuments{"blog": "root: /srv/blog\n", "shop": "root: /srv/shop\n"},
-		sessions:  &fakeSessions{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}},
+		sessions:  sessions,
+		tasks:     &fakeTasks{fakeSessions: sessions},
 		workspace: everything(),
 		form:      &fakeForm{project: project(t, "new")},
 		editor:    &scriptedEditor{},
@@ -163,18 +171,21 @@ func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 }
 
 // browse runs the browser from /srv/new until the scripted choices are
-// made, confirming with confirm.
+// made, confirming with confirm. Commands run and attaching are noted
+// in the browser's events.
 func (s browseSetup) browse(confirm app.Confirmer) error {
 	server := tmuxServer{s.sessions}
+	commands := &fakeCommands{onRun: func() { s.browser.note("ran") }}
+	s.sessions.onAttach = func() { s.browser.note("attached") }
 	return app.NewBrowseProjects(
 		s.browser.asking(confirm), s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
-		app.NewOpenProject(s.configs, server, s.workspace, &fakeCommands{}),
+		app.NewOpenProject(s.configs, server, s.workspace, commands),
 		app.NewBindProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form),
 		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
-		app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}),
-		app.NewRunTask(s.configs, &fakeTasks{fakeSessions: s.sessions}, s.browser),
-		app.NewRerunCommand(s.configs, &fakeTasks{fakeSessions: s.sessions}),
+		app.NewKillProject(server, capturedSessions{}, s.configs, commands, &fakeAcks{}),
+		app.NewRunTask(s.configs, s.tasks, s.browser),
+		app.NewRerunCommand(s.configs, s.tasks),
 	).Handle("/srv/new")
 }
 
@@ -484,14 +495,15 @@ func TestBrowseProjects(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["shop"] = tasked(t)
 		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		s.tasks.busy = map[string]bool{"logs/0": true}
 		choice := choose(t, app.ActionRunTaskStaying, "shop")
 		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
 		s.browser.choices = []app.Choice{choice}
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if want := []string{"left"}; !slices.Equal(s.browser.events, want) {
-			t.Fatalf("got %q, want the browser to leave only once done", s.browser.events)
+		if want := []string{"asked on screen", "left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
 		}
 	})
 
@@ -510,18 +522,35 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves the screen before running a task and going there", func(t *testing.T) {
+	t.Run("asks on screen, then leaves before going where a task runs", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["shop"] = tasked(t)
 		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		s.tasks.busy = map[string]bool{"logs/0": true}
 		choice := choose(t, app.ActionRunTask, "shop")
 		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
 		s.browser.choices = []app.Choice{choice}
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if want := []string{"left"}; !slices.Equal(s.browser.events, want) || len(s.sessions.attached) != 1 {
-			t.Fatalf("got %q, attached %q; want the browser left, then the session attached", s.browser.events, s.sessions.attached)
+		if want := []string{"asked on screen", "left", "attached off screen"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("stays on screen when a task to go to is refused", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		s.tasks.weaver = "logs/0"
+		choice := choose(t, app.ActionRunTask, "shop")
+		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		s.browser.choices = []app.Choice{choice}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left"}; !slices.Equal(s.browser.events, want) || !s.browser.last().failure {
+			t.Fatalf("got %q, notice %q; want the refusal told on screen", s.browser.events, s.browser.last().notice)
 		}
 	})
 
@@ -900,11 +929,74 @@ func TestBrowseProjects(t *testing.T) {
 	t.Run("leaves the screen for teardown commands once the kill is confirmed", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
 		s.configs.projects["shop"] = shop(t).TearingDown(command(t, "docker compose down"))
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if want := []string{"asked on screen", "left"}; !slices.Equal(s.browser.events[:2], want) || len(s.browser.shown) != 2 {
-			t.Fatalf("got %q after %d views, want %q, then the browser back", s.browser.events, len(s.browser.shown), want)
+		if want := []string{"asked on screen", "left", "ran off screen", "left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("stays on screen killing a session weaver didn't start, whose teardown doesn't run", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		s.configs.projects["shop"] = shop(t).TearingDown(command(t, "docker compose down"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"asked on screen", "left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("leaves the screen killing weaver's session whose config can't be read", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		server := tmuxServer{s.sessions}
+		configs := invalidConfig{s.configs, "shop"}
+		err := app.NewBrowseProjects(
+			s.browser.asking(answer(true)), configs, s.documents, s.workspace, server,
+			app.NewListProjects(configs, server), app.OpenProject{}, app.BindProject{}, app.EditProject{},
+			app.NewKillProject(server, capturedSessions{}, configs, &fakeCommands{}, &fakeAcks{}), app.RunTask{}, app.RerunCommand{},
+		).Handle("/srv/new")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"asked on screen", "left", "left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("leaves the screen for setup commands when starting", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionStart, "blog"))
+		s.configs.projects["blog"] = project(t, "blog").SettingUp(command(t, "docker compose up -d"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left", "ran off screen", "left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("stays on screen starting a project without setup commands", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionStart, "blog"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("stays on screen starting a running project, whose setup doesn't run", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionStart, "shop"))
+		s.configs.projects["shop"] = shop(t).SettingUp(command(t, "docker compose up -d"))
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
 		}
 	})
 

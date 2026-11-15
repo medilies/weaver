@@ -522,28 +522,21 @@ func runs(pane domain.PanePlan, cmd domain.Command) (string, bool) {
 // select next and what to tell the user. Declining to confirm is ErrAborted.
 func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []ProjectOverview) (domain.ProjectName, string, error) {
 	name := choice.Project
-	var project domain.Project
-	for _, overview := range overviews {
-		if overview.Name() == name {
-			project = overview.project
-		}
-	}
 	switch choice.Action {
-	case ActionOpen, ActionBind, ActionEdit, ActionEditRaw, ActionRunTask, ActionRerun:
+	case ActionOpen, ActionBind, ActionEdit, ActionEditRaw, ActionRerun:
 		if err := uc.browser.Leave(); err != nil {
 			return name, "", err
-		}
-	case ActionStart:
-		if len(project.Setup()) > 0 {
-			if err := uc.browser.Leave(); err != nil {
-				return name, "", err
-			}
 		}
 	}
 	switch choice.Action {
 	case ActionOpen:
 		return name, "", uc.open.Handle(name.String())
 	case ActionStart:
+		if uc.settingUp(name) {
+			if err := uc.browser.Leave(); err != nil {
+				return name, "", err
+			}
+		}
 		notice, err := uc.open.HandleStart(name.String())
 		return name, notice, err
 	case ActionBind:
@@ -572,7 +565,7 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		if err := uc.ask(fmt.Sprintf("Kill %s's session and everything running in it?", name)); err != nil {
 			return name, "", err
 		}
-		if len(project.Teardown()) > 0 {
+		if uc.tearingDown(name) {
 			if err := uc.browser.Leave(); err != nil {
 				return name, "", err
 			}
@@ -587,7 +580,7 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		}
 		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
 	case ActionRunTask:
-		return name, "", uc.run.Handle(name, choice.Task)
+		return name, "", uc.run.Handle(name, choice.Task, uc.browser.Leave)
 	case ActionRunTaskStaying:
 		notice, err := uc.run.HandleStaying(name, choice.Task)
 		return name, notice, err
@@ -598,6 +591,32 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		return name, "", uc.rerun.Handle(name, choice.Pane)
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)
+}
+
+// settingUp reports whether starting the project would run its setup
+// commands, which need the terminal: its session isn't running, and its
+// config, as stored now, has some.
+func (uc BrowseProjects) settingUp(name domain.ProjectName) bool {
+	if _, running, err := uc.sessions.Find(name); err != nil || running {
+		return false
+	}
+	project, err := uc.projects.FindByName(name)
+	return err == nil && len(project.Setup()) > 0
+}
+
+// tearingDown reports whether killing the project would run its teardown
+// commands, or tell why it can't, which both need the terminal: its
+// session is weaver's, and its config, as stored now, has some or can't
+// be read.
+func (uc BrowseProjects) tearingDown(name domain.ProjectName) bool {
+	if session, running, err := uc.sessions.Find(name); err != nil || !running || !session.Owned() {
+		return false
+	}
+	project, err := uc.projects.FindByName(name)
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		return false
+	}
+	return err != nil || len(project.Teardown()) > 0
 }
 
 // neighbour is the project after name in overviews, or before it when

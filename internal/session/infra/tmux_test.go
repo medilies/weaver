@@ -1505,10 +1505,15 @@ func TestTmuxRunningCommands(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		var others int
 		for _, c := range commands {
 			if c.Pane() == 0 {
 				t.Fatalf("got %s/%d running, want the pane weaver runs in left out", c.Window(), c.Pane())
 			}
+			others++
+		}
+		if others != 1 {
+			t.Fatalf("got %d other commands running, want sleep 301 still found", others)
 		}
 	})
 }

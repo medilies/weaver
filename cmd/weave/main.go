@@ -50,7 +50,10 @@ func wire() (application, error) {
 
 	weaverDir := filepath.Join(configDir, "weaver")
 	settings := sync.OnceValues(func() (infra.Settings, error) { return infra.LoadSettings(weaverDir, os.Stderr) })
-	projects := infra.NewFileProjectRegistry(filepath.Join(weaverDir, "projects")).WithWarnings(os.Stderr)
+	// Warnings wait while the browser is on screen, which they would
+	// show over.
+	warnings := infra.NewHeldOutput(os.Stderr)
+	projects := infra.NewFileProjectRegistry(filepath.Join(weaverDir, "projects")).WithWarnings(warnings)
 	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
 	// counts with $TMUX, which names the server it belongs to. A popup or
 	// run-shell has $TMUX but no pane.
@@ -78,7 +81,7 @@ func wire() (application, error) {
 		settings:     settings,
 	}
 	// The browser asks its own questions, in its status line while on screen.
-	browser := lazyBrowser(builtOnce(settings, infra.NewTeaBrowser))
+	browser := lazyBrowser(builtOnce(settings, func(s infra.Settings) infra.TeaBrowser { return infra.NewTeaBrowser(s, warnings) }))
 	weaver.browseProjects = app.NewBrowseProjects(browser, projects, projects, workspace, tmux,
 		weaver.listProjects, weaver.openProject, weaver.bindProject, weaver.editProject, weaver.killProject,
 		app.NewRunTask(projects, tmux, browser), app.NewRerunCommand(projects, tmux))

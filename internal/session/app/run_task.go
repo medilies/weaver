@@ -31,15 +31,19 @@ func NewRunTask(projects domain.ProjectRegistry, tasks domain.TaskRunner, confir
 	return RunTask{projects: projects, tasks: tasks, confirm: confirm}
 }
 
-// Handle runs the task at of project, and puts the user where it runs. A project
+// Handle runs the task at of project, then calls leaving, which frees the
+// terminal for attaching, and puts the user where the task runs. A project
 // that isn't running is refused, with an error wrapping
 // ErrSessionNotRunning, and one whose session weaver didn't start, whose
 // panes it can't tell, with ErrSessionNotOwned; a task of the pane the
 // browser runs in with ErrPaneRunsWeaver; declining to run the task apart
 // is ErrAborted.
-func (uc RunTask) Handle(name domain.ProjectName, at TaskAt) error {
+func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() error) error {
 	task, _, err := uc.started(name, at, true)
 	if err != nil {
+		return err
+	}
+	if err := leaving(); err != nil {
 		return err
 	}
 	if err := uc.tasks.Attach(name); err != nil {
@@ -123,7 +127,7 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 	}
 	busy, err := uc.tasks.Busy(name, window, index)
 	if errors.Is(err, domain.ErrPaneRunsWeaver) {
-		return false, fmt.Errorf("%s %w: w runs %s in a throwaway window", shown, err, task.Label())
+		return false, browserPane{fmt.Sprintf("%s runs this browser: w runs %s in a throwaway window", shown, task.Label())}
 	}
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", where(window, pane), err)
@@ -161,3 +165,11 @@ func taskOf(project domain.Project, at TaskAt) (domain.WindowPlan, domain.PanePl
 	}
 	return domain.WindowPlan{}, domain.PanePlan{}, domain.Task{}, fmt.Errorf("%w: %q", domain.ErrWindowNotFound, at.Window)
 }
+
+// browserPane is domain.ErrPaneRunsWeaver as the browser tells it: the
+// pane runs the browser, and w runs the task apart.
+type browserPane struct{ text string }
+
+func (e browserPane) Error() string { return e.text }
+
+func (e browserPane) Unwrap() error { return domain.ErrPaneRunsWeaver }

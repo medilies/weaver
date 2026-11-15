@@ -89,7 +89,7 @@ func runTask(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskA
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	return app.NewRunTask(configs, tasks, confirm).Handle(name, at)
+	return app.NewRunTask(configs, tasks, confirm).Handle(name, at, func() error { return nil })
 }
 
 func runningShop(t *testing.T) *fakeTasks {

@@ -3,8 +3,10 @@ package infra
 import (
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,6 +30,7 @@ type TeaBrowser struct {
 	kept   *browserPlace
 	theme  theme
 	screen *browserScreen
+	held   *HeldOutput
 }
 
 // browserScreen is the browser while it is on screen: its program, the
@@ -64,16 +67,74 @@ type browserPlace struct {
 	project            domain.ProjectName
 	window, pane, task int
 	tasking            bool
+	filter             string
+	config             bool // the config shown instead of the drawing
 	drawings           bool // the drawing switched to in place of the preview
+	abandoned          bool // quit while an action ran: not shown again
 }
 
-// NewTeaBrowser constructs a TeaBrowser styled by the settings' theme.
-func NewTeaBrowser(settings Settings) TeaBrowser {
-	return TeaBrowser{kept: &browserPlace{}, theme: settings.theme(), screen: &browserScreen{}}
+// NewTeaBrowser constructs a TeaBrowser styled by the settings' theme,
+// holding what is written to held while it is on screen.
+func NewTeaBrowser(settings Settings, held *HeldOutput) TeaBrowser {
+	return TeaBrowser{kept: &browserPlace{}, theme: settings.theme(), screen: &browserScreen{}, held: held}
 }
 
-// Browse implements app.ProjectBrowser.
+// HeldOutput writes through to its writer, except while the browser is on
+// screen, where it would show over it: it then holds what is written,
+// each write once, until the browser leaves.
+type HeldOutput struct {
+	mu      sync.Mutex
+	w       io.Writer
+	holding bool
+	held    []string
+}
+
+// NewHeldOutput constructs a HeldOutput writing to w.
+func NewHeldOutput(w io.Writer) *HeldOutput {
+	return &HeldOutput{w: w}
+}
+
+func (h *HeldOutput) Write(p []byte) (int, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if !h.holding {
+		return h.w.Write(p)
+	}
+	if !slices.Contains(h.held, string(p)) {
+		h.held = append(h.held, string(p))
+	}
+	return len(p), nil
+}
+
+// hold holds what is written from now on, if h is set.
+func (h *HeldOutput) hold() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.holding = true
+}
+
+// release writes what was held, and writes through again, if h is set.
+func (h *HeldOutput) release() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, text := range h.held {
+		_, _ = io.WriteString(h.w, text) // as the writes held would have, with nowhere to tell a failure
+	}
+	h.holding, h.held = false, nil
+}
+
+// Browse implements app.ProjectBrowser. Once the user quit while an
+// action ran, it is ErrAborted at once.
 func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) (app.Choice, error) {
+	if b.kept.abandoned {
+		return app.Choice{}, app.ErrAborted
+	}
 	if b.screen.program != nil {
 		b.screen.program.Send(reshown{projects: projects, selected: selected, notice: notice})
 	} else {
@@ -90,6 +151,9 @@ func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Proje
 // Confirm implements app.ProjectBrowser: in the status line while the
 // browser is on screen, else in the confirmation dialog.
 func (b TeaBrowser) Confirm(question string) (bool, error) {
+	if b.kept.abandoned {
+		return false, app.ErrAborted
+	}
 	if b.screen.program == nil {
 		return TeaConfirmer{theme: b.theme}.Confirm(question)
 	}
@@ -119,7 +183,11 @@ func (b TeaBrowser) Leave() error {
 func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
 	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
 	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings, chosen: chosen}
-	for i, project := range projects {
+	model.filter, model.config = b.kept.filter, b.kept.config
+	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Name() == selected }) {
+		model.filter = ""
+	}
+	for i, project := range model.shown() {
 		if project.Name() == selected {
 			model.cursor = i
 		}
@@ -133,6 +201,7 @@ func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.Project
 	}
 	program := tea.NewProgram(model)
 	ended := make(chan browserEnded, 1)
+	b.held.hold()
 	go func() {
 		final, err := program.Run()
 		ended <- browserEnded{final: final, err: err}
@@ -144,14 +213,16 @@ func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.Project
 // error it ended with, or ErrAborted when the user quit.
 func (b TeaBrowser) ended(end browserEnded) error {
 	*b.screen = browserScreen{}
+	b.held.release()
 	if end.err != nil {
 		return end.err
 	}
 	last := end.final.(browser)
-	b.kept.drawings = last.drawings
+	b.kept.drawings, b.kept.filter, b.kept.config, b.kept.abandoned = last.drawings, last.filter, last.config, last.abandoned
 	if shown := last.shown(); len(shown) > 0 {
 		*b.kept = browserPlace{project: shown[last.cursor].Name(), window: last.window, pane: last.pane,
-			task: last.task, tasking: last.tasking, drawings: last.drawings}
+			task: last.task, tasking: last.tasking, filter: last.filter, config: last.config,
+			drawings: last.drawings, abandoned: last.abandoned}
 	}
 	return app.ErrAborted
 }
@@ -204,6 +275,10 @@ type browser struct {
 	waiting  bool
 	question string
 	answer   chan<- bool
+	// working tells the user, who pressed ctrl+c while waiting, that the
+	// action still runs; a second ctrl+c abandons it, ending the browser.
+	working   bool
+	abandoned bool
 }
 
 // shown are the projects whose names contain the filter, ignoring case.
@@ -314,13 +389,12 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.reshown(msg)
 	case asked:
 		m.question, m.answer = msg.question, msg.answer
-		return m, nil
 	case tea.KeyPressMsg:
 		if m.question != "" {
 			return m.answered(msg.String())
 		}
 		if m.waiting {
-			return m, nil
+			return m.pressedWaiting(msg.String())
 		}
 	case tea.MouseClickMsg:
 		if m.question != "" || m.waiting {
@@ -648,6 +722,8 @@ func (m browser) noticeLine() string {
 	switch {
 	case m.question != "":
 		style, text = style.Inherit(m.theme.picked), m.question+" (y/n)"
+	case m.working:
+		style, text = style.Inherit(m.theme.picked), "Working… ctrl+c again leaves the browser."
 	case m.notice.Failure():
 		style, text = style.Inherit(m.theme.problem), "✗ "+text
 	}
@@ -660,7 +736,7 @@ func (m browser) noticeLine() string {
 // before.
 func (m browser) reshown(msg reshown) browser {
 	before := m.selectedName()
-	m.projects, m.notice, m.waiting = msg.projects, msg.notice, false
+	m.projects, m.notice, m.waiting, m.working = msg.projects, msg.notice, false, false
 	m.tasksStarted, m.hasRunning = false, false
 	if !slices.ContainsFunc(m.shown(), func(p app.ProjectOverview) bool { return p.Name() == msg.selected }) {
 		m.filter, m.filtering = "", false
@@ -680,6 +756,20 @@ func (m browser) reshown(msg reshown) browser {
 		}
 	}
 	return m
+}
+
+// pressedWaiting is m after key, pressed while an action runs: ctrl+c
+// says it is working, and a second one ends the browser, abandoning it.
+func (m browser) pressedWaiting(key string) (tea.Model, tea.Cmd) {
+	if key != "ctrl+c" {
+		return m, nil
+	}
+	if !m.working {
+		m.working = true
+		return m, nil
+	}
+	m.abandoned = true
+	return m, tea.Quit
 }
 
 // answered is m after key answers the question it asks: y or enter yes,

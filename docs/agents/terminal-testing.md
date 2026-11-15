@@ -110,6 +110,7 @@ Each is a function `sN` in the script, starting fresh. *Started* means started w
 | 24 | `weave`, select `notes`, `e`, ↓ until the project card scrolls out of view, ↑ back to `root` | The project card shows whole again, its border and the `name` row above `root` included, though the cursor never stops on `name`. |
 | 25 | `notes` started, `code` zoomed on `files`: in `files`, `weave`, select `notes`, `t`, `r` on `ls`, `w`, ↓, `r` on `echo saved` | `r` on `ls` is refused in red: `✗ files runs this browser: w runs ls in a throwaway window`. `w` runs it in a throwaway window `ls`, `code` staying the current window. `echo saved` runs in `edit`, `files` staying the current pane. |
 | 26 | `notes` started, `edit` busy: `weave`, select `notes`, `t`, ↓, `r`, `y` | The browser asks in its status line, staying on screen: `edit is busy: run echo saved in a throwaway window? (y/n)`. After `y` it says the task runs in a throwaway window, and the client stays in the browser. |
+| 27 | `weave`, `/notes`, enter, `e`, esc | Back from the config form, the browser keeps the filter `/notes`, `shop` filtered out. |
 
 ## Sample projects
 

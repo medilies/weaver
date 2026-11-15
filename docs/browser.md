@@ -129,6 +129,9 @@ comes back with what happened in the status line, a failure in red after
 stays on screen while the action runs, asking there what it asks
 (`y` or enter answers yes, any other key no), unless the action needs
 the terminal: the config form, the editor, `setup` or `teardown`
-commands, or going into a session. Since the browser and the config form take
+commands that run, or going into a session. Keys wait while an action
+runs; ctrl+c says it is still working, and a second ctrl+c leaves the
+browser, the action finishing on its own. The preview's hints, such as a
+session that ended, aren't failures and stay plain. Since the browser and the config form take
 the mouse, most terminals select text with shift held, and the wheel
 doesn't scroll them.

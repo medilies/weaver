@@ -21,6 +21,7 @@ type fakeSessions struct {
 	idle     map[string]map[domain.WindowName][]int // by project, the panes whose shell idles
 	commands map[string][]domain.RunningCommand     // by project, the commands weaver typed still running
 	previews map[string]domain.WindowPreview        // by project and window, "shop/api"
+	onAttach func()                                 // called as each attach happens
 }
 
 func (s *fakeSessions) Preview(name domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
@@ -67,6 +68,9 @@ func (s *fakeSessions) Start(plan domain.SessionPlan) error {
 
 func (s *fakeSessions) Attach(name domain.ProjectName) error {
 	s.attached = append(s.attached, name.String())
+	if s.onAttach != nil {
+		s.onAttach()
+	}
 	return nil
 }
 
