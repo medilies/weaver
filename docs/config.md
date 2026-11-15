@@ -23,7 +23,7 @@ root: ~/dev/weaver
 ## Toolchains
 
 Here a back end and a front end use different toolchain versions.
-weaver knows no toolchain: `before` types the commands that set one up,
+weaver knows no toolchain: `before` runs the commands that set one up,
 as you would. An alias only changes what you type; tools that run `php`
 themselves, such as `composer`, need the right `php` first on `PATH`:
 
@@ -53,14 +53,14 @@ windows:
 | `env` | Variables for every pane, and for the `setup` and `teardown` commands. Values are literal. |
 | `setup` | Commands run once in `root`, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. |
 | `teardown` | Commands run in `root`, in order, before `weave kill` ends a session weaver started, once its panes were interrupted, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. |
-| `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
-| `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
+| `before` | Commands run in every pane's shell, in order, before the pane's own command, so what they set (a variable, a function, an activated virtualenv) stays. They are typed as soon as the pane opens, unless the pane clears, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
+| `clear` | `true` runs the `before` commands unseen: never typed, never in the shell's history. What they print shows while they run, then the screen is cleared and the `note` printed. It is also logged, a file per pane, written again each time the pane starts: `weaver/logs/<project>/<window>.<pane>.log` in your cache folder (`~/.cache` on Linux), the pane numbered from 1 when it has no name. When one fails or you press Ctrl-C, the pane says so, and where the log is. This works with bash, zsh, fish and POSIX shells such as dash, as tmux's `default-shell`; with another shell, or a `default-command` set in tmux, the `before` commands are typed, then `clear`. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
 | `windows[].focus` | `true` lands `weave <project>` in this window when it starts the session, instead of the first. At most one window. |
 | `windows[].env` | Variables for every pane of the window, over the project's, per variable. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
-| `windows[].clear` | Whether the window's panes clear their `before` commands, over the project's `clear`. |
+| `windows[].clear` | Whether the window's panes run their `before` commands unseen, over the project's `clear`. |
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see [Grid](#grid). |
 | `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
@@ -68,7 +68,7 @@ windows:
 | `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
-| `clear` (pane) | Whether the pane clears its `before` commands, over its window's and project's `clear`. |
+| `clear` (pane) | Whether the pane runs its `before` commands unseen, over its window's and project's `clear`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
 | `prefill` | Typed at the prompt but not run: press Enter to run it. Not with `command`. |
 | `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. A line holding newlines, such as a `\|` block, prints as the lines it holds. |

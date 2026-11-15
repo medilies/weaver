@@ -212,6 +212,35 @@ windows:
 	h.gone("teardown")
 }
 
+// TestClearRunsBeforeCommandsUnseen: a `zine` that clears, its pane's
+// before command setting a variable and printing, its command printing
+// the shell's history: `weave zine --detached`.
+//
+// The pane shows the variable set, and a history of the command alone;
+// what the before command printed is in the pane's log.
+func TestClearRunsBeforeCommandsUnseen(t *testing.T) {
+	h := start(t)
+	h.write("cfg/weaver/projects/zine.yml", "root: "+h.dir+"/notes\n"+`clear: true
+windows:
+  - name: w
+    panes:
+      - name: p
+        before: ["ZINE=kept; echo printed-by-before"]
+        command: echo "ZINE=$ZINE"; history
+`)
+	h.started("zine")
+	pane := "=zine:w"
+
+	h.paneShows(pane, "ZINE=kept")
+	if shown := h.tmux("capture-pane", "-p", "-S", "-", "-t", pane); strings.Contains(shown, "printed-by-before") || strings.Contains(shown, "ZINE=kept;") {
+		h.fatal("the before command shows in the pane:\n%s", shown)
+	}
+	log, err := os.ReadFile(filepath.Join(h.dir, "home/.cache/weaver/logs/zine/w.p.log"))
+	if err != nil || !strings.Contains(string(log), "printed-by-before") {
+		h.fatal("logged %q (%v), want what the before command printed", log, err)
+	}
+}
+
 // TestKillAsksWithItsKeys: `notes` started: `weave`, select `notes`, `x`,
 // then `n`.
 //

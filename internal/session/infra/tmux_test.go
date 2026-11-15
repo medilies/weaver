@@ -410,6 +410,89 @@ func TestTmuxStartClearing(t *testing.T) {
 	})
 }
 
+func TestTmuxStartRunsBeforeCommandsUnseen(t *testing.T) {
+	server := newTmuxServer(t)
+	logs := t.TempDir()
+	tmux := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Logs: logs})
+	plan := planOf(t, "unseen", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
+		{"name": "w", "panes": [
+			{"name": "p", "before": ["x=kept; echo hidden-$((1+1))"], "command": "echo \"x=$x\""},
+			{"name": "q", "split": {"direction": "right"}, "before": ["false"], "command": "echo after-failure"}
+		]}
+	]}`, t.TempDir()))
+
+	if err := tmux.Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("runs them in the pane's shell, keeping their effects", func(t *testing.T) {
+		server.waitFor(t, "=unseen:w.0", "x=kept")
+	})
+
+	t.Run("logs what they print, but not them", func(t *testing.T) {
+		log := filepath.Join(logs, "unseen", "w.p.log")
+		var logged []byte
+		for range 100 {
+			if logged, _ = os.ReadFile(log); strings.Contains(string(logged), "hidden-2") {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		if !strings.Contains(string(logged), "hidden-2") || strings.Contains(string(logged), "echo hidden") {
+			t.Fatalf("logged %q, want hidden-2 printed, and not the command", logged)
+		}
+	})
+
+	t.Run("tells where the log is when one fails", func(t *testing.T) {
+		shown := server.waitFor(t, "=unseen:w.1", "✗ a before command failed")
+		if want := "✗ a before command failed or was interrupted: what it printed is in " + filepath.Join(logs, "unseen", "w.q.log"); !strings.Contains(strings.ReplaceAll(shown, "\n", ""), want) {
+			t.Fatalf("the pane shows:\n%s\nwant %q", shown, want)
+		}
+	})
+}
+
+func TestTmuxStartGoesOnWhenBeforeCommandIsInterrupted(t *testing.T) {
+	server := newTmuxServer(t)
+	plan := planOf(t, "slow", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
+		{"name": "w", "panes": [{"before": ["sleep 30"], "command": "echo after-$((1+1))"}]}
+	]}`, t.TempDir()))
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	server.busy(t, "slow", "sleep")
+
+	server.query(t, "send-keys", "-t", "=slow:w", "C-c")
+
+	shown := server.waitFor(t, "=slow:w", "after-2")
+	if !strings.Contains(shown, "✗ a before command failed or was interrupted") {
+		t.Fatalf("the pane shows:\n%s\nwant the interruption told", shown)
+	}
+}
+
+func TestTmuxStartLogsBeforeCommandsTypedWithDefaultCommand(t *testing.T) {
+	server := newTmuxServer(t)
+	config := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(config, []byte(`set -g default-command "exec /bin/sh"`+"\n"), 0o600); err != nil {
+		t.Fatalf("writing the config: %v", err)
+	}
+	server.global[3] = config
+	logs := t.TempDir()
+	tmux := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Logs: logs})
+	plan := planOf(t, "typed", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
+		{"name": "w", "panes": [{"before": ["echo hidden-$((1+1))"], "command": "echo shown-$((2+2))"}]}
+	]}`, t.TempDir()))
+
+	if err := tmux.Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	server.waitFor(t, "=typed:w", "shown-4")
+
+	logged, err := os.ReadFile(filepath.Join(logs, "typed", "w.1.log"))
+	if err != nil || !strings.Contains(string(logged), "hidden-2") {
+		t.Fatalf("logged %q (%v), want hidden-2", logged, err)
+	}
+}
+
 func TestTmuxStartEndsAPaneScriptWithTheDefaultCommand(t *testing.T) {
 	server := newTmuxServer(t)
 	// In the config, read by the server Start starts: there is none before.

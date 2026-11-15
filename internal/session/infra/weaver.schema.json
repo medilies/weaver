@@ -56,7 +56,7 @@
       }
     },
     "before": {
-      "description": "Commands typed and run in each pane before its own command, e.g. nvm use 20: the project's, then the window's, then the pane's. They are typed as soon as the pane opens, so one that reads the terminal (ssh, a password prompt) takes the lines typed after it.",
+      "description": "Commands run in each pane's shell before its own command, e.g. nvm use 20: the project's, then the window's, then the pane's. They are typed as soon as the pane opens, unless the pane clears, so one that reads the terminal (ssh, a password prompt) takes the lines typed after it.",
       "type": "array",
       "items": {
         "type": "string",
@@ -64,7 +64,7 @@
       }
     },
     "clear": {
-      "description": "Hide the before commands once they ran: clear is typed after them, then the note printed. Set on the project, a window or a pane, the lowest winning; off unless set.",
+      "description": "Run the before commands unseen, never typed nor in the shell's history, with bash, zsh, fish or a POSIX sh: what they print shows while they run and is logged in weaver/logs in the cache folder, then the screen is cleared and the note printed. With another shell, they are typed, then clear. Set on the project, a window or a pane, the lowest winning; off unless set.",
       "type": "boolean"
     },
     "window": {
