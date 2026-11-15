@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -66,6 +67,21 @@ func TestLoadSettings(t *testing.T) {
 		got, err := settingsIn(t, "preview: false\n")
 		if err != nil || got.preview {
 			t.Fatalf("got preview %t (%v), want it off", got.preview, err)
+		}
+	})
+
+	t.Run("read how often the browser finds what it shows again", func(t *testing.T) {
+		got, err := settingsIn(t, "preview-every: 500ms\n")
+		if err != nil || got.previewEvery != 500*time.Millisecond {
+			t.Fatalf("got %v (%v), want 500ms", got.previewEvery, err)
+		}
+	})
+
+	t.Run("refuse a duration that isn't one, or is out of its range", func(t *testing.T) {
+		for _, every := range []string{"1 second", "10", "50ms", "2m", "-1s"} {
+			if _, err := settingsIn(t, "preview-every: "+every+"\n"); !errors.Is(err, ErrInvalidDuration) || !strings.Contains(err.Error(), "preview-every: ") {
+				t.Errorf("%s: got %v, want ErrInvalidDuration naming preview-every", every, err)
+			}
 		}
 	})
 

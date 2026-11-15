@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 
 	"charm.land/bubbles/v2/spinner"
@@ -31,6 +32,7 @@ import (
 type TeaBrowser struct {
 	kept   *browserPlace
 	theme  theme
+	every  time.Duration // how often the browser finds what it shows again
 	screen *browserScreen
 	held   *HeldOutput
 }
@@ -82,7 +84,10 @@ type browserPlace struct {
 // starting on the preview or the drawing as they say, holding what is
 // written to held while it is on screen.
 func NewTeaBrowser(settings Settings, held *HeldOutput) TeaBrowser {
-	return TeaBrowser{kept: &browserPlace{drawings: !settings.preview}, theme: settings.theme(), screen: &browserScreen{}, held: held}
+	return TeaBrowser{
+		kept: &browserPlace{drawings: !settings.preview}, theme: settings.theme(), every: settings.previewEvery,
+		screen: &browserScreen{}, held: held,
+	}
 }
 
 // HeldOutput writes through to its writer, except while the browser is on
@@ -195,7 +200,7 @@ func (b TeaBrowser) Leave() error {
 // show puts the browser on screen.
 func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
 	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
-	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
+	model := browser{projects: projects, notice: notice, theme: b.theme, every: b.every, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
 	model.filter, model.config = b.kept.filter, b.kept.config
 	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Name() == selected }) {
 		model.filter = ""
@@ -253,6 +258,7 @@ var browserKeys = map[string]app.Action{
 // the task list.
 type browser struct {
 	theme      theme
+	every      time.Duration
 	projects   []app.ProjectOverview
 	cursor     int
 	top        int
@@ -398,7 +404,7 @@ func (m browser) windowsShown() []domain.WindowPlan {
 // as its session is now; the first asks follow the terminal's size, read again once
 // resizes are listened for.
 func (m browser) Init() tea.Cmd {
-	return tea.Batch(tick(), sizeRecheck())
+	return tea.Batch(tick(m.every), sizeRecheck())
 }
 
 // Update is m after msg, its list scrolled to keep the cursor in view,
@@ -482,7 +488,7 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.refreshAsked == m.refreshAnswered {
 			m, refresh = m.refresh()
 		}
-		return m, tea.Batch(preview, refresh, tick())
+		return m, tea.Batch(preview, refresh, tick(m.every))
 	case refreshed:
 		m.refreshAnswered = max(m.refreshAnswered, msg.asked)
 		if msg.asked == m.refreshAsked {

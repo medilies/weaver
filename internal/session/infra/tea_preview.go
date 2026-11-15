@@ -14,10 +14,6 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// previewEvery is how often the preview of the selected window, which
-// projects run, and the selected project's overview, are found again.
-const previewEvery = time.Second
-
 // previewTick asks for the selected window's preview, and the projects
 // as they are now, again.
 type previewTick struct{}
@@ -32,9 +28,11 @@ type previewed struct {
 	err     error
 }
 
-// tick is the next previewTick, previewEvery from now.
-func tick() tea.Cmd {
-	return tea.Tick(previewEvery, func(time.Time) tea.Msg { return previewTick{} })
+// tick is the next previewTick, every from now: how often the preview of
+// the selected window, which projects run, and the selected project's
+// overview, are found again.
+func tick(every time.Duration) tea.Cmd {
+	return tea.Tick(every, func(time.Time) tea.Msg { return previewTick{} })
 }
 
 // previewKey is the project and window the preview is wanted for: the

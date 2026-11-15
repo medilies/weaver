@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"go.yaml.in/yaml/v3"
@@ -31,9 +32,10 @@ var settingsSchema []byte
 // Settings are weaver-wide preferences, the same for every project: the
 // selected colour, the keys, and how the browser behaves.
 type Settings struct {
-	colour  color.Color
-	keys    DrawingKeys
-	preview bool
+	colour       color.Color
+	keys         DrawingKeys
+	preview      bool
+	previewEvery time.Duration
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -46,9 +48,10 @@ type DrawingKeys struct {
 // tmux's keys.
 func DefaultSettings() Settings {
 	return Settings{
-		colour:  lipgloss.Color("6"),
-		keys:    DrawingKeys{splitRight: "%", splitBelow: "\"", remove: "x", shrink: "H", grow: "L"},
-		preview: true,
+		colour:       lipgloss.Color("6"),
+		keys:         DrawingKeys{splitRight: "%", splitBelow: "\"", remove: "x", shrink: "H", grow: "L"},
+		preview:      true,
+		previewEvery: time.Second,
 	}
 }
 
@@ -96,6 +99,7 @@ type settingsFile struct {
 	SelectedColour yaml.Node `yaml:"selected-colour"`
 	Keys           keysFile  `yaml:"keys"`
 	Preview        *bool     `yaml:"preview"`
+	PreviewEvery   *string   `yaml:"preview-every"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -130,6 +134,9 @@ var (
 	// ErrInvalidKey is returned for a key no terminal sends as written,
 	// such as " " for space or ctrl-x for ctrl+x.
 	ErrInvalidKey = errors.New("invalid key")
+	// ErrInvalidDuration is returned for a duration that isn't one, such
+	// as "1 second", or is out of its setting's range.
+	ErrInvalidDuration = errors.New("invalid duration")
 	// ErrTrailingSettings is returned when the settings file holds a
 	// second document.
 	ErrTrailingSettings = errors.New("unexpected data after the settings object")
@@ -161,6 +168,13 @@ func decodeSettings(raw []byte) (Settings, error) {
 	if file.Preview != nil {
 		settings.preview = *file.Preview
 	}
+	if file.PreviewEvery != nil {
+		every, err := parseDuration("preview-every", *file.PreviewEvery, 100*time.Millisecond, time.Minute)
+		if err != nil {
+			return Settings{}, err
+		}
+		settings.previewEvery = every
+	}
 	keys := &settings.keys
 	for _, key := range []struct {
 		field string
@@ -188,6 +202,16 @@ func decodeSettings(raw []byte) (Settings, error) {
 		return Settings{}, err
 	}
 	return settings, nil
+}
+
+// parseDuration reads value, field's, as a duration from lowest to
+// highest, such as "500ms" or "2s".
+func parseDuration(field, value string, lowest, highest time.Duration) (time.Duration, error) {
+	d, err := time.ParseDuration(value)
+	if err != nil || d < lowest || d > highest {
+		return 0, fmt.Errorf("%s: %w: %q (want %s to %s, such as %q)", field, ErrInvalidDuration, value, lowest, highest, "2s")
+	}
+	return d, nil
 }
 
 // parseColour reads an ANSI colour number, 0-255, or "#rrggbb".

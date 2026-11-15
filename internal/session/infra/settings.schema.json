@@ -16,6 +16,11 @@
       "description": "Whether the browser shows the preview of a running session's window, rather than its drawing, until p switches. true unless set.",
       "type": "boolean"
     },
+    "preview-every": {
+      "description": "How often the browser reads the preview, which projects run and the selected project again: a duration from \"100ms\" to \"1m\", such as \"500ms\" or \"2s\". \"1s\" unless set.",
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+    },
     "keys": {
       "description": "The config form's keys on the drawing, tmux's unless set. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c), nor two the same.",
       "type": "object",

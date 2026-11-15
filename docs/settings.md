@@ -35,6 +35,13 @@ Whether the [browser](browser.md) shows the preview of a running
 session's window, rather than its drawing. `p` still switches. `true`
 unless set.
 
+## `preview-every`
+
+How often the browser reads again what it shows: the preview, which
+projects run, the selected project's summary and its task list's ●
+marks. A duration in quotes from `"100ms"` to `"1m"`, such as `"500ms"`
+or `"2s"`. `"1s"` unless set.
+
 ## `keys`
 
 The config form's keys on the drawing, tmux's unless set. Write a key

@@ -53,7 +53,7 @@ click one to select its window.
 When the selected project's session runs and weaver started it, the
 selected window shows as it is now instead of as it opens: its panes
 where tmux has them, each showing the bottom of its screen in its
-colours, updated every second. The details' title ends in `· preview`.
+colours, kept up to date. The details' title ends in `· preview`.
 Its panes keep their config names, warnings and levels, and `r` works;
 a pane split by hand shows its number, as "not in the config". The pane
 the browser runs in reads "this browser". A zoomed window shows its
@@ -62,7 +62,8 @@ line saying why, when the session ends or the window closes, and for a
 window the session lacks, which enter restores; these hints aren't
 failures and stay plain.
 
-The browser stays up to date while it is open, checking every second:
+The browser stays up to date while it is open, checking every second
+unless the [settings](settings.md#preview-every) say otherwise:
 the project list's ● marks and green names, and the selected project's
 summary, drawing and task list, its config read again.
 
@@ -70,8 +71,8 @@ summary, drawing and task list, its config read again.
 
 Beside the project list, the task list shows the selected project's
 tasks under `window › pane`, in the order its panes are created, ● before
-one still running in its pane or its throwaway window, checked again
-every second. weaver can't tell a task from another job started there
+one still running in its pane or its throwaway window, kept up to
+date. weaver can't tell a task from another job started there
 after it ended, and never marks one in the pane the browser runs in,
 which it keeps busy itself.
 
