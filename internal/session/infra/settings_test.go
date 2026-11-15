@@ -125,6 +125,13 @@ func TestLoadSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("turn the popup on", func(t *testing.T) {
+		got, err := settingsIn(t, "popup: true\n")
+		if err != nil || !got.Popup() {
+			t.Fatalf("got popup %t (%v), want it on", got.Popup(), err)
+		}
+	})
+
 	t.Run("refuse a colour that is neither a number to 255 nor #rrggbb", func(t *testing.T) {
 		for _, colour := range []string{"256", "-1", "cyan", `"#fff"`, `"6"`, "[6]"} {
 			if _, err := settingsIn(t, "selected-colour: "+colour+"\n"); !errors.Is(err, ErrInvalidColour) {

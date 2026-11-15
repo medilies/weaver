@@ -42,6 +42,9 @@ run their tasks.`,
 				if err := weaver.readSettings(); err != nil {
 					return err
 				}
+				if popped, err := weaver.inPopup(); popped || err != nil {
+					return err
+				}
 			}
 			dir, err := os.Getwd()
 			if err != nil {

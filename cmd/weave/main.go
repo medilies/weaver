@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +28,18 @@ type application struct {
 	sessions domain.SessionLister
 	// settings reads the settings, once.
 	settings func() (infra.Settings, error)
+	// popup runs weave again in a tmux popup, when the settings ask for
+	// one and weave runs in a tmux pane, and reports whether it did.
+	popup func() (bool, error)
+}
+
+// inPopup runs weave again in a tmux popup, as popup does; never without
+// one.
+func (a application) inPopup() (bool, error) {
+	if a.popup == nil {
+		return false, nil
+	}
+	return a.popup()
 }
 
 // readSettings stops a command showing the confirmation dialog, the
@@ -80,7 +94,24 @@ func wire() (application, error) {
 		return infra.NewTeaConfigForm(workspace, projects, s)
 	}))
 
+	popup := func() (bool, error) {
+		if s, err := settings(); err != nil || !s.Popup() || pane == "" {
+			return false, nil
+		}
+		dir, err := os.Getwd()
+		if err != nil {
+			return false, err
+		}
+		// The popup's shell starts from tmux's environment: weave takes
+		// its own along, but for what tells it which pane it runs in.
+		env := slices.DeleteFunc(os.Environ(), func(v string) bool {
+			return strings.HasPrefix(v, "TMUX=") || strings.HasPrefix(v, "TMUX_PANE=")
+		})
+		return true, tmux.Popup(os.Args[1:], dir, env)
+	}
+
 	weaver := application{
+		popup:       popup,
 		bindProject: app.NewBindProject(projects, tmux, workspace, configForm),
 		editProject: app.NewEditProject(projects, projects, configForm, infra.NewEditor().Preferring(func() string {
 			if s, err := settings(); err == nil {

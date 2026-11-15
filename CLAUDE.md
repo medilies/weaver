@@ -16,7 +16,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | --- | --- | --- | --- |
 | project | A named dev environment weaver can open | `<name>.yml` or `<name>.yaml` | `Project`, `ProjectName` |
 | settings | Weaver-wide preferences, the same for every project, in one file beside the configs; never part of a project's config | `settings.yml` | `Settings` |
-| popup | A tmux popup the size of the client, which the browser and the config form re-run themselves in when started in a tmux pane, if the settings ask for it; off unless set | `popup:` (settings) | |
+| popup | A tmux popup the size of the client, which the browser and the config form re-run themselves in when started in a tmux pane, if the settings ask for it; off unless set | `popup:` (settings) | `Settings.Popup`, `Tmux.Popup` |
 | selected colour | The colour marking what is selected, and where the cursor is, in the browser and the config form; cyan unless set. In a window list or pane list, the selected item is underlined, and in this colour while the cursor is on the list, or in the browser while it is in the project list | `selected-colour:` (settings) | `Settings`, `theme` |
 | theme | How weaver's screens are styled: the selected colour, the shades (bright, plain, muted) and the state colours (green, yellow, red) | | `theme` in `theme.go` |
 | keys | The settings choosing the browser's and the config form's action keys, one key each, the drawing keys among them; moving, enter, esc, Tab and ctrl+c are fixed. Two actions available at once never share a key | `keys:` (settings) | `keymap`, `browserActions`, `formActions` in `keymap.go` |

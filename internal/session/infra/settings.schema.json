@@ -39,6 +39,10 @@
       "type": "string",
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
     },
+    "popup": {
+      "description": "Whether the browser (weave) and the config form (weave bind), started in a tmux pane, re-run themselves in a tmux popup the size of the client. false unless set.",
+      "type": "boolean"
+    },
     "keys": {
       "description": "The keys of the browser's and the config form's actions, one key each, their own unless set. Moving, enter, esc, Tab and ctrl+c stay fixed. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c) for the drawing keys, and two actions available at once can't share a key.",
       "type": "object",

@@ -43,6 +43,7 @@ type Settings struct {
 	tmuxTimeout  time.Duration
 	browserKeys  map[string]string // the browser's keys set, by setting name
 	formKeys     map[string]string // the config form's keys set, by setting name, but the drawing's
+	popup        bool
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -55,6 +56,12 @@ type DrawingKeys struct {
 // $VISUAL and $EDITOR.
 func (s Settings) Editor() string {
 	return s.editor
+}
+
+// Popup reports whether the browser and the config form, started in a
+// tmux pane, re-run themselves in a popup the size of the client.
+func (s Settings) Popup() bool {
+	return s.popup
 }
 
 // TmuxTimeout is how long weave waits on a tmux command before giving
@@ -126,6 +133,7 @@ type settingsFile struct {
 	Mouse          *bool     `yaml:"mouse"`
 	Editor         *string   `yaml:"editor"`
 	TmuxTimeout    *string   `yaml:"tmux-timeout"`
+	Popup          *bool     `yaml:"popup"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -239,6 +247,9 @@ func decodeSettings(raw []byte) (Settings, error) {
 	}
 	if file.Preview != nil {
 		settings.preview = *file.Preview
+	}
+	if file.Popup != nil {
+		settings.popup = *file.Popup
 	}
 	if file.TmuxTimeout != nil {
 		timeout, err := parseDuration("tmux-timeout", *file.TmuxTimeout, 500*time.Millisecond, time.Minute)

@@ -3,6 +3,17 @@
 `weave` alone opens the browser: the projects, their tasks, and the
 selected project's windows drawn as they open.
 
+Inside tmux, it shows in the pane you typed it in. To have it fill the
+window instead:
+
+- set [`popup: true`](settings.md#popup): `weave` and `weave bind` then
+  show in a tmux popup the size of the window;
+- or bind a tmux key to it, in `~/.tmux.conf`:
+
+  ```sh
+  bind-key W display-popup -E -w 100% -h 100% weave
+  ```
+
 ## Summary
 
 The browser lists the projects, a ● and a green name marking those whose

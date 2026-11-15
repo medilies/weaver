@@ -66,6 +66,13 @@ How long weave waits on a tmux command before giving up, so a tmux
 server that stops answering can't freeze it. A duration in quotes from
 `"500ms"` to `"1m"`, such as `"10s"`. `"5s"` unless set.
 
+## `popup`
+
+Whether the browser (`weave`) and the config form (`weave bind`),
+started in a tmux pane, show in a tmux popup the size of the window
+rather than in that pane. The popup closes when they end. `false` unless
+set.
+
 ## `keys`
 
 The keys of the browser's and the config form's actions, one key each.

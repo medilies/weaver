@@ -451,6 +451,26 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 	return syscall.Exec(path, append(argv, "attach-session", "-t", target), env)
 }
 
+// Popup runs weave with args again in a tmux popup the size of the
+// client, in dir, with env, and waits for it to end. Inside the popup,
+// weave has no pane of its own, so it doesn't open another one. It
+// waits as long as the popup is open: tmux's limit doesn't apply.
+func (t Tmux) Popup(args []string, dir string, env []string) error {
+	weave, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	argv := append(slices.Clone(t.opts.Global), "display-popup", "-E", "-w", "100%", "-h", "100%", "-d", dir)
+	for _, v := range env {
+		argv = append(argv, "-e", v)
+	}
+	argv = append(append(argv, "--", weave), args...)
+	cmd := exec.Command("tmux", argv...)
+	cmd.Env = t.opts.Env
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
+}
+
 // taskTag is the pane option holding the command Type typed into the
 // pane, or RunApart into a throwaway window's, taskSinceTag the one
 // holding when, in Unix nanoseconds, and taskOfTag the window option

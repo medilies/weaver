@@ -93,6 +93,26 @@ func TestBrowserKeySetting(t *testing.T) {
 	h.sees("Y drawing")
 }
 
+// TestPopupSetting: settings `popup: true`: `weave` in the pane `term`,
+// select `notes`, enter.
+//
+// The browser shows in a popup, over `term`, which doesn't hold it; enter
+// opens `notes` from there, the popup closing and the client switching.
+func TestPopupSetting(t *testing.T) {
+	h := start(t)
+	h.settings("popup: true")
+	term := h.here()
+	h.browse("notes")
+
+	if shown := h.tmux("capture-pane", "-p", "-t", term); strings.Contains(shown, "enter open") {
+		h.fatal("the browser runs in the pane term, not a popup")
+	}
+	h.keys("Enter")
+
+	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "notes" })
+	h.gone("enter open")
+}
+
 // TestClickPicksPane: `weave`, select `blog`, click `shell` in the pane
 // list.
 //
