@@ -49,30 +49,21 @@ esac
 `,
 }
 
-const demoNimbus = `root: ~/dev/nimbus
-windows:
-  - name: api
-    dir: api
-    panes:
-      - name: api shell
-        tasks:
-          - {name: migrate, command: task migrate}
-      - name: task dev
-        split: { direction: right, size: 40% }
-        command: task dev
-      - name: psql
-        dir: .
-        split: { direction: below }
-        command: nimbus psql
-  - name: app
-    dir: app
-    panes:
-      - name: app shell
-      - name: flutter run
-        split: { direction: right, size: 40% }
-        command: nimbus app
-  - name: repo
-`
+// demoNimbus is the README's nimbus config, so that the demo shows what
+// the README says.
+func demoNimbus(t *testing.T) string {
+	t.Helper()
+	readme, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, config, found := strings.Cut(string(readme), "```yaml\n# ~/.config/weaver/projects/nimbus.yml\n")
+	config, _, closed := strings.Cut(config, "```")
+	if !found || !closed {
+		t.Fatal("the README shows no nimbus.yml")
+	}
+	return config
+}
 
 const demoSite = `root: ~/dev/site
 windows:
@@ -106,7 +97,7 @@ func TestDemo(t *testing.T) {
 		}
 	}
 	h.settings(`selected-colour: "#cba6f7"`)
-	h.write("cfg/weaver/projects/nimbus.yml", demoNimbus)
+	h.write("cfg/weaver/projects/nimbus.yml", demoNimbus(t))
 	h.write("cfg/weaver/projects/site.yml", demoSite)
 	for _, d := range []string{"home/dev/nimbus/api", "home/dev/nimbus/app", "home/dev/site"} {
 		h.mkdir(d)

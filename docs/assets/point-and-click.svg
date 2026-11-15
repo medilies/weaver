@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 320" width="760" height="320">
+  <defs>
+    <radialGradient id="night" cx="42%" cy="38%" r="80%">
+      <stop offset="0" stop-color="#2b2133"/>
+      <stop offset="0.6" stop-color="#1a1420"/>
+      <stop offset="1" stop-color="#0e0b12"/>
+    </radialGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8d8597"/>
+      <stop offset="0.42" stop-color="#f1ece4"/>
+      <stop offset="1" stop-color="#9a90a3"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#d23a4f" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#d23a4f" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="11"/>
+      <feDisplacementMap in="SourceGraphic" scale="3"/>
+    </filter>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="5"/>
+      <feColorMatrix values="0 0 0 0 0.9  0 0 0 0 0.85  0 0 0 0 0.8  0 0 0 0.05 0"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+  </defs>
+
+  <rect width="760" height="320" rx="20" fill="url(#night)"/>
+  <rect width="760" height="320" rx="20" fill="#000" filter="url(#grain)"/>
+
+  <g filter="url(#ink)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- silk strands drifting in the dark -->
+    <g fill="none" stroke="#e9dfc9" opacity="0.18">
+      <path d="M0 60 C 120 30, 220 90, 330 40 S 560 10, 760 50" stroke-width="1"/>
+      <path d="M0 290 C 140 250, 260 310, 420 276 S 640 240, 760 280" stroke-width="1"/>
+      <path d="M520 0 C 540 90, 600 120, 640 320" stroke-width="0.8"/>
+      <path d="M700 0 C 690 110, 730 200, 712 320" stroke-width="0.8"/>
+    </g>
+
+    <!-- the window: three panes -->
+    <rect x="40" y="44" width="380" height="232" rx="10" fill="#1d1724" stroke="#e9dfc9" stroke-width="3"/>
+    <path d="M40 70 L420 70" stroke="#e9dfc9" stroke-width="2" opacity="0.7"/>
+    <g fill="#e9dfc9" opacity="0.6">
+      <circle cx="58" cy="57" r="4"/><circle cx="72" cy="57" r="4"/><circle cx="86" cy="57" r="4"/>
+    </g>
+    <path d="M268 70 L268 276" stroke="#e9dfc9" stroke-width="3"/>
+    <path d="M268 172 L420 172" stroke="#e9dfc9" stroke-width="3"/>
+    <!-- the pane clicked, lit -->
+    <rect x="272" y="74" width="144" height="94" rx="4" fill="url(#glow)"/>
+    <path d="M270 72 L418 72 L418 170 L270 170 Z" fill="none" stroke="#d23a4f" stroke-width="3.5"/>
+    <g fill="#e9dfc9" opacity="0.45">
+      <rect x="58" y="88" width="90" height="6" rx="3"/>
+      <rect x="58" y="104" width="150" height="6" rx="3"/>
+      <rect x="58" y="120" width="120" height="6" rx="3"/>
+      <rect x="58" y="136" width="70" height="6" rx="3"/>
+      <rect x="284" y="188" width="96" height="6" rx="3"/>
+      <rect x="284" y="204" width="60" height="6" rx="3"/>
+    </g>
+    <g fill="#f3c9cf" opacity="0.8">
+      <rect x="284" y="88" width="80" height="6" rx="3"/>
+      <rect x="284" y="104" width="110" height="6" rx="3"/>
+    </g>
+
+    <!-- the thread: through the eye, stitching the panes, then a flourish -->
+    <path d="M423 282 C 432 292, 442 298, 456 302" fill="none" stroke="#d23a4f" stroke-width="4"/>
+    <path d="M423 282 C 400 302, 340 298, 300 270 C 280 256, 250 258, 220 264"
+          fill="none" stroke="#d23a4f" stroke-width="4.5"/>
+    <path d="M220 264 C 180 280, 130 248, 60 258"
+          fill="none" stroke="#d23a4f" stroke-width="4.5" stroke-dasharray="18 12"/>
+    <path d="M423 282 C 470 270, 500 210, 550 186 C 600 160, 660 200, 630 232 C 604 258, 572 216, 612 198 C 650 180, 700 150, 744 110"
+          fill="none" stroke="#d23a4f" stroke-width="4.5"/>
+    <path d="M423 282 C 470 270, 500 210, 550 186" fill="none" stroke="#f3a3ae" stroke-width="1.4" opacity="0.6"/>
+
+    <!-- impact at the tip -->
+    <g fill="none" stroke="#e9dfc9" stroke-width="2.5">
+      <path d="M324.3 78.5 A 22 22 0 0 1 352.5 65.3" opacity="0.95"/>
+      <path d="M311.2 73.7 A 36 36 0 0 1 357.3 52.2" opacity="0.6"/>
+      <path d="M298 68.9 A 50 50 0 0 1 362.1 39" opacity="0.3"/>
+    </g>
+
+    <!-- the needle as a pointer: its head the arrow, its shaft the tail, its eye the end -->
+    <g transform="translate(345 86) scale(0.85)">
+      <g transform="translate(37 102) rotate(-23.2)">
+        <path d="M-8.5 -6 L-5 112 Q-7.8 126 -7.2 142 Q-6.6 166 0 174 Q6.6 166 7.2 142 Q7.8 126 5 112 L8.5 -6 Z"
+              fill="url(#steel)" stroke="#0e0b12" stroke-width="3"/>
+        <path d="M0 124 Q-3.2 140 0 160 Q3.2 140 0 124 Z" fill="#1a1420" stroke="#0e0b12" stroke-width="2"/>
+        <path d="M-2.4 6 L-1.4 104" stroke="#ffffff" stroke-width="1.8" opacity="0.85"/>
+      </g>
+      <path d="M0 0 L0 134 Q 15 116 31 104 L49 96 Q 72 90 98 90 Q 44 60 0 0 Z"
+            fill="url(#steel)" stroke="#0e0b12" stroke-width="3.5"/>
+      <path d="M8 24 Q 9 68 8 112" fill="none" stroke="#ffffff" stroke-width="2.2" opacity="0.85"/>
+    </g>
+  </g>
+</svg>

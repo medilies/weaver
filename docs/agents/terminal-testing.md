@@ -39,7 +39,7 @@ The `LooksAsBefore` tests, in [`snapshots_test.go`](../../test/terminal/snapshot
 
 The GIF in the README, [`docs/assets/demo.gif`](../assets/demo.gif), is a recording of `TestDemo`, in [`demo_test.go`](../../test/terminal/demo_test.go). It runs only with `-demo FILE`, and needs ffmpeg and fontconfig's `fc-match`.
 
-- It is a story, not a check: `nimbus`, the README's project, is browsed, started, one of its tasks run, its config form shown, then opened.
+- It is a story, not a check: `nimbus` is browsed, started, one of its tasks run, its config form shown, then opened. Its config is read from the README, so a change to the README's example shows in the next recording.
 - Its world: a 112x30 terminal, tmux in Catppuccin Mocha, mauve the selected colour, and made-up `task` and `nimbus` programs on `PATH`. Its tmux options, `demoTmux`, are the ones the [Theming](../tmux.md#theming) section gives users: change both together.
 - A caption under the terminal names what each step shows. The test notes when each starts, then ffmpeg crops the recorder's window frame off, draws the captions in Noto Sans and shrinks the GIF.
 - It is the one test that sleeps, to pace the story for a viewer. It never sleeps to wait for weave.
