@@ -9,7 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"golang.org/x/term"
+	"github.com/charmbracelet/x/term"
 )
 
 // sizeRecheckAfter is when a screen reads the terminal's size again:
@@ -31,7 +31,7 @@ func sizeRecheck() tea.Cmd {
 // which tmux refuses: none is reported then.
 func TerminalSize() (cols, rows int, ok bool) {
 	for _, f := range []*os.File{os.Stdout, os.Stdin, os.Stderr} {
-		fd := int(f.Fd())
+		fd := f.Fd()
 		if !term.IsTerminal(fd) {
 			continue
 		}
