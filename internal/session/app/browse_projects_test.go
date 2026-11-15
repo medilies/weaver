@@ -196,6 +196,19 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 	).Handle("/srv/new")
 }
 
+// liveOne is project as the browser's live sessions tell it now, selected
+// among the projects last shown.
+func liveOne(t *testing.T, s browseSetup, project app.ProjectOverview) app.ProjectOverview {
+	t.Helper()
+	for _, live := range s.browser.previews.Live(s.browser.last().projects, project.Name()) {
+		if live.Name() == project.Name() {
+			return live
+		}
+	}
+	t.Fatalf("%s isn't among the projects", project.Name())
+	return app.ProjectOverview{}
+}
+
 func choose(t *testing.T, action app.Action, raw string) app.Choice {
 	t.Helper()
 	name, err := domain.NewProjectName(raw)
@@ -561,6 +574,31 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("tells the browser which projects run now, building only the selected one again", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		shown := s.browser.last().projects
+		delete(s.sessions.running, "shop")
+		s.sessions.running["blog"] = owned(t, "blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		blogName, _ := domain.NewProjectName("blog")
+		running := map[string]bool{}
+		var blogWarnings int
+		for _, project := range s.browser.previews.Live(shown, blogName) {
+			running[project.Name().String()] = project.Running()
+			if project.Name() == blogName {
+				blogWarnings = len(project.Warnings())
+			}
+		}
+		if running["shop"] || !running["blog"] || blogWarnings == 0 {
+			t.Fatalf("got running %v and %d warnings for blog, want only blog running, built again", running, blogWarnings)
+		}
+	})
+
 	t.Run("tells the browser which tasks run now", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		s.configs.projects["shop"] = tasked(t)
@@ -573,7 +611,7 @@ func TestBrowseProjects(t *testing.T) {
 			domain.NewRunningCommand(windowName(t, "logs"), 0, command(t, "tail -f app.log")),
 		}}
 		at := app.TaskAt{Window: windowName(t, "logs"), Task: 0}
-		if !s.browser.previews.Refreshed(shop).TaskRuns(at) {
+		if !liveOne(t, s, shop).TaskRuns(at) {
 			t.Fatal("got tail not running, want it running since the list was shown")
 		}
 	})
@@ -801,7 +839,7 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		blog, _ := s.browser.last().overview("blog")
 		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
-		got := s.browser.previews.Refreshed(blog).Warnings()
+		got := liveOne(t, s, blog).Warnings()
 		if len(got) != 1 || !errors.Is(got[0], app.ErrCommandExited) || !got[0].Concerns(windowName(t, "blog"), 0) {
 			t.Fatalf("got %v, want hugo server exited in the blog pane", got)
 		}
@@ -818,7 +856,7 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		blog, _ := s.browser.last().overview("blog")
 		s.sessions.idle = nil
-		if got := s.browser.previews.Refreshed(blog).Warnings(); len(got) > 0 {
+		if got := liveOne(t, s, blog).Warnings(); len(got) > 0 {
 			t.Fatalf("got %v, want no warnings", got)
 		}
 	})

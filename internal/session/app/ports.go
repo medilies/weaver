@@ -194,8 +194,8 @@ type LiveSessions interface {
 	// domain.ErrWindowNotFound when the project has no such window, or
 	// domain.ErrWindowNotRunning when the session lacks it.
 	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
-	// Refreshed is project as its owned session is now: the warnings
-	// about commands that exited, and the tasks still running, found
-	// again; none of either when tmux can't tell.
-	Refreshed(project ProjectOverview) ProjectOverview
+	// Live is projects as they are now: whether each one's session runs,
+	// and the one named selected as Browse would show it now, its config
+	// read again, its warnings and running tasks found again.
+	Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview
 }

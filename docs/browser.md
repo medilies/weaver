@@ -60,9 +60,11 @@ the browser runs in reads "this browser". A zoomed window shows its
 zoomed pane alone, as tmux draws it. The drawing comes back, the status
 line saying why, when the session ends or the window closes, and for a
 window the session lacks, which enter restores; these hints aren't
-failures and stay plain. Only the preview and the task list's ● marks
-are live: the summary and the project list's ● marks are as they were
-when the browser last showed the list.
+failures and stay plain.
+
+The browser stays up to date while it is open, checking every second:
+the project list's ● marks and green names, and the selected project's
+summary, drawing and task list, its config read again.
 
 ## Tasks
 

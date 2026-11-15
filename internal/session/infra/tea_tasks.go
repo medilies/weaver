@@ -197,34 +197,37 @@ func (m browser) taskRuns(at app.TaskAt) bool {
 	return m.shown()[m.cursor].TaskRuns(at)
 }
 
-// refreshed is a project as its owned session was found, in answer to the
-// ask numbered asked.
+// refreshed is the projects as they were found, in answer to the ask
+// numbered asked.
 type refreshed struct {
-	asked   int
-	project app.ProjectOverview
+	asked    int
+	projects []app.ProjectOverview
 }
 
-// refresh is m asking for the selected project as its owned session is
-// now, away from the screen's updates, when the session can tell; an
-// answer to an earlier ask is then dropped.
+// refresh is m asking for the projects as they are now, the selected one
+// built again in full, away from the screen's updates; an answer to an
+// earlier ask is then dropped.
 func (m browser) refresh() (browser, tea.Cmd) {
-	shown := m.shown()
-	if len(shown) == 0 || m.live == nil || !shown[m.cursor].Previewable() {
+	if len(m.shown()) == 0 || m.live == nil {
 		return m, nil
 	}
 	m.refreshAsked++
-	asked, project, live := m.refreshAsked, shown[m.cursor], m.live
+	asked, projects, selected, live := m.refreshAsked, m.projects, m.selectedName(), m.live
 	return m, func() tea.Msg {
-		return refreshed{asked: asked, project: live.Refreshed(project)}
+		return refreshed{asked: asked, projects: live.Live(projects, selected)}
 	}
 }
 
-// withRefreshed is m with project in place of the overview of the same
-// name, so that its warnings and running tasks are those found now.
-func (m browser) withRefreshed(project app.ProjectOverview) browser {
+// withRefreshed is m with projects in place of the overviews of the same
+// names, so that what they show is what was found now.
+func (m browser) withRefreshed(projects []app.ProjectOverview) browser {
+	byName := make(map[domain.ProjectName]app.ProjectOverview, len(projects))
+	for _, project := range projects {
+		byName[project.Name()] = project
+	}
 	m.projects = slices.Clone(m.projects)
 	for i, p := range m.projects {
-		if p.Name() == project.Name() {
+		if project, ok := byName[p.Name()]; ok {
 			m.projects[i] = project
 		}
 	}

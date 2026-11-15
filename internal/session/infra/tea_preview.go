@@ -14,12 +14,12 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// previewEvery is how often the preview of the selected window, and the
-// selected project's exited commands and running tasks, are found again.
+// previewEvery is how often the preview of the selected window, which
+// projects run, and the selected project's overview, are found again.
 const previewEvery = time.Second
 
-// previewTick asks for the selected window's preview, and the selected
-// project as its session is now, again.
+// previewTick asks for the selected window's preview, and the projects
+// as they are now, again.
 type previewTick struct{}
 
 // previewed is the preview of a project's window, or why there is none,

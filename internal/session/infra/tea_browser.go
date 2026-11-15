@@ -273,7 +273,7 @@ type browser struct {
 	previewAsked    int    // the asks for a preview
 	previewAnswered int    // the last ask answered
 	refreshStarted  bool   // asked, or found there is nothing to ask
-	refreshAsked    int    // the asks for the selected project as its session is now
+	refreshAsked    int    // the asks for the projects as they are now
 	refreshAnswered int    // the last ask answered
 	notice          app.Notice
 	width, height   int
@@ -485,7 +485,7 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case refreshed:
 		m.refreshAnswered = max(m.refreshAnswered, msg.asked)
 		if msg.asked == m.refreshAsked {
-			m = m.withRefreshed(msg.project)
+			m = m.withRefreshed(msg.projects)
 		}
 		return m, nil
 	case previewed:

@@ -283,6 +283,22 @@ func TestReload(t *testing.T) {
 	h.sees("Nothing done.")
 }
 
+// TestBrowserStaysLive: `shop` started: `weave`, then start a `blog`
+// session and kill `shop` from outside.
+//
+// `● blog` shows without a key pressed, and `● shop` goes.
+func TestBrowserStaysLive(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	h.browse("")
+	h.sees("● shop")
+
+	h.tmux("new-session", "-d", "-s", "blog")
+	h.sees("● blog")
+	h.tmux("kill-session", "-t", "=shop")
+	h.gone("● shop")
+}
+
 // TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
 // `weave`, select `shop`, `t`, `echo hi`, Enter, `y`.
 //

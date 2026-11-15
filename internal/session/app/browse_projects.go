@@ -240,14 +240,30 @@ func (uc BrowseProjects) Handle(workingDir string) (err error) {
 	}
 }
 
-// Refreshed implements LiveSessions, for the browser.
-func (uc BrowseProjects) Refreshed(project ProjectOverview) ProjectOverview {
-	project.warnings = slices.DeleteFunc(slices.Clone(project.warnings), func(w Warning) bool {
-		return errors.Is(w, ErrCommandExited)
-	})
-	project.warnings = append(project.warnings, uc.exited(project)...)
-	project.running = uc.runningTasks(project)
-	return project
+// Live implements LiveSessions, for the browser: one listing of the
+// sessions tells which projects run, and only selected's overview is
+// built again in full. When the listing fails, projects are as they were.
+func (uc BrowseProjects) Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview {
+	statuses, err := uc.list.Handle()
+	if err != nil {
+		return projects
+	}
+	byName := make(map[domain.ProjectName]ProjectStatus, len(statuses))
+	for _, status := range statuses {
+		byName[status.Name()] = status
+	}
+	live := slices.Clone(projects)
+	for i, project := range live {
+		status, ok := byName[project.Name()]
+		switch {
+		case !ok:
+		case project.Name() == selected:
+			live[i] = uc.overview(status)
+		default:
+			live[i].status = status
+		}
+	}
+	return live
 }
 
 // Preview implements LiveSessions, for the browser.
