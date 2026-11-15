@@ -29,10 +29,11 @@ const (
 var settingsSchema []byte
 
 // Settings are weaver-wide preferences, the same for every project: the
-// selected colour and the config form's keys on the drawing.
+// selected colour, the keys, and how the browser behaves.
 type Settings struct {
-	colour color.Color
-	keys   DrawingKeys
+	colour  color.Color
+	keys    DrawingKeys
+	preview bool
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -44,7 +45,11 @@ type DrawingKeys struct {
 // DefaultSettings are the settings without a settings file: cyan, and
 // tmux's keys.
 func DefaultSettings() Settings {
-	return Settings{colour: lipgloss.Color("6"), keys: DrawingKeys{splitRight: "%", splitBelow: "\"", remove: "x", shrink: "H", grow: "L"}}
+	return Settings{
+		colour:  lipgloss.Color("6"),
+		keys:    DrawingKeys{splitRight: "%", splitBelow: "\"", remove: "x", shrink: "H", grow: "L"},
+		preview: true,
+	}
 }
 
 // LoadSettings reads the settings file in dir, the defaults when there
@@ -90,6 +95,7 @@ func writeSettingsSchema(dir string) error {
 type settingsFile struct {
 	SelectedColour yaml.Node `yaml:"selected-colour"`
 	Keys           keysFile  `yaml:"keys"`
+	Preview        *bool     `yaml:"preview"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -151,6 +157,9 @@ func decodeSettings(raw []byte) (Settings, error) {
 			return Settings{}, err
 		}
 		settings.colour = colour
+	}
+	if file.Preview != nil {
+		settings.preview = *file.Preview
 	}
 	keys := &settings.keys
 	for _, key := range []struct {

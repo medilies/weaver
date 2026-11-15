@@ -299,6 +299,23 @@ func TestBrowserStaysLive(t *testing.T) {
 	h.gone("● shop")
 }
 
+// TestPreviewSettingOff: settings `preview: false`, `notes` started:
+// `weave`, select `notes`, then `p`.
+//
+// The drawing shows, `p preview` in the key line, and `p` brings the
+// preview: `notes.yml · preview`.
+func TestPreviewSettingOff(t *testing.T) {
+	h := start(t)
+	h.settings("preview: false")
+	h.started("notes")
+	h.browse("notes")
+
+	h.sees("p preview")
+	h.gone("· preview")
+	h.keys("p")
+	h.sees("notes.yml · preview")
+}
+
 // TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
 // `weave`, select `shop`, `t`, `echo hi`, Enter, `y`.
 //

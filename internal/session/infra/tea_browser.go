@@ -79,9 +79,10 @@ type browserPlace struct {
 }
 
 // NewTeaBrowser constructs a TeaBrowser styled by the settings' theme,
-// holding what is written to held while it is on screen.
+// starting on the preview or the drawing as they say, holding what is
+// written to held while it is on screen.
 func NewTeaBrowser(settings Settings, held *HeldOutput) TeaBrowser {
-	return TeaBrowser{kept: &browserPlace{}, theme: settings.theme(), screen: &browserScreen{}, held: held}
+	return TeaBrowser{kept: &browserPlace{drawings: !settings.preview}, theme: settings.theme(), screen: &browserScreen{}, held: held}
 }
 
 // HeldOutput writes through to its writer, except while the browser is on

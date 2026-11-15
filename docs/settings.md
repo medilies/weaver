@@ -29,6 +29,12 @@ card holding the cursor, and the keys at the bottom. An ANSI colour
 number, `0` to `255`, or `"#rrggbb"` in quotes. Cyan (`6`) unless set.
 Warnings keep their own colours.
 
+## `preview`
+
+Whether the [browser](browser.md) shows the preview of a running
+session's window, rather than its drawing. `p` still switches. `true`
+unless set.
+
 ## `keys`
 
 The config form's keys on the drawing, tmux's unless set. Write a key
