@@ -862,6 +862,18 @@ var (
 
 var taskingKeys = []keyTold{{"enter", "run, go"}, {"r", "run"}, {"w", "throwaway"}, {"esc", "back"}, {"q", "quit"}}
 
+// taskingKeys are taskingKeys, enter going where the selected task runs
+// when it does.
+func (m browser) taskingKeys() []keyTold {
+	listed := m.tasksShown()
+	if len(listed) == 0 || !m.taskRuns(listed[m.selectedTask(len(listed))].at) {
+		return taskingKeys
+	}
+	told := slices.Clone(taskingKeys)
+	told[0] = keyTold{"enter", "go"}
+	return told
+}
+
 // keys are the filter being typed and what its keys do, or the filter
 // kept and the keys acting on what it shows, cut to the width; with the
 // cells each key told covers, and the filter kept, which / edits again,
@@ -910,7 +922,7 @@ func (m browser) keys() (string, []hotspot) {
 		told = slices.Insert(slices.Clone(told), len(told)-2, key)
 	}
 	if m.tasking {
-		line, spots, told = "", nil, taskingKeys
+		line, spots, told = "", nil, m.taskingKeys()
 	}
 	keys, keySpots := m.theme.keys(told)
 	offset := ansi.StringWidth(line)

@@ -452,11 +452,13 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 }
 
 // taskTag is the pane option holding the command Type typed into the
-// pane, or RunApart into a throwaway window's, and taskOfTag the window
-// option holding the ID of the pane a throwaway window's task is of.
+// pane, or RunApart into a throwaway window's, taskSinceTag the one
+// holding when, in Unix nanoseconds, and taskOfTag the window option
+// holding the ID of the pane a throwaway window's task is of.
 const (
-	taskTag   = "@weaver_task"
-	taskOfTag = "@weaver_task_of"
+	taskTag      = "@weaver_task"
+	taskSinceTag = "@weaver_task_since"
+	taskOfTag    = "@weaver_task_of"
 )
 
 // throwawayTag is the window option marking a throwaway window, which
@@ -510,7 +512,7 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 	if _, err := t.run("send-keys", "-t", id, "C-e", "C-u"); err != nil {
 		return err
 	}
-	if _, err := t.run("set-option", "-p", "-t", id, taskTag, argument(cmd.String())); err != nil {
+	if err := t.tagTask(id, cmd); err != nil {
 		return err
 	}
 	return t.typeCommand(id, cmd.String(), true)
@@ -550,11 +552,13 @@ func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, ind
 		_, _ = t.run("kill-window", "-t", ids[0]) // untagged, bind would capture it
 		return err
 	}
-	for _, tag := range [][]string{{"-w", "-t", ids[0], taskOfTag, source}, {"-p", "-t", ids[1], taskTag, argument(task.Command().String())}} {
-		if _, err := t.run(append([]string{"set-option"}, tag...)...); err != nil {
-			_, _ = t.run("kill-window", "-t", ids[0]) // nothing runs in it yet
-			return err
-		}
+	_, err = t.run("set-option", "-w", "-t", ids[0], taskOfTag, source)
+	if err == nil {
+		err = t.tagTask(ids[1], task.Command())
+	}
+	if err != nil {
+		_, _ = t.run("kill-window", "-t", ids[0]) // nothing runs in it yet
+		return err
 	}
 	for _, cmd := range append(pane.Before(), task.Command()) {
 		if err := t.typeCommand(ids[1], cmd.String(), true); err != nil {
@@ -562,6 +566,30 @@ func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, ind
 		}
 	}
 	return nil
+}
+
+// tagTask tags the pane id with cmd, about to be typed into it, and with
+// now.
+func (t Tmux) tagTask(id string, cmd domain.Command) error {
+	if _, err := t.run("set-option", "-p", "-t", id, taskTag, argument(cmd.String())); err != nil {
+		return err
+	}
+	_, err := t.run("set-option", "-p", "-t", id, taskSinceTag, strconv.FormatInt(time.Now().UnixNano(), 10))
+	return err
+}
+
+// Reach implements domain.TaskRunner: run's place is the ID of the pane
+// it runs in.
+func (t Tmux) Reach(project domain.ProjectName, run domain.RunningCommand) error {
+	session, err := t.run("display-message", "-p", "-t", run.Place(), "#{session_name}")
+	if err != nil || session != project.String() {
+		return fmt.Errorf("%w: it ended", domain.ErrPaneNotRunning)
+	}
+	if _, err := t.run("select-window", "-t", run.Place()); err != nil {
+		return err
+	}
+	_, err = t.run("select-pane", "-t", run.Place())
+	return err
 }
 
 // paneOf is the ID and process of the pane at index of window in the
@@ -644,30 +672,28 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 		}
 	}
 	out, err := t.run("list-panes", "-s", "-t", "="+project.String(), "-F",
-		"#{pane_id} #{pane_pid} #{?"+taskOfTag+",#{"+taskOfTag+"},-} "+sized(taskTag))
+		"#{pane_id} #{pane_pid} #{?"+taskOfTag+",#{"+taskOfTag+"},-} #{?"+taskSinceTag+",#{"+taskSinceTag+"},0} "+sized(taskTag))
 	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
 	}
 	if err != nil {
 		return nil, err
 	}
-	type typed struct {
-		at      at
-		command domain.Command
-	}
-	running := map[string]typed{} // by process
+	running := map[string]domain.RunningCommand{} // by process
 	for line := range strings.Lines(out) {
-		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
-		if len(fields) != 4 || fields[0] == t.opts.Pane {
+		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 5)
+		if len(fields) != 5 || fields[0] == t.opts.Pane {
 			continue
 		}
-		source := fields[0]
-		if fields[2] != "-" {
+		source, apart := fields[0], fields[2] != "-"
+		if apart {
 			source = fields[2]
 		}
 		pane, ok := panes[source]
-		if command, err := domain.NewCommand(verbatim(fields[3])); ok && err == nil {
-			running[fields[1]] = typed{at: pane, command: command}
+		nanos, _ := strconv.ParseInt(fields[3], 10, 64) // 0, the oldest, when untold
+		if command, err := domain.NewCommand(verbatim(fields[4])); ok && err == nil {
+			running[fields[1]] = domain.NewRunningCommand(pane.window, pane.index, command).
+				RunningIn(fields[0], apart, time.Unix(0, nanos))
 		}
 	}
 	idle, seen, err := t.idleShells(project, slices.Collect(maps.Keys(running)))
@@ -677,7 +703,7 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 	var commands []domain.RunningCommand
 	for pid, run := range running {
 		if seen[pid] && !idle[pid] {
-			commands = append(commands, domain.NewRunningCommand(run.at.window, run.at.index, run.command))
+			commands = append(commands, run)
 		}
 	}
 	return commands, nil

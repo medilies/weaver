@@ -178,6 +178,31 @@ func TestTaskRunsInItsPane(t *testing.T) {
 	h.sees("● wait")
 }
 
+// TestEnterGoesToRunningTask: `shop` started: `weave`, select `shop`,
+// `t`, `w` on `wait`, then Enter once `● wait` shows.
+//
+// The client moves to shop's throwaway window `wait`, where the task runs,
+// and no second copy starts.
+func TestEnterGoesToRunningTask(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	h.logsIdle()
+	h.browse("shop")
+
+	h.keys("t", "w")
+	h.sees("● wait")
+	h.sees("enter go")
+	h.keys("Enter")
+
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
+	if window := h.tmux("display", "-p", "-t", "=shop:", "#{window_name}"); window != "wait" {
+		h.fatal("the current window is %q, not the throwaway window wait", window)
+	}
+	if windows := h.tmux("list-windows", "-t", "=shop", "-F", "#{window_name}"); strings.Count(windows, "wait") != 1 {
+		h.fatal("shop's windows are %q, want one wait", windows)
+	}
+}
+
 // TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
 // `weave`, select `shop`, `t`, `echo hi`, Enter, `y`.
 //

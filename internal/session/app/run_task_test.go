@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -21,6 +22,12 @@ type fakeTasks struct {
 	typed   []string        // "window/index: command"
 	apart   []string        // "throwaway window in dir: command"
 	landing []bool          // whether each run landed there
+	reached []string        // the places of the running commands reached
+}
+
+func (f *fakeTasks) Reach(_ domain.ProjectName, run domain.RunningCommand) error {
+	f.reached = append(f.reached, run.Place())
+	return nil
 }
 
 func (f *fakeTasks) Busy(_ domain.ProjectName, window domain.WindowPlan, index int) (bool, error) {
@@ -115,6 +122,52 @@ func TestRunTask(t *testing.T) {
 		}
 		if want := []string{"shop"}; !slices.Equal(tasks.attached, want) {
 			t.Fatalf("got %q attached, want %q", tasks.attached, want)
+		}
+	})
+
+	t.Run("goes where a running task runs rather than running it again", func(t *testing.T) {
+		tasks := runningShop(t)
+		tasks.commands = map[string][]domain.RunningCommand{"shop": {
+			domain.NewRunningCommand(windowName(t, "logs"), 0, command(t, "tail -f app.log")).RunningIn("%3", false, time.Unix(1, 0)),
+		}}
+		if err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "logs"), Pane: 0, Task: 0}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(tasks.typed)+len(tasks.apart) > 0 || !slices.Equal(tasks.reached, []string{"%3"}) || !slices.Equal(tasks.attached, []string{"shop"}) {
+			t.Fatalf("ran %q %q, reached %q, attached %q; want %%3 reached and attached, nothing run", tasks.typed, tasks.apart, tasks.reached, tasks.attached)
+		}
+	})
+
+	t.Run("goes to a running task's pane over its throwaway windows", func(t *testing.T) {
+		tasks := runningShop(t)
+		tail := command(t, "tail -f app.log")
+		logs := windowName(t, "logs")
+		tasks.commands = map[string][]domain.RunningCommand{"shop": {
+			domain.NewRunningCommand(logs, 0, tail).RunningIn("%7", true, time.Unix(9, 0)),
+			domain.NewRunningCommand(logs, 0, tail).RunningIn("%3", false, time.Unix(1, 0)),
+		}}
+		if err := runTask(t, tasks, answer(true), app.TaskAt{Window: logs, Pane: 0, Task: 0}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(tasks.reached, []string{"%3"}) {
+			t.Fatalf("reached %q, want the pane %%3", tasks.reached)
+		}
+	})
+
+	t.Run("goes to a running task's most recent throwaway window when its pane doesn't run it", func(t *testing.T) {
+		tasks := runningShop(t)
+		tail := command(t, "tail -f app.log")
+		logs := windowName(t, "logs")
+		tasks.commands = map[string][]domain.RunningCommand{"shop": {
+			domain.NewRunningCommand(logs, 0, tail).RunningIn("%7", true, time.Unix(5, 0)),
+			domain.NewRunningCommand(logs, 0, tail).RunningIn("%9", true, time.Unix(9, 0)),
+			domain.NewRunningCommand(logs, 0, command(t, "vim app.log")).RunningIn("%3", false, time.Unix(1, 0)),
+		}}
+		if err := runTask(t, tasks, answer(true), app.TaskAt{Window: logs, Pane: 0, Task: 0}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(tasks.reached, []string{"%9"}) {
+			t.Fatalf("reached %q, want the newest throwaway window's pane %%9", tasks.reached)
 		}
 	})
 

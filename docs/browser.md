@@ -88,6 +88,9 @@ Running one needs the project's session running, started by weaver:
 - With enter, weaver then puts you where the task runs, as opening the
   project does; with `r`, `w` or a click, you stay in the browser, and
   the session's current window and pane stay as they were.
+- Enter on a ● task doesn't run it again: it puts you where it runs,
+  its pane when it runs there, otherwise its most recent throwaway
+  window. `r` and `w` still run another copy.
 - A task of the pane the browser runs in is never typed there, which
   would type it into the browser: the status line says so, and `w` runs
   it in a throwaway window.
@@ -116,7 +119,7 @@ or that leaves a quote open, marks its pane.
 | r | rerun the selected pane's command once it exited: typed into the pane again, as a task is, then you are put in that pane. Only in a session weaver started, on a pane run with `command`, not `prefill` |
 | p | switch between the preview of the selected window and its drawing, for as long as the browser stays open. Only in a session weaver started |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
-| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing; enter, r or w run it (see [Tasks](#tasks)); esc goes back |
+| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing; enter, r or w run it, enter going to a ● task instead (see [Tasks](#tasks)); esc goes back |
 | click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list, as r does; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it: start it, then attach or switch, like `weave <project>` |

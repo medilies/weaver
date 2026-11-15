@@ -1,6 +1,9 @@
 package domain
 
-import "slices"
+import (
+	"slices"
+	"time"
+)
 
 // RunningSession is a running tmux session named after a project.
 type RunningSession struct {
@@ -32,21 +35,27 @@ type SessionFinder interface {
 	Find(name ProjectName) (RunningSession, bool, error)
 }
 
+// CommandTracker finds the commands weaver typed into projects' running
+// sessions that still run. Infrastructure provides the implementation.
+type CommandTracker interface {
+	// RunningCommands are the commands TaskRunner typed for the panes of
+	// windows in the project's running session that still run: in the
+	// pane, or in a throwaway window it ran apart from the pane in. An
+	// error wrapping ErrSessionNotRunning when no session runs.
+	RunningCommands(project ProjectName, windows []WindowPlan) ([]RunningCommand, error)
+}
+
 // SessionInspector finds projects' running tmux sessions and looks into
 // their panes. Infrastructure provides the implementation.
 type SessionInspector interface {
 	SessionFinder
+	CommandTracker
 	// Idle is, by window, the indexes of the panes of windows whose shell
 	// idles at its prompt in the project's running session, nothing
 	// running in its terminal's foreground. A pane is found as TaskRunner
 	// finds it; one the session lacks isn't idle. An error wrapping
 	// ErrSessionNotRunning when no session runs.
 	Idle(project ProjectName, windows []WindowPlan) (map[WindowName][]int, error)
-	// RunningCommands are the commands TaskRunner typed for the panes of
-	// windows in the project's running session that still run: in the
-	// pane, or in a throwaway window it ran apart from the pane in. An
-	// error wrapping ErrSessionNotRunning when no session runs.
-	RunningCommands(project ProjectName, windows []WindowPlan) ([]RunningCommand, error)
 	// Preview is window in the project's running session as it is now:
 	// the window tagged with its name, only its zoomed pane when it has
 	// one, each pane showing the bottom of its screen, but for the one
@@ -58,17 +67,29 @@ type SessionInspector interface {
 }
 
 // RunningCommand is a command weaver typed for a pane of a project's
-// running session, still running there or in a throwaway window.
+// running session, still running there or in a throwaway window: a copy
+// of it, when the same command runs in several.
 type RunningCommand struct {
 	window  WindowName
 	pane    int
 	command Command
+	place   string
+	apart   bool
+	since   time.Time
 }
 
 // NewRunningCommand is command, typed for the pane at index pane of the
 // window named window, running.
 func NewRunningCommand(window WindowName, pane int, command Command) RunningCommand {
 	return RunningCommand{window: window, pane: pane, command: command}
+}
+
+// RunningIn is r running in place, how the session's adapter finds the
+// pane it runs in, apart when that is a throwaway window's, and typed at
+// since.
+func (r RunningCommand) RunningIn(place string, apart bool, since time.Time) RunningCommand {
+	r.place, r.apart, r.since = place, apart, since
+	return r
 }
 
 // Window is the name of the window of the pane the command was typed for.
@@ -79,6 +100,28 @@ func (r RunningCommand) Window() WindowName {
 // Pane is the index of that pane in its window.
 func (r RunningCommand) Pane() int {
 	return r.pane
+}
+
+// Place is how the session's adapter finds the pane the command runs in.
+func (r RunningCommand) Place() string {
+	return r.place
+}
+
+// Apart reports whether the command runs in a throwaway window rather
+// than in the pane it was typed for.
+func (r RunningCommand) Apart() bool {
+	return r.apart
+}
+
+// Since is when the command was typed; the zero time when unknown.
+func (r RunningCommand) Since() time.Time {
+	return r.since
+}
+
+// Of reports whether r is cmd, typed for the pane at index pane of the
+// window named window.
+func (r RunningCommand) Of(window WindowName, pane int, cmd Command) bool {
+	return r.window == window && r.pane == pane && r.Runs(cmd)
 }
 
 // Runs reports whether it is cmd that runs.
@@ -164,4 +207,9 @@ type TaskRunner interface {
 	// session's current one, as Type's pane does. Capture skips throwaway
 	// windows, and restoration ignores them.
 	RunApart(project ProjectName, window WindowPlan, index int, task Task, landing bool) error
+	CommandTracker
+	// Reach makes the pane run runs in, its pane's or a throwaway
+	// window's, its session's current one, where attaching lands; an
+	// error wrapping ErrPaneNotRunning once it is gone.
+	Reach(project ProjectName, run RunningCommand) error
 }

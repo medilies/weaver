@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/medilies/weaver/internal/session/domain"
 )
@@ -19,7 +20,8 @@ type TaskAt struct {
 // the pane when its shell is idle, otherwise, if the user agrees, in a
 // throwaway window, or there at once when they ask for one. Then it puts
 // the user where the task runs, unless they chose to stay where they are.
-// A task is never typed into the pane the browser runs in.
+// A task is never typed into the pane the browser runs in. A task already
+// running isn't run again, unless asked to: the user is put where it runs.
 type RunTask struct {
 	projects domain.ProjectRegistry
 	tasks    domain.TaskRunner
@@ -32,15 +34,28 @@ func NewRunTask(projects domain.ProjectRegistry, tasks domain.TaskRunner, confir
 }
 
 // Handle runs the task at of project, then calls leaving, which frees the
-// terminal for attaching, and puts the user where the task runs. A project
+// terminal for attaching, and puts the user where the task runs. A task
+// that already runs isn't run again: the user is put where it runs, in
+// its pane when it runs there, else in its most recent copy. A project
 // that isn't running is refused, with an error wrapping
 // ErrSessionNotRunning, and one whose session weaver didn't start, whose
 // panes it can't tell, with ErrSessionNotOwned; a task of the pane the
 // browser runs in with ErrPaneRunsWeaver; declining to run the task apart
 // is ErrAborted.
 func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() error) error {
-	task, _, err := uc.started(name, at, true, func(string) {})
+	window, _, task, err := uc.found(name, at)
 	if err != nil {
+		return err
+	}
+	copies, err := copiesOf(uc.tasks, name, window, at.Pane, task.Command())
+	if err != nil {
+		return err
+	}
+	if len(copies) > 0 {
+		if err := uc.tasks.Reach(name, copies[0]); err != nil {
+			return fmt.Errorf("%s: %w", task.Label(), err)
+		}
+	} else if _, _, err := uc.started(name, at, true, func(string) {}); err != nil {
 		return err
 	}
 	if err := leaving(); err != nil {
@@ -148,6 +163,29 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 	}
 	working(apartWorking(task))
 	return true, uc.tasks.RunApart(name, window, index, task, landing)
+}
+
+// copiesOf are the copies of cmd typed for the pane at index of window
+// still running in the project's session, in the order the user reaches
+// them: the one in the pane itself, then the others, most recent first.
+func copiesOf(tracker domain.CommandTracker, name domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command) ([]domain.RunningCommand, error) {
+	runs, err := tracker.RunningCommands(name, []domain.WindowPlan{window})
+	if err != nil {
+		return nil, err
+	}
+	copies := slices.DeleteFunc(runs, func(r domain.RunningCommand) bool {
+		return !r.Of(window.Name(), index, cmd)
+	})
+	slices.SortStableFunc(copies, func(a, b domain.RunningCommand) int {
+		if a.Apart() != b.Apart() {
+			if a.Apart() {
+				return 1
+			}
+			return -1
+		}
+		return b.Since().Compare(a.Since())
+	})
+	return copies, nil
 }
 
 // apartWorking is what running task in a throwaway window is doing.

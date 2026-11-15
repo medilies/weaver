@@ -1489,6 +1489,47 @@ func TestTmuxRunningCommands(t *testing.T) {
 		running(t, "api/0: sleep 300", "api/1: sleep 301")
 	})
 
+	t.Run("tells where each runs, apart or not, and since when", func(t *testing.T) {
+		commands, err := server.tmux().RunningCommands(project, plan.Windows())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, c := range commands {
+			window := server.query(t, "display-message", "-p", "-t", c.Place(), "#{window_name}")
+			if want := map[bool]string{false: "api", true: "sleep"}[c.Apart()]; window != want || c.Apart() != (c.Pane() == 1) {
+				t.Fatalf("pane %d's command runs in window %q, apart %t; want %q", c.Pane(), window, c.Apart(), want)
+			}
+			if time.Since(c.Since()) > time.Minute {
+				t.Fatalf("pane %d's command typed at %v, want just now", c.Pane(), c.Since())
+			}
+		}
+	})
+
+	t.Run("reaches where a command runs, its window and pane selected", func(t *testing.T) {
+		server.query(t, "select-window", "-t", "=running:api")
+		commands, err := server.tmux().RunningCommands(project, plan.Windows())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		i := slices.IndexFunc(commands, domain.RunningCommand.Apart)
+		if i < 0 {
+			t.Fatal("found no command running apart")
+		}
+		if err := server.tmux().Reach(project, commands[i]); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := server.query(t, "display-message", "-p", "-t", "=running:", "#{pane_id}"); got != commands[i].Place() {
+			t.Fatalf("the session's current pane is %s, want %s", got, commands[i].Place())
+		}
+	})
+
+	t.Run("refuses to reach a command whose pane is gone", func(t *testing.T) {
+		gone := domain.NewRunningCommand(api.Name(), 1, api.Panes()[1].Tasks()[0].Command()).RunningIn("%999", true, time.Now())
+		if err := server.tmux().Reach(project, gone); !errors.Is(err, domain.ErrPaneNotRunning) {
+			t.Fatalf("got %v, want ErrPaneNotRunning", err)
+		}
+	})
+
 	t.Run("no longer finds a command once it ended", func(t *testing.T) {
 		server.query(t, "send-keys", "-t", server.paneLabelled(t, "running", "shell"), "C-c")
 		running(t, "api/1: sleep 301")
