@@ -6,9 +6,23 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"golang.org/x/term"
 )
+
+// sizeRecheckAfter is when a screen reads the terminal's size again:
+// long after Bubble Tea listens for resizes.
+const sizeRecheckAfter = 100 * time.Millisecond
+
+// sizeRecheck reads the terminal's size again once Bubble Tea listens for
+// resizes. Bubble Tea v2 reads the size, then starts listening: a resize
+// in between, as when weave starts in a pane tmux is still sizing, would
+// leave the screen drawn for the old size until the next resize.
+func sizeRecheck() tea.Cmd {
+	return tea.Tick(sizeRecheckAfter, func(time.Time) tea.Msg { return tea.RequestWindowSize() })
+}
 
 // TerminalSize is the size of the terminal weaver runs in, read from the
 // first of stdout, stdin and stderr that is one. Inside tmux, that is the

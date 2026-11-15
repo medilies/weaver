@@ -375,9 +375,10 @@ func (m browser) windowsShown() []domain.WindowPlan {
 }
 
 // Init starts the ticks asking for the preview and the running tasks
-// again; the first asks follow the terminal's size.
+// again; the first asks follow the terminal's size, read again once
+// resizes are listened for.
 func (m browser) Init() tea.Cmd {
-	return tick()
+	return tea.Batch(tick(), sizeRecheck())
 }
 
 // Update is m after msg, its list scrolled to keep the cursor in view,

@@ -211,8 +211,10 @@ type question struct {
 	yes  func(configForm) (configForm, tea.Cmd)
 }
 
+// Init starts the form, and reads the terminal's size again once
+// resizes are listened for.
 func (m configForm) Init() tea.Cmd {
-	return m.start
+	return tea.Batch(m.start, sizeRecheck())
 }
 
 // Update is m after msg, scrolled to keep the cursor in view.

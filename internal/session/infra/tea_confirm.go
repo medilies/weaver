@@ -55,8 +55,9 @@ const (
 	confirmIndent       = 2 // the question's border and padding, which the buttons line up with
 )
 
+// Init reads the terminal's size again once resizes are listened for.
 func (c confirmation) Init() tea.Cmd {
-	return nil
+	return sizeRecheck()
 }
 
 func (c confirmation) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
