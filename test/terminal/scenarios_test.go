@@ -67,7 +67,6 @@ func TestOpenGrid(t *testing.T) {
 
 // Scenario 12.
 func TestKillFromInsideTearsDownFirst(t *testing.T) {
-	t.Skip("weave loses keys typed as one of its screens ends and the next starts: the y, or the Enter")
 	h := start(t)
 	h.started("shop")
 	h.switchTo("shop", "shell")
