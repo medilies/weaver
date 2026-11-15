@@ -241,28 +241,30 @@ func (uc BrowseProjects) Handle(workingDir string) (err error) {
 }
 
 // Live implements LiveSessions, for the browser: one listing of the
-// sessions tells which projects run, and only selected's overview, and
-// those of projects whose session started or ended, are built again in
-// full. When the listing fails, projects are as they were.
+// registered projects and their sessions tells which projects there are
+// and which run. Only selected's overview, those of projects whose session
+// started or ended, and those registered since, are built again in full;
+// those no longer registered are dropped. When the listing fails,
+// projects are as they were.
 func (uc BrowseProjects) Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview {
 	statuses, err := uc.list.Handle()
 	if err != nil {
 		return projects
 	}
-	byName := make(map[domain.ProjectName]ProjectStatus, len(statuses))
-	for _, status := range statuses {
-		byName[status.Name()] = status
+	known := make(map[domain.ProjectName]ProjectOverview, len(projects))
+	for _, project := range projects {
+		known[project.Name()] = project
 	}
-	live := slices.Clone(projects)
-	for i, project := range live {
-		status, ok := byName[project.Name()]
+	live := make([]ProjectOverview, 0, len(statuses))
+	for _, status := range statuses {
+		project, ok := known[status.Name()]
 		switch {
-		case !ok:
-		case project.Name() == selected || status.Running() != project.Running():
-			live[i] = uc.overview(status)
+		case !ok || status.Name() == selected || status.Running() != project.Running():
+			project = uc.overview(status)
 		default:
-			live[i].status = status
+			project.status = status
 		}
+		live = append(live, project)
 	}
 	return live
 }

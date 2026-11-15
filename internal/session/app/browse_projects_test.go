@@ -638,6 +638,37 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("tells the browser of a project registered since", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		var names []string
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "shop")) {
+			names = append(names, project.Name().String())
+		}
+		if want := []string{"blog", "shop"}; !slices.Equal(names, want) {
+			t.Fatalf("got %q, want %q", names, want)
+		}
+	})
+
+	t.Run("drops a project no longer registered", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		delete(s.configs.projects, "blog")
+		var names []string
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "blog")) {
+			names = append(names, project.Name().String())
+		}
+		if want := []string{"shop"}; !slices.Equal(names, want) {
+			t.Fatalf("got %q, want %q", names, want)
+		}
+	})
+
 	t.Run("leaves the projects as they were when the sessions can't be listed", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		if err := s.browse(answer(true)); err != nil {

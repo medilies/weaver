@@ -194,9 +194,11 @@ type LiveSessions interface {
 	// domain.ErrWindowNotFound when the project has no such window, or
 	// domain.ErrWindowNotRunning when the session lacks it.
 	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
-	// Live is projects as they are now: whether each one's session runs,
-	// and the one named selected, and those whose session started or
-	// ended, as Browse would show them now, their configs read again,
-	// their warnings and running tasks found again.
+	// Live is the registered projects as they are now, sorted by name:
+	// those registered since projects were listed added, those no longer
+	// registered dropped, whether each one's session runs, and the one
+	// named selected, and those whose session started or ended, as Browse
+	// would show them now, their configs read again, their warnings and
+	// running tasks found again.
 	Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview
 }

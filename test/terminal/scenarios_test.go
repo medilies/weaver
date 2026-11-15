@@ -3,6 +3,8 @@
 package terminal
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -384,6 +386,39 @@ func TestBrowserStaysLive(t *testing.T) {
 	h.sees("● blog")
 	h.tmux("kill-session", "-t", "=shop")
 	h.gone("● shop")
+}
+
+// TestBrowserShowsProjectAddedOnDisk: `weave`, then a `zine.yml` written
+// beside the configs.
+//
+// `zine` joins the list without a key pressed.
+func TestBrowserShowsProjectAddedOnDisk(t *testing.T) {
+	h := start(t)
+	h.browse("")
+	h.sees("  shop")
+
+	h.write("cfg/weaver/projects/zine.yml", "root: "+h.dir+"/notes\nwindows:\n  - name: edit\n")
+
+	h.sees("  zine")
+}
+
+// TestBrowserDropsProjectDeletedOnDisk: `weave`, select `notes`, then
+// `notes.yml` removed.
+//
+// `notes` leaves the list, and the cursor moves to the next project:
+// the details are `shop.yml`'s.
+func TestBrowserDropsProjectDeletedOnDisk(t *testing.T) {
+	h := start(t)
+	h.browse("")
+	h.clicks("notes")
+	h.sees("─ notes.yml ")
+
+	if err := os.Remove(filepath.Join(h.dir, "cfg/weaver/projects/notes.yml")); err != nil {
+		t.Fatal(err)
+	}
+
+	h.sees("─ shop.yml ")
+	h.gone("notes")
 }
 
 // TestPreviewSettingOff: settings `preview: false`, `notes` started:

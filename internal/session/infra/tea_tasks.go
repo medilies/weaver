@@ -206,9 +206,10 @@ type refreshed struct {
 
 // refresh is m asking for the projects as they are now, the selected one
 // built again in full, away from the screen's updates; an answer to an
-// earlier ask is then dropped.
+// earlier ask is then dropped. It asks with no project shown too, for
+// those registered since.
 func (m browser) refresh() (browser, tea.Cmd) {
-	if len(m.shown()) == 0 || m.live == nil {
+	if m.live == nil {
 		return m, nil
 	}
 	m.refreshAsked++
@@ -218,18 +219,28 @@ func (m browser) refresh() (browser, tea.Cmd) {
 	}
 }
 
-// withRefreshed is m with projects in place of the overviews of the same
-// names, so that what they show is what was found now.
+// withRefreshed is m showing projects, as they were found now, the filter
+// applying to them as it did: the selected project stays selected while
+// it is shown, else the cursor goes to the first shown after it, or
+// before it when none is, as after a delete.
 func (m browser) withRefreshed(projects []app.ProjectOverview) browser {
-	byName := make(map[domain.ProjectName]app.ProjectOverview, len(projects))
-	for _, project := range projects {
-		byName[project.Name()] = project
+	before, selected := m.shown(), m.selectedName()
+	m.projects, m.cursor = projects, 0
+	shown := m.shown()
+	index := func(name domain.ProjectName) int {
+		return slices.IndexFunc(shown, func(p app.ProjectOverview) bool { return p.Name() == name })
 	}
-	m.projects = slices.Clone(m.projects)
-	for i, p := range m.projects {
-		if project, ok := byName[p.Name()]; ok {
-			m.projects[i] = project
+	if i := slices.IndexFunc(before, func(p app.ProjectOverview) bool { return p.Name() == selected }); i >= 0 {
+		candidates := slices.Clone(before[i:])
+		for j := i - 1; j >= 0; j-- {
+			candidates = append(candidates, before[j])
+		}
+		for _, candidate := range candidates {
+			if at := index(candidate.Name()); at >= 0 {
+				m.cursor = at
+				break
+			}
 		}
 	}
-	return m
+	return m.reselected(selected)
 }

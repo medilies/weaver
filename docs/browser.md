@@ -17,8 +17,11 @@ window instead:
 ## Summary
 
 The browser lists the projects, a ● and a green name marking those whose
-session runs, the selected one after a ›. Beside them, a summary of the
-selected one:
+session runs, the selected one after a ›. A config added or removed
+beside the others, by hand or by another weave, joins or leaves the list
+as the browser reads again ([`preview-every`](settings.md#preview-every));
+when the selected one goes, the cursor moves to the
+next. Beside them, a summary of the selected one:
 
 - how many of the configured windows a running session still has, and
   which ones enter restores (a session weaver didn't start is left as it

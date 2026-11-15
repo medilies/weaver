@@ -22,7 +22,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 | keys | The settings choosing the browser's and the config form's action keys, one key each, the drawing keys among them; moving, enter, esc, Tab and ctrl+c are fixed, as are the config form's h, l, o, d, y and n. Two actions available at once never share a key | `keys:` (settings) | `keymap`, `browserActions`, `formActions` in `keymap.go` |
 | drawing keys | The config form's keys splitting, removing and resizing panes on the drawing; tmux's unless set | `keys:` (settings) | `DrawingKeys` |
 | config | A project's YAML file, shown in the browser's details | browser, key `y` | `ProjectRegistry`, `ConfigDocument` |
-| registered | Having a config; bind registers, delete unregisters | the browser's project list | `ProjectRegistry.Names()` |
+| registered | Having a config; bind registers, delete unregisters, as do configs added or removed by hand; kept up to date while the browser is open | the browser's project list | `ProjectRegistry.Names()` |
 | root | The absolute directory panes are relative to | `root:` | `ProjectRoot` |
 | workspace | The filesystem projects live in: their directories, and the programs on PATH | | `Workspace` |
 | window, pane | tmux windows and panes, panes laid out by splits or a grid | `windows:`, `panes:`, `split:` | `Window`, `Pane`, `Split` |
