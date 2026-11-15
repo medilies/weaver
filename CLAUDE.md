@@ -14,7 +14,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 | Term | Meaning | Config / CLI / browser | Code |
 | --- | --- | --- | --- |
-| project | A named dev environment weaver can open | `<name>.yml` | `Project`, `ProjectName` |
+| project | A named dev environment weaver can open | `<name>.yml` or `<name>.yaml` | `Project`, `ProjectName` |
 | settings | Weaver-wide preferences, the same for every project, in one file beside the configs; never part of a project's config | `settings.yml` | `Settings` |
 | selected colour | The colour marking what is selected, and where the cursor is, in the browser and the config form; cyan unless set | `selected-colour:` (settings) | `Settings`, `theme` |
 | theme | How weaver's screens are styled: the selected colour, the shades (bright, plain, muted) and the state colours (green, yellow, red) | | `theme` in `theme.go` |
@@ -79,7 +79,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 - No Docker: weaver drives the host's real tmux server, not a container's. Build and run natively with `go build ./...` / `go run ./cmd/weave`.
 - Go version is `1.26` everywhere, and `go.mod` is the source of truth: its `go` directive (`1.26.0`, which the `go` command insists on) sets the language version, and its `toolchain` directive the exact Go that CI and releases build with, read by setup-go's `go-version-file`. Bump `toolchain` when a 1.26.x patch ships.
-- No database: settings are one YAML file, `os.UserConfigDir()/weaver/settings.yml`, read by `infra.LoadSettings` with `settings.schema.json` beside it; project configs are plain YAML files (`<name>.yml`, one per project) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRegistry` port and the `infra.FileProjectRegistry` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
+- No database: settings are one YAML file, `os.UserConfigDir()/weaver/settings.yml`, read by `infra.LoadSettings` with `settings.schema.json` beside it; project configs are plain YAML files (`<name>.yml` or `<name>.yaml`, one per project, new ones `.yml`) under `os.UserConfigDir()/weaver/projects`, with `weaver.schema.json` beside them, read and written through the `domain.ProjectRegistry` port and the `infra.FileProjectRegistry` implementation. Keep `infra/weaver.schema.json` in step with the config format; a test checks saved configs only use declared fields.
 
 ## Tests
 

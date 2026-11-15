@@ -563,7 +563,7 @@ func writeConfigs(t *testing.T, files ...string) string {
 func TestFileProjectRegistryNames(t *testing.T) {
 	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
 		dir := t.TempDir()
-		for _, file := range []string{"shop.yml", "nimbus.yml", "a-b.yml", "a.yml", "weaver.schema.json", "notes.txt", "old.json", "blog.yaml", "show.yml"} {
+		for _, file := range []string{"shop.yml", "nimbus.yml", "a-b.yml", "a.yml", "weaver.schema.json", "notes.txt", "old.json", "blog.yaml", "show.yml", "list.yaml"} {
 			if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
 				t.Fatalf("writing fixture: %v", err)
 			}
@@ -580,7 +580,7 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		for _, name := range names {
 			got = append(got, name.String())
 		}
-		if want := []string{"a", "a-b", "nimbus", "shop"}; !slices.Equal(got, want) {
+		if want := []string{"a", "a-b", "blog", "nimbus", "shop"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
@@ -602,8 +602,8 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		}
 	})
 
-	t.Run("warns about a config ending in .yaml with the command renaming it", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml", "nimbus.yaml", ".#nimbus.yaml")
+	t.Run("skips a project with both a .yml and a .yaml config, warning about both", func(t *testing.T) {
+		dir := writeConfigs(t, "nimbus.yml", "shop.yml", "shop.yaml")
 		var warnings strings.Builder
 
 		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
@@ -611,38 +611,10 @@ func TestFileProjectRegistryNames(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		yaml, yml := filepath.Join(dir, "nimbus.yaml"), filepath.Join(dir, "nimbus.yml")
-		want := "warning: skipping " + yaml + ": configs end in .yml; rename it to register it: mv " + yaml + " " + yml + "\n"
-		if got := warnings.String(); got != want || len(names) != 1 {
-			t.Fatalf("got %v and %q, want only shop and %q", names, got, want)
-		}
-	})
-
-	t.Run("warns about a config ending in .yaml without renaming it to a name that wouldn't register", func(t *testing.T) {
-		dir := writeConfigs(t, "list.yaml")
-		var warnings strings.Builder
-
-		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		want := "warning: skipping " + filepath.Join(dir, "list.yaml") + ": configs end in .yml, and its name isn't a project name either\n"
-		if got := warnings.String(); got != want {
-			t.Fatalf("got %q, want %q", got, want)
-		}
-	})
-
-	t.Run("warns about a config ending in .yaml without renaming it over the .yml beside it", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml", "shop.yaml")
-		var warnings strings.Builder
-
-		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		want := "warning: skipping " + filepath.Join(dir, "shop.yaml") + ": configs end in .yml, and shop.yml is one already\n"
-		if got := warnings.String(); got != want {
-			t.Fatalf("got %q, want %q", got, want)
+		want := "warning: skipping " + filepath.Join(dir, "shop.yml") + " and " + filepath.Join(dir, "shop.yaml") +
+			": two configs of one project; remove one to register it\n"
+		if got := warnings.String(); got != want || len(names) != 1 || names[0].String() != "nimbus" {
+			t.Fatalf("got %v and %q, want only nimbus and %q", names, got, want)
 		}
 	})
 
@@ -692,6 +664,72 @@ func TestFileProjectRegistryNames(t *testing.T) {
 		names, err := infra.NewFileProjectRegistry(filepath.Join(t.TempDir(), "missing")).Names()
 		if err != nil || len(names) != 0 {
 			t.Fatalf("got %v (%v), want no projects", names, err)
+		}
+	})
+}
+
+func TestFileProjectRegistryYAMLExtension(t *testing.T) {
+	name, _ := domain.NewProjectName("shop")
+
+	t.Run("reads a config ending in .yaml", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yaml")
+
+		project, err := infra.NewFileProjectRegistry(dir).FindByName(name)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := project.Root().String(); got != "/srv" {
+			t.Fatalf("got root %q, want /srv", got)
+		}
+	})
+
+	t.Run("names the .yaml file as the config's document", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yaml")
+
+		document, err := infra.NewFileProjectRegistry(dir).Document(name)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if document.File != "shop.yaml" {
+			t.Fatalf("got %q, want shop.yaml", document.File)
+		}
+	})
+
+	t.Run("saves over a .yaml config rather than beside it", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yaml")
+		configs := infra.NewFileProjectRegistry(dir)
+		project, err := configs.FindByName(name)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if err := configs.Save(project); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if _, err := os.Stat(filepath.Join(dir, "shop.yml")); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("got %v, want no shop.yml beside shop.yaml", err)
+		}
+	})
+
+	t.Run("deletes a .yaml config", func(t *testing.T) {
+		configs := infra.NewFileProjectRegistry(writeConfigs(t, "shop.yaml"))
+
+		if err := configs.Delete(name); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := configs.FindByName(name); !isNotFound(err) {
+			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
+		}
+	})
+
+	t.Run("refuses a project with both a .yml and a .yaml config, naming both", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml", "shop.yaml")
+
+		_, err := infra.NewFileProjectRegistry(dir).FindByName(name)
+
+		if err == nil || isNotFound(err) || !strings.Contains(err.Error(), filepath.Join(dir, "shop.yaml")) {
+			t.Fatalf("got %v, want an error naming both configs", err)
 		}
 	})
 }

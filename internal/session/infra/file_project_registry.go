@@ -17,11 +17,12 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// configExtension is the extension of the config files.
-const configExtension = ".yml"
+// configExtensions are the extensions of the config files. A new config
+// gets the first; an existing one keeps its own.
+var configExtensions = []string{".yml", ".yaml"}
 
 // FileProjectRegistry reads and saves project configs in a directory of
-// "<name>.yml" files, in the format of projectFile.
+// "<name>.yml" or "<name>.yaml" files, in the format of projectFile.
 type FileProjectRegistry struct {
 	dir      string
 	warnings io.Writer
@@ -43,9 +44,9 @@ func (r FileProjectRegistry) WithWarnings(w io.Writer) FileProjectRegistry {
 }
 
 // Names implements domain.ProjectRegistry. It reads file names only:
-// config files whose stem isn't exactly a valid project name, and .yaml
-// files, are skipped, with a warning, and a missing directory has no
-// projects.
+// config files whose stem isn't exactly a valid project name, and a
+// project with both a .yml and a .yaml config, are skipped, with a
+// warning, and a missing directory has no projects.
 func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 	entries, err := os.ReadDir(r.dir)
 	if errors.Is(err, os.ErrNotExist) {
@@ -54,19 +55,15 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 	if err != nil {
 		return nil, err
 	}
+	configs := map[string]int{}
 	var names []domain.ProjectName
 	for _, entry := range entries {
-		stem, isConfig := strings.CutSuffix(entry.Name(), configExtension)
 		// Dot-files, such as the .#shop.yml lock Emacs makes while
 		// shop.yml is edited, aren't configs and aren't worth a warning.
 		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
 			continue
 		}
-		// .yaml is an easy name to give a config written by hand.
-		if yamlStem, isYAML := strings.CutSuffix(entry.Name(), ".yaml"); isYAML {
-			r.warnYAML(entry.Name(), yamlStem+configExtension)
-			continue
-		}
+		stem, isConfig := configStem(entry.Name())
 		if !isConfig {
 			continue
 		}
@@ -80,41 +77,43 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 			r.warnSkipped(entry.Name(), fmt.Errorf("blank space around its name, read as %q", name))
 			continue
 		}
-		names = append(names, name)
+		if configs[stem]++; configs[stem] == 1 {
+			names = append(names, name)
+		}
 	}
+	names = slices.DeleteFunc(names, func(name domain.ProjectName) bool {
+		if configs[name.String()] == 1 {
+			return false
+		}
+		r.warnOnce(strings.Join(r.paths(name), " and "), "two configs of one project; remove one to register it")
+		return true
+	})
 	slices.SortFunc(names, func(a, b domain.ProjectName) int { return strings.Compare(a.String(), b.String()) })
 	return names, nil
 }
 
+// configStem is file without its config extension, if it has one.
+func configStem(file string) (string, bool) {
+	for _, extension := range configExtensions {
+		if stem, isConfig := strings.CutSuffix(file, extension); isConfig {
+			return stem, true
+		}
+	}
+	return "", false
+}
+
 func (r FileProjectRegistry) warnSkipped(file string, reason error) {
-	r.warnOnce(file, fmt.Sprintf("%v; rename it to register it", reason))
+	r.warnOnce(filepath.Join(r.dir, file), fmt.Sprintf("%v; rename it to register it", reason))
 }
 
-// warnYAML warns about a file ending in .yaml, saying the command
-// renaming it to config, unless config is taken or wouldn't register.
-func (r FileProjectRegistry) warnYAML(file, config string) {
-	path, renamed := filepath.Join(r.dir, file), filepath.Join(r.dir, config)
-	stem := strings.TrimSuffix(config, configExtension)
-	if name, err := domain.NewProjectName(stem); err != nil || name.String() != stem {
-		r.warnOnce(file, "configs end in "+configExtension+", and its name isn't a project name either")
+// warnOnce warns that what is skipped, one path or more, is skipped.
+func (r FileProjectRegistry) warnOnce(skipped, message string) {
+	if r.warned[skipped] {
 		return
 	}
-	if _, err := os.Lstat(renamed); err == nil {
-		r.warnOnce(file, fmt.Sprintf("configs end in %s, and %s is one already", configExtension, config))
-		return
-	}
-	r.warnOnce(file, fmt.Sprintf("configs end in %s; rename it to register it: %s",
-		configExtension, shellWords([]string{"mv", path, renamed})))
-}
-
-func (r FileProjectRegistry) warnOnce(file, message string) {
-	path := filepath.Join(r.dir, file)
-	if r.warned[path] {
-		return
-	}
-	r.warned[path] = true
+	r.warned[skipped] = true
 	// A warning that can't be written changes nothing worth failing for.
-	_, _ = fmt.Fprintf(r.warnings, "warning: skipping %s: %s\n", path, message)
+	_, _ = fmt.Fprintf(r.warnings, "warning: skipping %s: %s\n", skipped, message)
 }
 
 // FindByName implements domain.ProjectRegistry.
@@ -186,35 +185,61 @@ func (r FileProjectRegistry) Save(project domain.Project) error {
 	if err != nil {
 		return err
 	}
+	path, err := r.find(project.Name())
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		path, err = r.paths(project.Name())[0], nil
+	}
+	if err != nil {
+		return err
+	}
 	if err := r.writeSchema(); err != nil {
 		return err
 	}
-	return writeFileAtomic(r.path(project.Name()), doc)
+	return writeFileAtomic(path, doc)
 }
 
 // Delete implements domain.ProjectRegistry: it removes the project's
 // config file.
 func (r FileProjectRegistry) Delete(name domain.ProjectName) error {
-	err := os.Remove(r.path(name))
-	if errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
+	path, err := r.find(name)
+	if err != nil {
+		return err
 	}
-	return err
+	return os.Remove(path)
 }
 
-// find is the path of the config file of project name.
+// find is the path of the config file of project name, which has one
+// config, ending in .yml or .yaml.
 func (r FileProjectRegistry) find(name domain.ProjectName) (string, error) {
-	path := r.path(name)
-	_, err := os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return "", fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
+	var found []string
+	for _, path := range r.paths(name) {
+		_, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		found = append(found, path)
 	}
-	return path, err
+	switch len(found) {
+	case 0:
+		return "", fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
+	case 1:
+		return found[0], nil
+	default:
+		return "", fmt.Errorf("%s has two configs, %s; remove one", name, strings.Join(found, " and "))
+	}
 }
 
-// path is where the config of project name lives.
-func (r FileProjectRegistry) path(name domain.ProjectName) string {
-	return filepath.Join(r.dir, name.String()+configExtension)
+// paths are where the config of project name may live, the first where
+// a new one is saved.
+func (r FileProjectRegistry) paths(name domain.ProjectName) []string {
+	paths := make([]string, 0, len(configExtensions))
+	for _, extension := range configExtensions {
+		paths = append(paths, filepath.Join(r.dir, name.String()+extension))
+	}
+	return paths
 }
 
 // writeSchema saves the JSON Schema next to the configs, unless it is
