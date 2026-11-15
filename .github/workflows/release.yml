@@ -21,6 +21,8 @@ jobs:
       # Nothing is published that fails the tests.
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux
       - run: go test ./...
+      - run: go test -tags terminal .
+        working-directory: test/terminal
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"

@@ -12,7 +12,9 @@ import (
 	tuitest "github.com/microsoft/tui-test/bindings/go"
 )
 
-// Scenario 1.
+// TestBrowserDraws: `weave`.
+//
+// The project list, task list, details (`blog.yml`) and key line drawn.
 func TestBrowserDraws(t *testing.T) {
 	h := start(t)
 
@@ -27,6 +29,9 @@ func TestBrowserDraws(t *testing.T) {
 	}
 }
 
+// TestClickPicksProject: `weave`, click `notes`.
+//
+// The details are `notes.yml`'s.
 func TestClickPicksProject(t *testing.T) {
 	h := start(t)
 	h.browse("")
@@ -36,6 +41,10 @@ func TestClickPicksProject(t *testing.T) {
 	h.sees("─ notes.yml ")
 }
 
+// TestClickPicksPane: `weave`, select `blog`, click `shell` in the pane
+// list.
+//
+// `shell` is the selected pane in the drawing: `[ shell ]`.
 func TestClickPicksPane(t *testing.T) {
 	h := start(t)
 	h.browse("blog")
@@ -48,7 +57,11 @@ func TestClickPicksPane(t *testing.T) {
 	h.sees("[ shell ]")
 }
 
-// Scenario 2.
+// TestOpenGrid: `weave`, select `blog`, Enter.
+//
+// The client switches to `blog`, `preview`, focused, is the active pane,
+// and the grid is 60/40 and 70/30 of the window: `editor` 95x43, `preview`
+// 64x29, `shell` 64x13.
 func TestOpenGrid(t *testing.T) {
 	h := start(t)
 	h.browse("blog")
@@ -67,7 +80,12 @@ func TestOpenGrid(t *testing.T) {
 	}
 }
 
-// Scenario 12.
+// TestKillFromInsideTearsDownFirst: `shop` started. In its `shell` window:
+// `weave`, select `shop`, `x`, `y`.
+//
+// `tearing down`, then `teardown: false: command failed`,
+// `shop's session will be killed anyway, with this pane.` and
+// `Press Enter to go on.` One Enter kills `shop`.
 func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -89,7 +107,12 @@ func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	}
 }
 
-// Scenario 14.
+// TestMiniaturesNeedLines: `weave`, select `notes`, then the terminal down
+// to 20 lines.
+//
+// Under the window list, `code` and `shell` are drawn small, each under
+// its name, `code`'s with its narrow `files` column. At 20 lines, only the
+// names show.
 func TestMiniaturesNeedLines(t *testing.T) {
 	h := start(t)
 	h.browse("notes")
@@ -108,7 +131,11 @@ func TestMiniaturesNeedLines(t *testing.T) {
 	h.laidOut()
 }
 
-// Scenario 5.
+// TestTaskRunsInItsPane: `shop` started: `weave`, select `shop`, `t`,
+// Enter on `wait`.
+//
+// `sleep 300` runs in `logs` and the client moves there. A new `weave`
+// shows `● wait`.
 func TestTaskRunsInItsPane(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -127,7 +154,12 @@ func TestTaskRunsInItsPane(t *testing.T) {
 	h.sees("● wait")
 }
 
-// Scenario 6.
+// TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
+// `weave`, select `shop`, `t`, `echo hi`, Enter, `y`.
+//
+// The dialog says `logs is busy`. A throwaway window `echo` opens with
+// `@weaver_throwaway` 1 and `@weaver_task_of` set to the ID of `logs`,
+// printing `hi`, and the client moves there.
 func TestTaskOfBusyPaneRunsInThrowawayWindow(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -154,7 +186,10 @@ func TestTaskOfBusyPaneRunsInThrowawayWindow(t *testing.T) {
 	})
 }
 
-// Scenario 9.
+// TestRerunTypesExitedCommandAgain: `shop` started, its `sleep 3` exited:
+// `weave`, select `shop`, →, `r`.
+//
+// `sleep 3` runs in `logs` again and the client moves there.
 func TestRerunTypesExitedCommandAgain(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -172,7 +207,15 @@ func TestRerunTypesExitedCommandAgain(t *testing.T) {
 	h.waitRuns(logs, "sleep", 5*time.Second)
 }
 
-// Scenario 19.
+// TestPreviewShowsSessionAsItIs: `notes` started: `weave`, select `notes`.
+// Print `green` in green in `code`'s first pane, split `code` from
+// outside, Tab twice to the new pane, `p`, `p`, then kill `notes` from
+// outside.
+//
+// The title reads `notes.yml · preview`. `green` shows, drawn in green,
+// and the new pane's levels read `not in the config`. After `p`, the
+// drawing has neither. `p` brings the preview back, and the kill the
+// drawing with `preview: notes's session ended`.
 func TestPreviewShowsSessionAsItIs(t *testing.T) {
 	h := start(t)
 	h.started("notes")
@@ -197,7 +240,11 @@ func TestPreviewShowsSessionAsItIs(t *testing.T) {
 	h.sees("preview: notes's session ended")
 }
 
-// Scenario 20.
+// TestPreviewOfOwnPaneShowsNoBrowserInside: `weave notes`, then in
+// `code`'s focused pane, zoomed: `weave`, select `notes`.
+//
+// The preview draws the pane weave runs in with `this browser` in it, not
+// the browser again inside itself.
 func TestPreviewOfOwnPaneShowsNoBrowserInside(t *testing.T) {
 	h := start(t)
 	h.promptIn("term")
@@ -210,7 +257,12 @@ func TestPreviewOfOwnPaneShowsNoBrowserInside(t *testing.T) {
 	h.sees("this browser")
 }
 
-// Scenario 21.
+// TestPreviewOfZoomedWindowShowsZoomedPane: `notes` started: `weave`,
+// select `notes`, zoom `code` on `edit` from outside, `p`, `p`, unzoom.
+//
+// Zoomed, the preview shows `edit` alone, named alone in the pane list,
+// its levels below. After `p`, the drawing selects `edit` too. Unzoomed,
+// both panes are back, `edit` still selected.
 func TestPreviewOfZoomedWindowShowsZoomedPane(t *testing.T) {
 	h := start(t)
 	h.started("notes")
@@ -235,7 +287,11 @@ func TestPreviewOfZoomedWindowShowsZoomedPane(t *testing.T) {
 	})
 }
 
-// Scenario 3.
+// TestOpenRunsSetupAndLandsOnFocus: `weave shop`.
+//
+// The setup command's output shows in `term`. The client lands in window
+// `api`, pane `back`, both focused. `echo "$APP_ENV $LOG"` prints
+// `staging info` in `logs` and `dev info` in `back`.
 func TestOpenRunsSetupAndLandsOnFocus(t *testing.T) {
 	h := start(t)
 	h.promptIn("term")
@@ -255,7 +311,12 @@ func TestOpenRunsSetupAndLandsOnFocus(t *testing.T) {
 	h.paneShows("=term:", "setting up shop")
 }
 
-// Scenario 4.
+// TestExitedCommandWarns: `shop` started, its `sleep 3` exited: `weave`,
+// select `shop`, →.
+//
+// `⚠` on `logs`. The levels show `APP_ENV=staging` as
+// `window api, over project's local`. `r rerun` is in the key line on
+// `logs`, and gone after Tab to `back`.
 func TestExitedCommandWarns(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -271,7 +332,12 @@ func TestExitedCommandWarns(t *testing.T) {
 	h.gone("r rerun")
 }
 
-// Scenario 7.
+// TestTaskRunStayingLeavesYouInBrowser: `shop` started: `weave`, select
+// `shop`, `t`, `r` on `wait`, then Ctrl-C in `logs`.
+//
+// `sleep 300` runs in `logs`, `● wait` shows, and the client stays in the
+// browser. After Ctrl-C the ● goes while the browser is shown, and `wait`
+// stays listed.
 func TestTaskRunStayingLeavesYouInBrowser(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -290,7 +356,10 @@ func TestTaskRunStayingLeavesYouInBrowser(t *testing.T) {
 	h.sees("  wait")
 }
 
-// Scenario 8.
+// TestConfigShowsAsStored: `shop` started: `weave`, select `shop`, `y`,
+// `y`.
+//
+// The YAML shows as stored, then the preview comes back.
 func TestConfigShowsAsStored(t *testing.T) {
 	h := start(t)
 	h.started("shop")
@@ -304,7 +373,11 @@ func TestConfigShowsAsStored(t *testing.T) {
 	h.gone("setup: [echo setting up shop]")
 }
 
-// Scenario 13.
+// TestGridColumnInCells: `weave notes`.
+//
+// The client switches to `notes`, window `code`, of the client's size less
+// the status line, 160x44. `files` is exactly 30 columns wide and `edit`
+// takes the rest, 129.
 func TestGridColumnInCells(t *testing.T) {
 	h := start(t)
 	h.promptIn("term")
@@ -324,7 +397,14 @@ func TestGridColumnInCells(t *testing.T) {
 	}
 }
 
-// Scenario 16.
+// TestBadSettingsStopOnlyTheBrowser: `settings.yml` with
+// `keys: { remove: u }`: `weave`, then `weave --version`,
+// `weave completion bash` and `weave notes --detached`.
+//
+// `weave` prints
+// `Error: …/settings.yml: keys.remove: key taken: "u" already does undo`
+// and exits 1 before the browser opens, leaving the config as it was; the
+// others run as usual, and `notes` starts.
 func TestBadSettingsStopOnlyTheBrowser(t *testing.T) {
 	h := start(t)
 	h.settings("keys: { remove: u }")
@@ -346,7 +426,12 @@ func TestBadSettingsStopOnlyTheBrowser(t *testing.T) {
 	h.started("notes")
 }
 
-// Scenario 22.
+// TestPreviewAndDrawingShareSelectedPane: `notes` started: `weave`, select
+// `notes`, Tab, `p`, Tab, `p`, `t`, ↓, ↑.
+//
+// The preview selects `files`, then `edit`; the drawing keeps `edit`, then
+// selects `files`, and the preview keeps `files`. Moving between `ls` and
+// `echo saved` in the task list selects `files` and `edit` in the preview.
 func TestPreviewAndDrawingShareSelectedPane(t *testing.T) {
 	h := start(t)
 	h.started("notes")
@@ -373,7 +458,12 @@ func TestPreviewAndDrawingShareSelectedPane(t *testing.T) {
 	h.sees("[ files ]")
 }
 
-// Scenario 23.
+// TestKillUnzoomsFirst: `notes` started, `code` zoomed on `edit`:
+// `weave kill notes`.
+//
+// `notes` is gone and `term` still runs: weave unzooms first, as tmux 3.4
+// crashes killing a session with a zoomed window, taking every session
+// along.
 func TestKillUnzoomsFirst(t *testing.T) {
 	h := start(t)
 	h.started("notes")
@@ -387,7 +477,14 @@ func TestKillUnzoomsFirst(t *testing.T) {
 	}
 }
 
-// Scenario 25.
+// TestTaskOfBrowsersOwnPaneRunsApart: `notes` started, `code` zoomed on
+// `files`: in `files`, `weave`, select `notes`, `t`, `r` on `ls`, `w`, ↓,
+// `r` on `echo saved`.
+//
+// `r` on `ls` is refused in red:
+// `✗ files runs this browser: w runs ls in a throwaway window`. `w` runs
+// it in a throwaway window `ls`, `code` staying the current window.
+// `echo saved` runs in `edit`, `files` staying the current pane.
 func TestTaskOfBrowsersOwnPaneRunsApart(t *testing.T) {
 	h := start(t)
 	h.started("notes")
@@ -416,7 +513,13 @@ func TestTaskOfBrowsersOwnPaneRunsApart(t *testing.T) {
 	}
 }
 
-// Scenario 26.
+// TestBrowserAsksAboutBusyPaneInPlace: `notes` started, `edit` busy:
+// `weave`, select `notes`, `t`, ↓, `r`, `y`.
+//
+// The browser asks in its status line, staying on screen:
+// `edit is busy: run echo saved in a throwaway window? (y/n)`. After `y`
+// it says the task runs in a throwaway window, and the client stays in the
+// browser.
 func TestBrowserAsksAboutBusyPaneInPlace(t *testing.T) {
 	h := start(t)
 	h.started("notes")

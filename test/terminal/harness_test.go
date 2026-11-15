@@ -26,6 +26,7 @@ var (
 	weaveDir = flag.String("weave", "", "test DIR/weave instead of building ./cmd/weave")
 	keep     = flag.Bool("keep", false, "keep a failed test's directory and tmux server")
 	shots    = flag.String("shots", "", "write a PNG of the screen each test ends on to DIR")
+	record   = flag.String("record", "", "write a GIF of each test's screen, from start to end, to DIR")
 )
 
 // weave is the binary under test, set by TestMain.
@@ -53,7 +54,7 @@ func run(m *testing.M) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	weave = filepath.Join(dir, "weave")
 	build := exec.Command("go", "build", "-o", weave, "./cmd/weave")
 	build.Dir = "../.."
@@ -115,6 +116,11 @@ func start(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	h.eventually("a client attaches to term", func() bool { return h.clientOn() == "term" })
+	if *record != "" {
+		if err := screen.StartRecording(filepath.Join(*record, t.Name()+".gif"), tuitest.RecordingOptions{}); err != nil {
+			t.Fatalf("recording: %v", err)
+		}
+	}
 	h.promptIn("term")
 	h.typed("command -v weave")
 	h.sees(weave)
@@ -158,6 +164,11 @@ func (h *harness) write(name, content string) {
 }
 
 func (h *harness) clean() {
+	if *record != "" && h.screen != nil {
+		if _, err := h.screen.StopRecording(); err != nil {
+			h.t.Logf("recording: %v", err)
+		}
+	}
 	if *shots != "" && h.screen != nil {
 		name := filepath.Join(*shots, h.t.Name()+".png")
 		if _, err := h.screen.Screenshot(name, tuitest.ScreenshotOptions{}); err != nil {
@@ -171,11 +182,11 @@ func (h *harness) clean() {
 		}
 		return
 	}
-	exec.Command("tmux", "-S", h.sock, "kill-server").Run()
+	_ = exec.Command("tmux", "-S", h.sock, "kill-server").Run()
 	if h.screen != nil {
 		h.screen.CloseQuiet()
 	}
-	os.RemoveAll(h.dir)
+	_ = os.RemoveAll(h.dir)
 }
 
 // tmux runs a tmux command on the test's server, in the test's
@@ -213,12 +224,18 @@ func (h *harness) keys(keys ...string) {
 	}
 }
 
-// typed types text then presses Enter.
-func (h *harness) typed(text string) {
+// types types text, as a user does.
+func (h *harness) types(text string) {
 	h.t.Helper()
 	if err := h.screen.Type(text); err != nil {
 		h.t.Fatalf("typing %q: %v", text, err)
 	}
+}
+
+// typed types text then presses Enter.
+func (h *harness) typed(text string) {
+	h.t.Helper()
+	h.types(text)
 	h.keys("Enter")
 }
 
@@ -292,7 +309,7 @@ func (h *harness) browse(project string) {
 		return
 	}
 	h.keys("/")
-	h.screen.Type(project)
+	h.types(project)
 	h.keys("Enter")
 	h.sees(project + ".yml")
 }

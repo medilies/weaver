@@ -20,6 +20,12 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
+      # The terminal tests are a module of their own, behind a build tag.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.14.0
+          working-directory: test/terminal
+          args: --build-tags terminal
 
   test:
     # 24.04 ships tmux 3.4, the only version weaver is tested on.

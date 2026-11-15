@@ -13,7 +13,11 @@ import (
 	tuitest "github.com/microsoft/tui-test/bindings/go"
 )
 
-// Scenario 10.
+// TestFocusingWindowUnfocusesTheOther: Edit `shop`, the `shell` window's
+// `focus` row, Enter, Ctrl-S, `y`.
+//
+// The diff removes one `focus: true`, `api`'s, and keeps the pane's.
+// `Saved shop.` The file has a single `focus: true`, on `back`.
 func TestFocusingWindowUnfocusesTheOther(t *testing.T) {
 	h := start(t)
 	h.edit("shop")
@@ -37,7 +41,14 @@ func TestFocusingWindowUnfocusesTheOther(t *testing.T) {
 	}
 }
 
-// Scenario 11.
+// TestBindingUnderRegisteredNameAsksToReplace: `blog` started:
+// `weave bind blog`, Ctrl-S, `n`, Ctrl-U, `journal`, Enter, Ctrl-S, `y`.
+//
+// Saving under `blog` asks `Replace blog's registered config with this?`
+// under the diff, once; `n` goes back to the form typing the name, under
+// it `blog is already registered`. Saving as `journal` asks
+// `Save the new project's config?`. `journal.yml` has no window but
+// `write`, and `focus: true` on `preview`.
 func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
 	h := start(t)
 	h.started("blog")
@@ -54,7 +65,7 @@ func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
 	h.keys("n")
 	h.sees("blog is already registered")
 	h.keys("Ctrl+u")
-	h.screen.Type("journal")
+	h.types("journal")
 	h.keys("Enter", "Ctrl+s")
 	h.sees("Save the new project's config?")
 	h.keys("y")
@@ -71,7 +82,15 @@ func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
 	}
 }
 
-// Scenario 15.
+// TestSettingsChangeColourAndDrawingKeys: `settings.yml` with
+// `selected-colour: 214` and
+// `keys: { split-right: "|", split-below: "-" }`: edit `notes`, `shell` in
+// the window list, down to its drawing, `|`, `u`, Esc.
+//
+// `settings.schema.json` is beside it. The key line reads
+// `| split right  - split below`, `|` splits the pane right
+// (`pane 1   pane 2`), and something is drawn in colour 214. `u` then Esc
+// leave with `Nothing done.`
 func TestSettingsChangeColourAndDrawingKeys(t *testing.T) {
 	h := start(t)
 	h.settings("selected-colour: 214", `keys: { split-right: "|", split-below: "-" }`)
@@ -100,14 +119,19 @@ func TestSettingsChangeColourAndDrawingKeys(t *testing.T) {
 	h.sees("Nothing done.")
 }
 
-// Scenario 17.
+// TestTypedAreasAddPane: Edit `notes`, `code`'s `areas` row, Enter,
+// Ctrl-U, type `files, edit / files, logs`, Enter, Ctrl-S, `y`.
+//
+// The drawing adds `logs` as it is typed. The diff adds the row
+// `[files, logs]` and a pane `logs`. The saved config keeps
+// `columns: [30, 1fr]` and lists `files`, `edit`, `logs`.
 func TestTypedAreasAddPane(t *testing.T) {
 	h := start(t)
 	h.edit("notes")
 	h.cursorTo("areas")
 
 	h.keys("Enter", "Ctrl+u")
-	h.screen.Type("files, edit / files, logs")
+	h.types("files, edit / files, logs")
 
 	h.sees("─ logs ─")
 	h.keys("Enter", "Ctrl+s")
@@ -126,7 +150,13 @@ func TestTypedAreasAddPane(t *testing.T) {
 	}
 }
 
-// Scenario 18.
+// TestGridTurnedIntoSplitsKeepsItsSizes: Edit `notes`, `code`'s `layout`
+// row, →, Ctrl-S, `y`.
+//
+// The `areas`, `columns` and `rows` rows go, and the drawing is unchanged:
+// `edit` starts at the same column. The diff removes the grid. `edit`'s
+// saved split is its share of the terminal, about 81% (129 of 160
+// columns), not of tmux's default 80 (61%).
 func TestGridTurnedIntoSplitsKeepsItsSizes(t *testing.T) {
 	h := start(t)
 	h.edit("notes")
@@ -171,7 +201,11 @@ func (h *harness) splitAt() int {
 	return 0
 }
 
-// Scenario 24.
+// TestFormScrollsBackToItsTop: `weave`, select `notes`, `e`, ↓ until the
+// project card scrolls out of view, ↑ back to `root`.
+//
+// The project card shows whole again, its border and the `name` row above
+// `root` included, though the cursor never stops on `name`.
 func TestFormScrollsBackToItsTop(t *testing.T) {
 	h := start(t)
 	h.edit("notes")
@@ -195,7 +229,10 @@ func TestFormScrollsBackToItsTop(t *testing.T) {
 	h.sees("   name      notes")
 }
 
-// Scenario 27.
+// TestBrowserKeepsFilterAfterForm: `weave`, `/notes`, enter, `e`, esc.
+//
+// Back from the config form, the browser keeps the filter `/notes`, `shop`
+// filtered out.
 func TestBrowserKeepsFilterAfterForm(t *testing.T) {
 	h := start(t)
 	h.edit("notes")

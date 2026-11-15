@@ -48,7 +48,7 @@ Since v0.6.0, ready for v0.7.0: the live preview, designed on
 2026-11-14, start, running a task while staying in the browser, the task
 list's ● marks kept up to date, running projects marked by a green name,
 `weave kill` safe with a zoomed window on tmux 3.4, and the terminal
-scenarios scripted in `test/terminal/run.sh`. Building the overviews
+scenarios, run as Go tests in a real terminal emulator. Building the overviews
 concurrently, so the summary and the project list's ● marks stay as live
 as the preview, waits for a use of its own.
 

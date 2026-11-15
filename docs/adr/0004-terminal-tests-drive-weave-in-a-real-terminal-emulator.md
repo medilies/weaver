@@ -1,0 +1,9 @@
+# Terminal tests drive weave in a real terminal emulator
+
+The end-to-end scenarios, a 700-line bash script until now, are Go tests in `test/terminal`, using Microsoft's [tui-test](https://github.com/microsoft/tui-test) as the terminal. Each test runs a tui-test emulator, on Alacritty's engine and without a display, whose client is attached to a tmux server of the test's own; weave runs in that server, as users run it.
+
+The script read tmux's own copy of the screen, through a second tmux server standing in for the terminal. It could only send keys with `send-keys`, never click, checked colours by searching escape codes, ran only when someone thought to, and took about 50 seconds. A real emulator types and clicks through a pty as a user does and reads the screen as cells with their colours. The tests run in parallel in about 6 seconds and in CI on every push. Porting found two bugs the script had missed: keys typed as one screen gave way to the next were lost, and a screen started during a resize stayed drawn for the old size.
+
+tmux stays: weave drives it, so a terminal without tmux would test nothing weave does. Only the second tmux server, the screen, is gone.
+
+tui-test is before 1.0 and loads a prebuilt native engine, extracted to the user's cache on first use, which ties the tests to the platforms Microsoft builds for and to its keeping the project up. To keep that cost off weave, `test/terminal` is a Go module of its own, behind the `terminal` build tag: weave's `go.mod`, build and `go test ./...` don't see it, and every tui-test call goes through the harness, so a change of its API is fixed in one file. Unit tests of the Bubble Tea models, driven by messages, were the other way considered; they don't attach or switch a client, read real sessions or draw through a terminal, which is what these scenarios are for.
