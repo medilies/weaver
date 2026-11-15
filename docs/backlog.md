@@ -150,10 +150,11 @@ confirmation, since reloading ends what runs. Only in an owned session.
 
 **Use**: while the browser is open, the summary and the project list's
 ● marks and green names show where things stood when it last built the
-overviews, while the preview and the task list's marks beside them are
-kept up to date. Building the overviews concurrently, on the browser's
-tick (`previewTick`, with its numbered asks), keeps them as live as the
-preview.
+overviews, while the preview, the exited-command warnings and the task
+list's marks are kept up to date. Building the overviews concurrently, on
+the browser's tick (`previewTick`, with its numbered asks), as
+`LiveSessions.Refreshed` builds the selected one's warnings and marks,
+keeps them as live as the preview.
 
 ### A clean shutdown when killing (M)
 
@@ -507,7 +508,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   free-text paths and labels out of one line adds parsing risk.
 - Restoration's placement of one window serves lazy windows and reload.
 - The browser's tick (`previewTick`), with its numbered asks, serves the
-  preview and the task list's marks, and would serve live overviews.
+  preview, the exited-command warnings and the task list's marks, and
+  would serve live overviews.
 - The reserved-name rule, for the first new subcommand: when a registered project's name clashes with it, weave
   refuses with an error naming the config file to rename, and only when
   such a config exists. It becomes an ADR when that subcommand ships.

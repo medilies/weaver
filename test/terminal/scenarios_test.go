@@ -332,6 +332,35 @@ func TestExitedCommandWarns(t *testing.T) {
 	h.gone("r rerun")
 }
 
+// TestExitedCommandWarnsWhileShown: `shop` started, its `sleep 3` exited,
+// `sleep 300` typed in `logs` from outside: `weave`, select `shop`, →, then
+// Ctrl-C in `logs` from outside, then `sleep 300` typed again.
+//
+// No `⚠` while `sleep 300` runs. After Ctrl-C, `⚠` on `logs` and
+// `r rerun` in the key line, without leaving the browser. Once `sleep 300`
+// runs again, both go.
+func TestExitedCommandWarnsWhileShown(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	logs := h.logsIdle()
+	h.tmux("send-keys", "-t", logs, "sleep 300", "Enter")
+	h.waitRuns(logs, "sleep", 5*time.Second)
+	h.browse("shop")
+	h.keys("Right")
+	h.sees("logs   back")
+	h.gone("⚠")
+
+	h.tmux("send-keys", "-t", logs, "C-c")
+
+	h.sees(`⚠ window "api", pane "logs": command exited: sleep 3`)
+	h.sees("r rerun")
+
+	h.tmux("send-keys", "-t", logs, "sleep 300", "Enter")
+
+	h.gone("⚠")
+	h.gone("r rerun")
+}
+
 // TestTaskRunStayingLeavesYouInBrowser: `shop` started: `weave`, select
 // `shop`, `t`, `r` on `wait`, then Ctrl-C in `logs`.
 //

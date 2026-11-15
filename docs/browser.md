@@ -21,7 +21,8 @@ selected one:
   shell would wait for the rest of it;
 - in a session weaver started, each pane whose `command` isn't running,
   its shell back at its prompt: it crashed, was interrupted (Ctrl-C warns
-  too) or finished, or the pane is still starting;
+  too) or finished, or the pane is still starting; checked again every
+  second;
 - the `before` commands and variables every pane starts with.
 
 ## Drawing

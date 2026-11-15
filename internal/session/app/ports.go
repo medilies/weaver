@@ -158,7 +158,8 @@ type ProjectBrowser interface {
 	// ErrAborted when they quit. Already on screen, it shows them in
 	// place; after a choice, it stays on screen, waiting. While it shows
 	// a project whose Previewable reports true, it keeps asking live for
-	// the preview of the selected window and the tasks still running.
+	// the preview of the selected window and for the project as it is
+	// now.
 	Browse(projects []ProjectOverview, selected domain.ProjectName, notice Notice, live LiveSessions) (Choice, error)
 	// Confirm asks in the status line while the browser is on screen,
 	// otherwise as a Confirmer of its own.
@@ -177,8 +178,8 @@ type LiveSessions interface {
 	// domain.ErrWindowNotFound when the project has no such window, or
 	// domain.ErrWindowNotRunning when the session lacks it.
 	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
-	// RunningTasks are project's tasks still running in its owned
-	// session now, as ProjectOverview.TaskRuns tells them; none when tmux
-	// can't tell.
-	RunningTasks(project ProjectOverview) []TaskAt
+	// Refreshed is project as its owned session is now: the warnings
+	// about commands that exited, and the tasks still running, found
+	// again; none of either when tmux can't tell.
+	Refreshed(project ProjectOverview) ProjectOverview
 }

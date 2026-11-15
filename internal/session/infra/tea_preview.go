@@ -15,11 +15,11 @@ import (
 )
 
 // previewEvery is how often the preview of the selected window, and the
-// selected project's running tasks, are found again.
+// selected project's exited commands and running tasks, are found again.
 const previewEvery = time.Second
 
-// previewTick asks for the selected window's preview and the running
-// tasks again.
+// previewTick asks for the selected window's preview, and the selected
+// project as its session is now, again.
 type previewTick struct{}
 
 // previewed is the preview of a project's window, or why there is none,

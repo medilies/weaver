@@ -235,9 +235,14 @@ func (uc BrowseProjects) Handle(workingDir string) (err error) {
 	}
 }
 
-// RunningTasks implements LiveSessions, for the browser.
-func (uc BrowseProjects) RunningTasks(project ProjectOverview) []TaskAt {
-	return uc.runningTasks(project)
+// Refreshed implements LiveSessions, for the browser.
+func (uc BrowseProjects) Refreshed(project ProjectOverview) ProjectOverview {
+	project.warnings = slices.DeleteFunc(slices.Clone(project.warnings), func(w Warning) bool {
+		return errors.Is(w, ErrCommandExited)
+	})
+	project.warnings = append(project.warnings, uc.exited(project)...)
+	project.running = uc.runningTasks(project)
+	return project
 }
 
 // Preview implements LiveSessions, for the browser.

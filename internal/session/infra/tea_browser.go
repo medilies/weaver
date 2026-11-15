@@ -257,14 +257,12 @@ type browser struct {
 	// previewPane is the selected pane of the preview, by its index in
 	// it; pane follows it when the config has it.
 	previewPane     int
-	previewFailure  string       // why the last preview failed, told once
-	previewAsked    int          // the asks for a preview
-	previewAnswered int          // the last ask answered
-	running         tasksRunning // the tasks last found running, if hasRunning
-	hasRunning      bool
-	tasksStarted    bool // asked, or found there is nothing to ask
-	tasksAsked      int  // the asks for the running tasks
-	tasksAnswered   int  // the last ask answered
+	previewFailure  string // why the last preview failed, told once
+	previewAsked    int    // the asks for a preview
+	previewAnswered int    // the last ask answered
+	refreshStarted  bool   // asked, or found there is nothing to ask
+	refreshAsked    int    // the asks for the selected project as its session is now
+	refreshAnswered int    // the last ask answered
 	notice          app.Notice
 	width, height   int
 	// choice is the one just made, sent on chosen; the browser then waits
@@ -374,8 +372,8 @@ func (m browser) windowsShown() []domain.WindowPlan {
 	return shown[m.cursor].Project().Plan().Windows()
 }
 
-// Init starts the ticks asking for the preview and the running tasks
-// again; the first asks follow the terminal's size, read again once
+// Init starts the ticks asking for the preview and the selected project
+// as its session is now; the first asks follow the terminal's size, read again once
 // resizes are listened for.
 func (m browser) Init() tea.Cmd {
 	return tea.Batch(tick(), sizeRecheck())
@@ -423,10 +421,10 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, fetch = next.fetch()
 		cmd = tea.Batch(cmd, fetch)
 	}
-	if !next.tasksStarted || next.selectedName() != m.selectedName() {
-		next.tasksStarted = true // the first ask, once the browser shows
+	if !next.refreshStarted || next.selectedName() != m.selectedName() {
+		next.refreshStarted = true // the first ask, once the browser shows
 		var fetch tea.Cmd
-		next, fetch = next.fetchTasks()
+		next, fetch = next.refresh()
 		cmd = tea.Batch(cmd, fetch)
 	}
 	return next, cmd
@@ -445,18 +443,18 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case previewTick:
 		// An ask still unanswered isn't asked again, so slow answers can't
 		// pile up.
-		var preview, tasks tea.Cmd
+		var preview, refresh tea.Cmd
 		if m.previewAsked == m.previewAnswered {
 			m, preview = m.fetch()
 		}
-		if m.tasksAsked == m.tasksAnswered {
-			m, tasks = m.fetchTasks()
+		if m.refreshAsked == m.refreshAnswered {
+			m, refresh = m.refresh()
 		}
-		return m, tea.Batch(preview, tasks, tick())
-	case tasksRunning:
-		m.tasksAnswered = max(m.tasksAnswered, msg.asked)
-		if msg.asked == m.tasksAsked {
-			m.running, m.hasRunning = msg, true
+		return m, tea.Batch(preview, refresh, tick())
+	case refreshed:
+		m.refreshAnswered = max(m.refreshAnswered, msg.asked)
+		if msg.asked == m.refreshAsked {
+			m = m.withRefreshed(msg.project)
 		}
 		return m, nil
 	case previewed:
@@ -738,7 +736,9 @@ func (m browser) noticeLine() string {
 func (m browser) reshown(msg reshown) browser {
 	before := m.selectedName()
 	m.projects, m.notice, m.waiting, m.working = msg.projects, msg.notice, false, false
-	m.tasksStarted, m.hasRunning = false, false
+	// An answer still on its way is about the projects as they were.
+	m.refreshStarted, m.refreshAsked = false, m.refreshAsked+1
+	m.refreshAnswered = m.refreshAsked
 	if !slices.ContainsFunc(m.shown(), func(p app.ProjectOverview) bool { return p.Name() == msg.selected }) {
 		m.filter, m.filtering = "", false
 	}

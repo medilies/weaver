@@ -565,9 +565,9 @@ func TestBrowseProjects(t *testing.T) {
 		s.sessions.commands = map[string][]domain.RunningCommand{"shop": {
 			domain.NewRunningCommand(windowName(t, "logs"), 0, command(t, "tail -f app.log")),
 		}}
-		want := []app.TaskAt{{Window: windowName(t, "logs"), Task: 0}}
-		if got := s.browser.previews.RunningTasks(shop); !slices.Equal(got, want) {
-			t.Fatalf("got %v, want tail running since the list was shown", got)
+		at := app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		if !s.browser.previews.Refreshed(shop).TaskRuns(at) {
+			t.Fatal("got tail not running, want it running since the list was shown")
 		}
 	})
 
@@ -781,6 +781,38 @@ func TestBrowseProjects(t *testing.T) {
 		if len(got) != 1 || !errors.Is(got[0], app.ErrCommandExited) || !strings.Contains(got[0].Error(), "hugo server") ||
 			!got[0].Concerns(windowName(t, "blog"), 0) {
 			t.Fatalf("got %v, want hugo server exited in the blog pane", got)
+		}
+	})
+
+	t.Run("tells the browser of a command that exited since the list was shown", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		got := s.browser.previews.Refreshed(blog).Warnings()
+		if len(got) != 1 || !errors.Is(got[0], app.ErrCommandExited) || !got[0].Concerns(windowName(t, "blog"), 0) {
+			t.Fatalf("got %v, want hugo server exited in the blog pane", got)
+		}
+	})
+
+	t.Run("stops warning the browser of a command that runs again", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		s.sessions.idle = nil
+		if got := s.browser.previews.Refreshed(blog).Warnings(); len(got) > 0 {
+			t.Fatalf("got %v, want no warnings", got)
 		}
 	})
 
