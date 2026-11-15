@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -286,6 +287,12 @@ type browser struct {
 	doing    string        // what the action waited for is doing, once told
 	question string
 	answer   chan<- bool
+	// reloading is the question R asks, answered with p, w or any other
+	// key cancelling: what to reload, the pane at reloadPane when
+	// reloadsPane, or its whole window.
+	reloading   string
+	reloadPane  app.PaneAt
+	reloadsPane bool
 	// interrupted tells the user, who pressed ctrl+c while waiting, that
 	// the action still runs; a second ctrl+c abandons it, ending the
 	// browser.
@@ -420,7 +427,7 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.pressedWaiting(msg.String())
 		}
 	case tea.MouseClickMsg:
-		if m.question != "" || m.waiting {
+		if m.question != "" || m.waiting || m.reloading != "" {
 			return m, nil
 		}
 	}
@@ -501,6 +508,9 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // press moves the cursor, starts the filter or clears it, or ends with
 // the choice the key makes.
 func (m browser) press(key string) (tea.Model, tea.Cmd) {
+	if m.reloading != "" {
+		return m.reloadAnswered(key), nil
+	}
 	if m.tasking && key != "q" && key != "ctrl+c" {
 		next, _ := m.pressInTasks(key)
 		return next, nil
@@ -547,6 +557,8 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m.choice = app.Choice{Action: app.ActionInterruptPane, Project: m.shown()[m.cursor].Name(),
 			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
 		return m, nil
+	case "R":
+		return m.asksReload(), nil
 	case "t":
 		if len(m.tasksShown()) > 0 {
 			m.tasking = true
@@ -759,6 +771,8 @@ func (m browser) noticeLine() string {
 	switch {
 	case m.question != "":
 		style, text = style.Inherit(m.theme.picked), m.question+" (y/n)"
+	case m.reloading != "":
+		style, text = style.Inherit(m.theme.picked), m.reloading
 	case m.waiting:
 		text = m.spin.View() + " " + m.doing
 		if m.interrupted {
@@ -816,6 +830,45 @@ func (m browser) pressedWaiting(key string) (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
+// asksReload is m asking what to reload in the selected project's owned
+// session: the selected pane, when it is in the config, or the window
+// drawn.
+func (m browser) asksReload() browser {
+	windows := m.windowsShown()
+	if len(windows) == 0 || !m.shown()[m.cursor].Previewable() {
+		return m
+	}
+	window := windows[m.drawn(windows)]
+	pane, inConfig := m.selectedInConfig(len(window.Panes()))
+	m.reloadPane, m.reloadsPane = app.PaneAt{Window: window.Name(), Pane: pane}, inConfig
+	if !inConfig {
+		m.reloading = fmt.Sprintf("Reload the whole %s window? (w, anything else cancels)", window.Name())
+		return m
+	}
+	named := "pane " + strconv.Itoa(pane+1)
+	if name := window.Panes()[pane].Name(); !name.IsZero() {
+		named = "pane " + name.String()
+	}
+	m.reloading = fmt.Sprintf("Reload %s, or the whole %s window? (p/w, anything else cancels)", named, window.Name())
+	return m
+}
+
+// reloadAnswered is m after key answers what to reload: p the pane, w its
+// window, anything else nothing.
+func (m browser) reloadAnswered(key string) browser {
+	m.reloading = ""
+	project := m.shown()[m.cursor].Name()
+	switch {
+	case key == "p" && m.reloadsPane:
+		m.choice = app.Choice{Action: app.ActionReloadPane, Project: project, Pane: m.reloadPane}
+	case key == "w":
+		m.choice = app.Choice{Action: app.ActionReloadWindow, Project: project, Pane: m.reloadPane}
+	default:
+		m.notice = app.Telling("Nothing done.")
+	}
+	return m
+}
+
 // answered is m after key answers the question it asks: y or enter yes,
 // anything else no.
 func (m browser) answered(key string) (tea.Model, tea.Cmd) {
@@ -859,9 +912,11 @@ var (
 	// interruptKey i when the selected project's session can be previewed,
 	// or, in the task list, when the selected task runs.
 	interruptKey = keyTold{"i", "interrupt"}
-	taskKey      = keyTold{"t", "tasks"}
-	configKey    = keyTold{"y", "config"}
-	drawingKey   = keyTold{"y", "drawing"}
+	// reloadKey R when the selected project's session can be previewed.
+	reloadKey  = keyTold{"R", "reload"}
+	taskKey    = keyTold{"t", "tasks"}
+	configKey  = keyTold{"y", "config"}
+	drawingKey = keyTold{"y", "drawing"}
 	// previewKey p, or previewDrawingKey while the preview is shown, when
 	// the selected project's session can be previewed.
 	previewKey        = keyTold{"p", "preview"}
@@ -874,6 +929,7 @@ var (
 var (
 	answeringKeys = []keyTold{{"y or enter", "yes"}, {"any other key", "no"}}
 	waitingKeys   = []keyTold{{"ctrl+c twice", "leave the browser"}}
+	reloadingKeys = []keyTold{{"p", "pane"}, {"w", "window"}, {"any other key", "cancel"}}
 )
 
 var taskingKeys = []keyTold{{"enter", "run, go"}, {"r", "run"}, {"w", "throwaway"}, {"esc", "back"}, {"q", "quit"}}
@@ -905,6 +961,13 @@ func (m browser) keys() (string, []hotspot) {
 	case m.waiting:
 		line, _ := m.theme.keys(waitingKeys) // nor while waiting
 		return cut(line, nil, m.width)
+	case m.reloading != "":
+		told := reloadingKeys
+		if !m.reloadsPane {
+			told = told[1:]
+		}
+		line, _ := m.theme.keys(told) // nor while asking what to reload
+		return cut(line, nil, m.width)
 	case m.filtering:
 		line, told = "/"+m.filter+m.theme.muted.Render("▏")+keysGap, typingKeys
 	case m.filter != "":
@@ -921,7 +984,7 @@ func (m browser) keys() (string, []hotspot) {
 		told = slices.Insert(slices.Clone(told), len(told)-2, rerunKey)
 	}
 	if !m.filtering && len(m.shown()) > 0 && m.shown()[m.cursor].Previewable() {
-		told = slices.Insert(slices.Clone(told), len(told)-2, interruptKey)
+		told = slices.Insert(slices.Clone(told), len(told)-2, interruptKey, reloadKey)
 	}
 	if !m.filtering && len(m.tasksShown()) > 0 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, taskKey)

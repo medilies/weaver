@@ -1177,25 +1177,33 @@ func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defau
 		}
 	}
 	for i, pane := range panes {
-		for _, cmd := range pane.Before() {
-			if err := t.typeCommand(ids[i], cmd.String(), true); err != nil {
-				return err
-			}
-		}
-		if pane.Clears() {
-			if err := t.typeCommand(ids[i], clearLine(pane), true); err != nil {
-				return err
-			}
-		}
-		if cmd, ok := pane.Startup().Command(); ok {
-			if err := t.typeCommand(ids[i], cmd.String(), pane.Startup().Submits()); err != nil {
-				return err
-			}
+		if err := t.startUp(ids[i], pane); err != nil {
+			return err
 		}
 	}
 	if focused := window.FocusedPane(); focused > 0 {
 		_, err := t.run("select-pane", "-t", ids[focused])
 		return err
+	}
+	return nil
+}
+
+// startUp types into the pane id what pane runs once started: those to
+// run first, clear and the note when the pane clears, then the startup
+// command.
+func (t Tmux) startUp(id string, pane domain.PanePlan) error {
+	for _, cmd := range pane.Before() {
+		if err := t.typeCommand(id, cmd.String(), true); err != nil {
+			return err
+		}
+	}
+	if pane.Clears() {
+		if err := t.typeCommand(id, clearLine(pane), true); err != nil {
+			return err
+		}
+	}
+	if cmd, ok := pane.Startup().Command(); ok {
+		return t.typeCommand(id, cmd.String(), pane.Startup().Submits())
 	}
 	return nil
 }

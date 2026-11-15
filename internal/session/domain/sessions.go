@@ -149,6 +149,28 @@ type SessionLauncher interface {
 	Restore(name ProjectName, placements []WindowPlacement) error
 }
 
+// SessionReloader rebuilds panes and windows of projects' running
+// sessions as their configs say now, ending what runs in them.
+// Infrastructure provides the implementation.
+type SessionReloader interface {
+	SessionFinder
+	// ReloadPane restarts the pane at index of window in place, its size
+	// and position kept, as opening the project starts it. An error
+	// wrapping ErrPaneNotRunning when the session lacks the pane, or
+	// ErrPaneRunsWeaver when weaver runs in it.
+	ReloadPane(project ProjectName, window WindowPlan, index int) error
+	// ReloadWindow replaces window, in the project's running session,
+	// with one built as opening the project builds it, at the same index,
+	// and the current window still when it was. The throwaway windows of
+	// its tasks are left alone. An error wrapping ErrWindowNotRunning when
+	// the session lacks it, or ErrPaneRunsWeaver when weaver runs in one
+	// of its panes.
+	ReloadWindow(project ProjectName, window WindowPlan) error
+	// Restore adds windows to the project's running session, each where
+	// its placement says, as SessionLauncher does.
+	Restore(name ProjectName, placements []WindowPlacement) error
+}
+
 // SessionLister lists running tmux sessions. Infrastructure provides the
 // implementation.
 type SessionLister interface {

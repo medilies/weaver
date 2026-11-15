@@ -248,6 +248,41 @@ func TestInterruptPane(t *testing.T) {
 	h.sees("nothing to interrupt")
 }
 
+// TestReload: `shop` started: `weave`, select `shop`, →, `R`, `p`, then
+// `R`, `w`, then `R`, `x`.
+//
+// `R` asks `Reload pane logs, or the whole api window?`; `p` restarts
+// `logs` in place, its process new, and says `Reloaded api › logs.`; `w`
+// replaces `api` at its index and says `Reloaded api.`; `x` does nothing.
+func TestReload(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	logs := h.logsIdle()
+	pid := h.tmux("display", "-p", "-t", logs, "#{pane_pid}")
+	index := h.tmux("display", "-p", "-t", "=shop:api", "#{window_index}")
+	h.browse("shop")
+	h.keys("Right")
+	h.sees("R reload")
+
+	h.keys("R")
+	h.sees("Reload pane logs, or the whole api window?")
+	h.sees("p pane")
+	h.keys("p")
+	h.sees("Reloaded api › logs.")
+	if now := h.tmux("display", "-p", "-t", logs, "#{pane_pid}"); now == pid {
+		h.fatal("logs still runs process %s", pid)
+	}
+
+	h.keys("R", "w")
+	h.sees("Reloaded api.")
+	if now := h.tmux("display", "-p", "-t", "=shop:api", "#{window_index}"); now != index {
+		h.fatal("api is at index %s, was %s", now, index)
+	}
+
+	h.keys("R", "x")
+	h.sees("Nothing done.")
+}
+
 // TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
 // `weave`, select `shop`, `t`, `echo hi`, Enter, `y`.
 //

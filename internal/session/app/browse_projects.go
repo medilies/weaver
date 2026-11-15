@@ -174,6 +174,7 @@ type BrowseProjects struct {
 	run       RunTask
 	rerun     RerunCommand
 	interrupt Interrupt
+	reload    Reload
 }
 
 // NewBrowseProjects constructs the use case against its ports and the use
@@ -192,11 +193,12 @@ func NewBrowseProjects(
 	run RunTask,
 	rerun RerunCommand,
 	interrupt Interrupt,
+	reload Reload,
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, projects: projects, documents: documents, workspace: workspace,
 		sessions: sessions, list: list, open: open, bind: bind, edit: edit, kill: kill, run: run, rerun: rerun,
-		interrupt: interrupt,
+		interrupt: interrupt, reload: reload,
 	}
 }
 
@@ -605,6 +607,14 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		return name, notice, err
 	case ActionInterruptPane:
 		notice, err := uc.interrupt.HandlePane(name, choice.Pane)
+		return name, notice, err
+	case ActionReloadPane:
+		uc.browser.Working(fmt.Sprintf("Reloading %s…", choice.Pane.Window))
+		notice, err := uc.reload.HandlePane(name, choice.Pane)
+		return name, notice, err
+	case ActionReloadWindow:
+		uc.browser.Working(fmt.Sprintf("Reloading %s…", choice.Pane.Window))
+		notice, err := uc.reload.HandleWindow(name, choice.Pane.Window)
 		return name, notice, err
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)

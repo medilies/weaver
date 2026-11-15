@@ -122,6 +122,7 @@ or that leaves a quote open, marks its pane.
 | tab or shift+tab | select the next or previous pane of the selected window, in the pane list's order |
 | r | rerun the selected pane's command once it exited: typed into the pane again, as a task is, then you are put in that pane. Only in a session weaver started, on a pane run with `command`, not `prefill` |
 | i | interrupt what runs in the selected pane: ctrl+c typed into it, as if you pressed it there; the browser stays. Only in a session weaver started, never the pane the browser runs in. A pane idle at its prompt has nothing to interrupt |
+| R | reload the selected pane or its whole window, as its config says now, ending what runs there; the status line asks which, `p` or `w`, any other key cancelling. A pane restarts in place; a window is rebuilt where it is, and one the session lacks is restored. The browser stays. Only in a session weaver started, never the pane the browser runs in or its window |
 | p | switch between the preview of the selected window and its drawing, for as long as the browser stays open. Only in a session weaver started |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing; enter, r or w run it, enter going to a ● task instead, and i interrupts a ● task (see [Tasks](#tasks)); esc goes back |
@@ -136,8 +137,8 @@ or that leaves a quote open, marks its pane.
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc hides the config, then clears the filter, first) |
 
-After starting, binding, editing, killing, deleting, running a task or
-interrupting, the list
+After starting, binding, editing, killing, deleting, running a task,
+interrupting or reloading, the list
 comes back with what happened in the status line, a failure in red after
 ✗, the filter kept while it shows the project acted on. The browser
 stays on screen while the action runs, unless the action needs the

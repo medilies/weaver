@@ -114,6 +114,12 @@ const (
 	// ActionInterruptPane types ctrl+c into the chosen pane of the chosen
 	// project, the browser staying.
 	ActionInterruptPane
+	// ActionReloadPane reloads the chosen pane of the chosen project, the
+	// browser staying.
+	ActionReloadPane
+	// ActionReloadWindow reloads the window of the chosen pane of the
+	// chosen project, the browser staying.
+	ActionReloadWindow
 )
 
 // Choice is what the user picked in the project browser: an action, and

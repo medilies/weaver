@@ -17,13 +17,34 @@ import (
 // asked to run.
 type fakeTasks struct {
 	*fakeSessions
-	busy    map[string]bool // "window/index"
-	weaver  string          // the pane weaver runs in, "window/index"
-	typed   []string        // "window/index: command"
-	apart   []string        // "throwaway window in dir: command"
-	landing []bool          // whether each run landed there
-	reached []string        // the places of the running commands reached
-	stopped []string        // "window/index" or a running command's place, interrupted
+	busy     map[string]bool // "window/index"
+	weaver   string          // the pane weaver runs in, "window/index"
+	typed    []string        // "window/index: command"
+	apart    []string        // "throwaway window in dir: command"
+	landing  []bool          // whether each run landed there
+	reached  []string        // the places of the running commands reached
+	stopped  []string        // "window/index" or a running command's place, interrupted
+	reloaded []string        // "window/index" or "window", reloaded
+	gone     map[string]bool // "window/index", panes the session lacks
+}
+
+func (f *fakeTasks) ReloadPane(_ domain.ProjectName, window domain.WindowPlan, index int) error {
+	if paneKey(window, index) == f.weaver {
+		return domain.ErrPaneRunsWeaver
+	}
+	if f.gone[paneKey(window, index)] {
+		return domain.ErrPaneNotRunning
+	}
+	f.reloaded = append(f.reloaded, paneKey(window, index))
+	return nil
+}
+
+func (f *fakeTasks) ReloadWindow(_ domain.ProjectName, window domain.WindowPlan) error {
+	if strings.HasPrefix(f.weaver, window.Name().String()+"/") {
+		return domain.ErrPaneRunsWeaver
+	}
+	f.reloaded = append(f.reloaded, window.Name().String())
+	return nil
 }
 
 func (f *fakeTasks) Interrupt(_ domain.ProjectName, window domain.WindowPlan, index int) error {
