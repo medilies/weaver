@@ -72,22 +72,6 @@ which does each ([ADR 0003](adr/0003-edit-list-and-show-leave-the-cli.md)).
 - Their names are still reserved, so adding one back breaks no config.
   Bring back only the one asked for, and its terminal scenario.
 
-### A time limit on tmux calls (S)
-
-**Use**: a tmux server that stops answering, under load or stuck,
-freezes weave with no word: `Tmux.run` waits as long as tmux does. In
-the browser, the preview and the task list's ● marks then stop
-refreshing silently, since a tick doesn't ask again while an ask is
-unanswered; elsewhere `weave` hangs.
-
-- `exec.CommandContext` with a time limit in `Tmux.run`, the error
-  saying tmux didn't answer in time. One place, every call covered.
-- The limit must leave room for slow calls that are fine: `Start` on a
-  large project, `capture-pane` of a busy pane. A few seconds, the same
-  for all, until a call needs more.
-- In the browser, a capture that times out is a failure like any other:
-  told once, tried again on the next tick.
-
 ### A clean shutdown when killing (M)
 
 **Use**: a dev server leaves state behind (a lock file, a stale PID,
