@@ -243,3 +243,21 @@ func TestBrowserKeepsFilterAfterForm(t *testing.T) {
 	h.sees("/notes")
 	h.gone("  shop")
 }
+
+// TestClickAddsWindow: edit `notes`, click `+ window`, Enter, `logs`,
+// Enter.
+//
+// The windows card offers `enter names a new window`, and the window list
+// then reads `code   shell   logs   + window`.
+func TestClickAddsWindow(t *testing.T) {
+	h := start(t)
+	h.edit("notes")
+
+	h.clicks("+ window")
+
+	h.sees("enter names a new window")
+	h.keys("Enter")
+	h.types("logs")
+	h.keys("Enter")
+	h.seesLoosely("code shell logs + window")
+}

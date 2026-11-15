@@ -49,8 +49,15 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: test/terminal/go.sum
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux
-      - run: go test -tags terminal .
+      - run: go test -tags terminal . -traces "$RUNNER_TEMP/traces"
         working-directory: test/terminal
+      # A failed test's trace: open trace.html, or read trace.md.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: terminal-traces
+          path: ${{ runner.temp }}/traces
+          if-no-files-found: ignore
 
   build:
     runs-on: ubuntu-latest

@@ -6,8 +6,11 @@ package terminal
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +30,7 @@ var (
 	keep     = flag.Bool("keep", false, "keep a failed test's directory and tmux server")
 	shots    = flag.String("shots", "", "write a PNG of the screen each test ends on to DIR")
 	record   = flag.String("record", "", "write a GIF of each test's screen, from start to end, to DIR")
+	traces   = flag.String("traces", "", "write a trace of each failed test to DIR")
 )
 
 // weave is the binary under test, set by TestMain.
@@ -80,12 +84,7 @@ type harness struct {
 func start(t *testing.T) *harness {
 	t.Helper()
 	t.Parallel()
-	// Not t.TempDir(): its long paths can pass the 108 bytes a socket's
-	// path is limited to.
-	dir, err := os.MkdirTemp("/tmp", "wvt-")
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir := testDir(t)
 	h := &harness{t: t, dir: dir, sock: filepath.Join(dir, "tmux.sock")}
 	tmuxBin, _ := exec.LookPath("tmux")
 	// Every tmux command and the client run in the test's environment,
@@ -102,7 +101,11 @@ func start(t *testing.T) *harness {
 
 	h.tmux("-f", filepath.Join(dir, "tmux.conf"), "new-session", "-d", "-s", "term",
 		"-x", fmt.Sprint(cols), "-y", fmt.Sprint(rows), "bash", "--norc", "--noprofile")
-	screen, err := tuitest.Ephemeral("weave", tuitest.ClientOptions{})
+	options := tuitest.ClientOptions{}
+	if *traces != "" {
+		options.Trace = &tuitest.TraceOptions{Mode: tuitest.TraceOnFailure, Directory: *traces}
+	}
+	screen, err := tuitest.Ephemeral("weave", options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,6 +128,26 @@ func start(t *testing.T) *harness {
 	h.typed("command -v weave")
 	h.sees(weave)
 	return h
+}
+
+// testDir makes the test's directory, /tmp/wvt- and 8 hex digits: not
+// t.TempDir(), whose long paths can pass the 108 bytes a socket's path is
+// limited to, and of one length, so that snapshots can hide it without
+// moving what is aligned after it.
+func testDir(t *testing.T) string {
+	t.Helper()
+	for range 100 {
+		dir := fmt.Sprintf("/tmp/wvt-%08x", rand.Uint32())
+		err := os.Mkdir(dir, 0o700)
+		if err == nil {
+			return dir
+		}
+		if !errors.Is(err, fs.ErrExist) {
+			t.Fatal(err)
+		}
+	}
+	t.Fatal("no free test directory under /tmp")
+	return ""
 }
 
 // files writes the home, the sample projects and tmux's config.
@@ -153,7 +176,7 @@ func (h *harness) files() {
 	h.write("home/.bash_profile", ". ~/.bashrc\n")
 	h.write("home/.hushlogin", "")
 	bash, _ := exec.LookPath("bash")
-	h.write("tmux.conf", "set -g default-terminal tmux-256color\nset -g default-shell "+bash+"\nset -g mouse on\nset -g status-right ''\n")
+	h.write("tmux.conf", "set -g default-terminal tmux-256color\nset -g default-shell "+bash+"\nset -g mouse on\nset -g status-right ''\nset -g automatic-rename off\n")
 }
 
 func (h *harness) write(name, content string) {
@@ -175,17 +198,17 @@ func (h *harness) clean() {
 			h.t.Logf("screenshot: %v", err)
 		}
 	}
+	if h.screen != nil {
+		// A failed test's trace is kept, with -traces.
+		if err := h.screen.Close(tuitest.CloseOptions{Failed: tuitest.Ptr(h.t.Failed())}); err != nil {
+			h.t.Logf("closing the terminal: %v", err)
+		}
+	}
 	if h.t.Failed() && *keep {
 		h.t.Logf("kept %s; look with: tmux -S %s attach", h.dir, h.sock)
-		if h.screen != nil {
-			h.screen.CloseQuiet()
-		}
 		return
 	}
 	_ = exec.Command("tmux", "-S", h.sock, "kill-server").Run()
-	if h.screen != nil {
-		h.screen.CloseQuiet()
-	}
 	_ = os.RemoveAll(h.dir)
 }
 
@@ -304,13 +327,15 @@ func (h *harness) browse(project string) {
 	h.t.Helper()
 	h.promptIn(h.here())
 	h.typed("clear; weave")
-	h.sees("q quit")
+	h.sees("enter open")
 	if project == "" {
 		return
 	}
 	h.keys("/")
 	h.types(project)
 	h.keys("Enter")
+	// The filter kept, not still typed: the key line is the browser's.
+	h.sees("/" + project + "  enter open")
 	h.sees(project + ".yml")
 }
 
@@ -422,8 +447,14 @@ func layoutProblem(screen string) string {
 					break
 				}
 				if at(bottom, x) != '│' || at(bottom, right) != '│' {
-					return fmt.Sprintf("the card at line %d, column %d has a broken side at line %d", y+1, x+1, bottom+1)
+					break
 				}
+			}
+			if bottom < len(grid) && at(bottom, x) != '╰' {
+				if cutOff(grid, bottom, x, right) {
+					continue
+				}
+				return fmt.Sprintf("the card at line %d, column %d has a broken side at line %d", y+1, x+1, bottom+1)
 			}
 			if bottom == len(grid) || at(bottom, right) != '╯' {
 				return fmt.Sprintf("the card at line %d, column %d isn't closed under its top", y+1, x+1)
@@ -573,4 +604,78 @@ func (h *harness) seesLoosely(text string) {
 	if err := loose.Expect(tuitest.LocatorExpectOptions{}); err != nil {
 		h.fatal("%q never showed", text)
 	}
+}
+
+// cutOff is whether a card whose sides stop at line bottom is cut by a
+// scrolled screen's edge: both sides stop there, and nothing below
+// carries on either.
+func cutOff(grid [][]rune, bottom, left, right int) bool {
+	for y := bottom; y < len(grid); y++ {
+		for _, x := range []int{left, right} {
+			if x < len(grid[y]) && strings.ContainsRune("│╰╯", grid[y][x]) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// --- Snapshots --------------------------------------------------------------
+
+var update = flag.Bool("update", false, "rewrite the snapshots in testdata/snapshots")
+
+// testDirShown stands for the test's directory in snapshots, as long as it.
+const testDirShown = "/tmp/wvt-XXXXXXXX"
+
+// matchesSnapshot fails the test when the screen isn't the one in
+// testdata/snapshots/<name>.txt, the test's directory hidden; -update
+// rewrites it. The layout is checked too.
+func (h *harness) matchesSnapshot(name string) {
+	h.t.Helper()
+	h.laidOut()
+	screen, err := h.screen.Text(tuitest.TextOptions{})
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	lines := strings.Split(strings.ReplaceAll(screen, h.dir, testDirShown), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " ")
+	}
+	got := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	path := filepath.Join("testdata", "snapshots", name+".txt")
+	if *update {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			h.t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+			h.t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		h.t.Fatalf("no snapshot %s: run with -update to write it", path)
+	}
+	if string(want) != got {
+		h.t.Fatalf("the screen isn't snapshot %s; run with -update to accept it\n%s", path, lineDiff(string(want), got))
+	}
+}
+
+// lineDiff is the lines of want and got that differ, by number.
+func lineDiff(want, got string) string {
+	w, g := strings.Split(want, "\n"), strings.Split(got, "\n")
+	var diff []string
+	for i := range max(len(w), len(g)) {
+		var a, b string
+		if i < len(w) {
+			a = w[i]
+		}
+		if i < len(g) {
+			b = g[i]
+		}
+		if a != b {
+			diff = append(diff, fmt.Sprintf("line %d\n  want | %s\n  got  | %s", i+1, a, b))
+		}
+	}
+	return strings.Join(diff, "\n")
 }

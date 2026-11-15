@@ -11,6 +11,8 @@ go test -tags terminal . -run TestRerun           # some
 go test -tags terminal . -record /tmp/rec         # a GIF of each test's screen, to watch afterwards
 go test -tags terminal . -shots /tmp/shots        # a PNG of the screen each test ends on
 go test -tags terminal . -keep -run TestOpenGrid  # a failed test's tmux server kept, to look around
+go test -tags terminal . -traces /tmp/traces      # a trace of each failed test
+go test -tags terminal . -run LooksAsBefore -update  # the snapshots rewritten, to accept a change of look
 golangci-lint run --build-tags terminal ./...     # the lint CI runs on it
 ```
 
@@ -23,6 +25,12 @@ A failure says what never showed, or what was found instead of what was expected
 ```
 
 A failure is a bug in weave only once the test's keys are known to be the right ones: run it alone, with `-keep`, and look.
+
+A failed test's trace, with `-traces`, holds `trace.html` to open, `session.cast` to replay with `asciinema play`, and `trace.md`, what was expected and found, for an agent to read. CI keeps them as the `terminal-traces` artifact of a failed run.
+
+## Snapshots
+
+The `LooksAsBefore` tests, in [`snapshots_test.go`](../../test/terminal/snapshots_test.go), compare a whole screen with its text in `testdata/snapshots`: the browser on `notes` at 160x45 and at 80x24, and the config form on `notes`. Every change of look fails them: rewrite them with `-update`, and the diff of the snapshots is what to review. The test's directory shows as `/tmp/wvt-XXXXXXXX`, of the same length, so that what is aligned after it doesn't move. Keep them few, for screens worth seeing whole; check anything else with `sees` and the like.
 
 ## Before and after a release
 
@@ -74,7 +82,7 @@ The agent's shell usually runs inside the user's tmux, with `$TMUX` set, and `tm
 
 ## Scenarios
 
-Each is a test, in [`scenarios_test.go`](../../test/terminal/scenarios_test.go), or [`form_test.go`](../../test/terminal/form_test.go) for the config form, named for what it checks, with a comment above it saying what it does, then what it expects. List them, each with how it starts, with `grep -h '^// Test' test/terminal/*_test.go`. Their comments use a shorthand: *started* means started with `weave <project> --detached` from `term`; *select* means with the filter; *edit* means `e` on the project, selected in `weave`; *from outside* means a tmux command the test sends, not keys a user types.
+Each is a test, in [`scenarios_test.go`](../../test/terminal/scenarios_test.go), [`form_test.go`](../../test/terminal/form_test.go) for the config form, or [`snapshots_test.go`](../../test/terminal/snapshots_test.go) for whole screens, named for what it checks, with a comment above it saying what it does, then what it expects. List them, each with how it starts, with `grep -h '^// Test' test/terminal/*_test.go`. Their comments use a shorthand: *started* means started with `weave <project> --detached` from `term`; *select* means with the filter; *edit* means `e` on the project, selected in `weave`; *from outside* means a tmux command the test sends, not keys a user types.
 
 ## Sample projects
 

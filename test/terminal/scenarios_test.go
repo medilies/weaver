@@ -538,3 +538,37 @@ func TestBrowserAsksAboutBusyPaneInPlace(t *testing.T) {
 		h.fatal("r left the browser for %s", on)
 	}
 }
+
+// TestClickPicksWindow: `weave`, select `notes`, click `shell` in the
+// window list.
+//
+// `shell` is the window drawn: `2/2`.
+func TestClickPicksWindow(t *testing.T) {
+	h := start(t)
+	h.browse("notes")
+	h.sees("1/2")
+
+	h.clicks("shell")
+
+	h.sees("2/2")
+}
+
+// TestClickRunsTaskStaying: `notes` started: `weave`, select `notes`,
+// click `ls` in the task list.
+//
+// `ls` runs in `files`, `Running ls in code › files.` shows, and the
+// client stays in the browser.
+func TestClickRunsTaskStaying(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	files := h.paneOf("notes:code", "files")
+	h.browse("notes")
+
+	h.clicks("ls")
+
+	h.sees("Running ls in code › files.")
+	h.paneShows(files, "$ ls")
+	if on := h.clientOn(); on != "term" {
+		h.fatal("the click left the browser for %s", on)
+	}
+}
