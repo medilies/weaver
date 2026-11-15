@@ -64,7 +64,12 @@
         "run": { "$ref": "#/definitions/key", "description": "Browser's task list: run the selected task, staying. r unless set." },
         "throwaway": { "$ref": "#/definitions/key", "description": "Browser's task list: run the selected task in a throwaway window. w unless set." },
         "interrupt": { "$ref": "#/definitions/key", "description": "Browser: interrupt the selected pane, or the selected task in the task list. i unless set." },
-        "quit": { "$ref": "#/definitions/key", "description": "Browser: quit. q unless set." }
+        "quit": { "$ref": "#/definitions/key", "description": "Browser: quit. q unless set." },
+        "undo": { "$ref": "#/definitions/key", "description": "Config form: undo the last change. u unless set." },
+        "redo": { "$ref": "#/definitions/key", "description": "Config form: redo what was undone. ctrl+r unless set." },
+        "save": { "$ref": "#/definitions/key", "description": "Config form: save, after showing the diff. ctrl+s unless set." },
+        "move-up": { "$ref": "#/definitions/key", "description": "Config form: move the item, task or window the cursor is on up. K unless set." },
+        "move-down": { "$ref": "#/definitions/key", "description": "Config form: move the item, task or window the cursor is on down. J unless set." }
       }
     }
   },

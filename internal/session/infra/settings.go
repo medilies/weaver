@@ -42,6 +42,7 @@ type Settings struct {
 	editor       string
 	tmuxTimeout  time.Duration
 	browserKeys  map[string]string // the browser's keys set, by setting name
+	formKeys     map[string]string // the config form's keys set, by setting name, but the drawing's
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -151,6 +152,12 @@ type keysFile struct {
 	Throwaway *string `yaml:"throwaway"`
 	Interrupt *string `yaml:"interrupt"`
 	Quit      *string `yaml:"quit"`
+	// The config form's.
+	Undo     *string `yaml:"undo"`
+	Redo     *string `yaml:"redo"`
+	Save     *string `yaml:"save"`
+	MoveUp   *string `yaml:"move-up"`
+	MoveDown *string `yaml:"move-down"`
 }
 
 // written are the keys the file sets, by setting name, in the order the
@@ -163,6 +170,7 @@ func (k keysFile) written() []writtenKey {
 		{"kill", k.Kill}, {"delete", k.Delete}, {"rerun", k.Rerun}, {"reload", k.Reload},
 		{"preview", k.Preview}, {"config", k.Config}, {"tasks", k.Tasks}, {"filter", k.Filter},
 		{"run", k.Run}, {"throwaway", k.Throwaway}, {"interrupt", k.Interrupt}, {"quit", k.Quit},
+		{"undo", k.Undo}, {"redo", k.Redo}, {"save", k.Save}, {"move-up", k.MoveUp}, {"move-down", k.MoveDown},
 	}
 	return slices.DeleteFunc(all, func(w writtenKey) bool { return w.value == nil })
 }
@@ -277,7 +285,13 @@ func decodeSettings(raw []byte) (Settings, error) {
 			*into = key
 		}
 	}
-	if err := keys.free(); err != nil {
+	settings.formKeys = map[string]string{}
+	for _, action := range formActions {
+		if key, ok := set[action.field]; ok {
+			settings.formKeys[action.field] = key
+		}
+	}
+	if err := checkKeys(append(slices.Clone(drawingActions), formActions...), set, formFixedKeys); err != nil {
 		return Settings{}, err
 	}
 	settings.browserKeys = map[string]string{}
@@ -315,23 +329,4 @@ func parseColour(node *yaml.Node) (color.Color, error) {
 		}
 	}
 	return nil, fmt.Errorf("selected-colour: %w: %q (want an ANSI colour number, 0-255, or \"#rrggbb\")", ErrInvalidColour, value)
-}
-
-// free reports a drawing key the config form already uses, or two
-// drawing keys the same, naming both.
-func (k DrawingKeys) free() error {
-	taken := map[string]string{}
-	for key, does := range formKeys {
-		taken[key] = does
-	}
-	for _, key := range []struct{ field, value string }{
-		{"split-right", k.splitRight}, {"split-below", k.splitBelow}, {"remove", k.remove},
-		{"shrink", k.shrink}, {"grow", k.grow},
-	} {
-		if does, ok := taken[key.value]; ok {
-			return fmt.Errorf("keys.%s: %w: %q already does %s", key.field, ErrKeyTaken, key.value, does)
-		}
-		taken[key.value] = "keys." + key.field
-	}
-	return nil
 }

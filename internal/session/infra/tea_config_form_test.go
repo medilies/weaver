@@ -286,6 +286,20 @@ func TestUndoGoesBackAndRedoForward(t *testing.T) {
 	d.sees("● unsaved")
 }
 
+func TestUndoMovedByTheSettings(t *testing.T) {
+	d := editing(t, "notes", notesConfig)
+	d.form.keymap = newKeymap(formActions, map[string]string{"undo": "z"})
+	d.cursorTo("layout")
+	d.keys("right")
+	d.sees("z undo")
+
+	d.keys("u")
+	d.sees("● unsaved")
+	d.keys("z")
+
+	d.doesntSee("● unsaved")
+}
+
 func TestUndoWithNothingToUndoSaysSo(t *testing.T) {
 	d := editing(t, "notes", notesConfig)
 

@@ -181,9 +181,9 @@ func TestLoadSettings(t *testing.T) {
 	})
 
 	t.Run("refuse a key the config form already uses, saying what it does", func(t *testing.T) {
-		_, err := settingsIn(t, "keys:\n  remove: u\n")
-		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.remove: key taken: "u" already does undo`) {
-			t.Fatalf("got %v, want u refused as undo", err)
+		_, err := settingsIn(t, "keys:\n  remove: o\n")
+		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.remove: key taken: "o" already does add`) {
+			t.Fatalf("got %v, want o refused as add", err)
 		}
 	})
 
@@ -229,6 +229,26 @@ func TestBrowserKeys(t *testing.T) {
 		_, err := settingsIn(t, "keys:\n  quit: esc\n")
 		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.quit: key taken: "esc" already does go back`) {
 			t.Fatalf("got %v, want esc refused", err)
+		}
+	})
+}
+
+func TestFormKeys(t *testing.T) {
+	t.Run("move undo to the key set", func(t *testing.T) {
+		got, err := settingsIn(t, "keys:\n  undo: z\n")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		keys := newKeymap(formActions, got.formKeys)
+		if keys.pressed(inForm, "z") != "u" || keys.pressed(inForm, "u") != "" {
+			t.Fatal("want z undoing and u doing nothing")
+		}
+	})
+
+	t.Run("refuse a drawing key on a key the form's actions moved to", func(t *testing.T) {
+		_, err := settingsIn(t, "keys:\n  undo: x\n")
+		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.undo: key taken: "x" already does keys.remove`) {
+			t.Fatalf("got %v, want x refused as remove's", err)
 		}
 	})
 }

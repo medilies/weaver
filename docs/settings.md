@@ -91,10 +91,20 @@ tmux's keys unless set.
 | `grow` | make the selected pane larger | `L` |
 
 A key the config form already uses (the arrows, `h` `j` `k` `l`,
-`enter`, `o`, `d`, `J`, `K`, `u`, `ctrl+r`, `ctrl+s`, `esc`, `ctrl+c`)
-is refused, as are two drawing keys on the same key.
+`enter`, `o`, `d`, `esc`, `ctrl+c`, or one of the keys below) is
+refused, as are two drawing keys on the same key.
 weave reads only this file, never your tmux bindings: see
 [ADR 0001](adr/0001-drawing-keys-are-a-setting-not-read-from-tmux.md).
+
+### The config form
+
+| Setting | Does | Default |
+| --- | --- | --- |
+| `undo` | undo the last change | `u` |
+| `redo` | redo what was undone | `ctrl+r` |
+| `save` | save, after showing the diff | `ctrl+s` |
+| `move-up` | move the item, task or window the cursor is on up | `K` |
+| `move-down` | move it down | `J` |
 
 ### The browser
 

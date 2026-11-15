@@ -90,7 +90,7 @@ func (f TeaConfigForm) form(draft app.ProjectDraft) (configForm, error) {
 	}
 	model := configForm{
 		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
-		workspace: f.workspace, documents: f.documents, theme: f.settings.theme(), mouse: f.settings.mouse, drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
+		workspace: f.workspace, documents: f.documents, theme: f.settings.theme(), mouse: f.settings.mouse, keymap: newKeymap(formActions, f.settings.formKeys), drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
 	}
 	if !draft.NameStays {
 		model.focus.field = fieldName
@@ -155,7 +155,8 @@ type spot struct {
 // valid: a field being typed changes it only once enter keeps it.
 type configForm struct {
 	theme         theme
-	mouse         bool // whether it takes clicks
+	keymap        keymap // its keys, as the settings set them, but the drawing's
+	mouse         bool   // whether it takes clicks
 	drawingKeys   DrawingKeys
 	project       domain.Project
 	original      []byte // the project as its config writes it, to tell changes; none when unsaved
@@ -290,7 +291,11 @@ func (m configForm) answer(key string) (configForm, tea.Cmd) {
 // typed is m after msg, pressed while a field is typed: enter keeps
 // what is typed if it is valid, esc cancels it.
 func (m configForm) typed(msg tea.KeyPressMsg) (configForm, tea.Cmd) {
-	switch msg.String() {
+	key := msg.String()
+	if msg.Text == "" { // a key typing text is never an action while typing
+		key = m.keymap.pressed(inForm, key)
+	}
+	switch key {
 	case "enter":
 		return m.kept(), nil
 	case "esc":
@@ -362,15 +367,6 @@ func (m configForm) typedVar() (spot, bool) {
 	return spot{window: at.window, pane: at.pane, field: fieldEnv, item: index}, true
 }
 
-// formKeys are the keys press reads on a row, the drawing's aside, and
-// what they do: the drawing keys can't be any of them.
-var formKeys = map[string]string{
-	"up": "move", "down": "move", "left": "change", "right": "change",
-	"k": "move", "j": "move", "h": "change", "l": "change",
-	"enter": "edit", "o": "add", "d": "delete", "J": "reorder", "K": "reorder",
-	"u": "undo", "ctrl+r": "redo", "ctrl+s": "save", "esc": "leave", "ctrl+c": "leave",
-}
-
 // press is m after key, pressed on a row.
 func (m configForm) press(key string) (configForm, tea.Cmd) {
 	if m.focus.field == fieldDrawing {
@@ -378,7 +374,7 @@ func (m configForm) press(key string) (configForm, tea.Cmd) {
 			return next, cmd
 		}
 	}
-	switch key {
+	switch m.keymap.pressed(inForm, key) {
 	case "up", "k":
 		return m.moved(-1), nil
 	case "down", "j":
@@ -459,6 +455,9 @@ func (m configForm) replaced() ([]byte, bool, error) {
 // saving would replace a registered project's config, ↑↓ scroll.
 func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 	top := m.reviewing.top
+	if m.keymap.pressed(inForm, key) == "ctrl+s" {
+		key = "ctrl+s" // the save key, wherever the settings put it
+	}
 	switch key {
 	case "y", "Y", "enter", "ctrl+s":
 		m.saved = true
@@ -2304,24 +2303,26 @@ func (m configForm) toldKeys(told []keyTold) string {
 
 // keys are what the keys do, while typing or on a row.
 func (m configForm) keys() string {
-	told := []keyTold{{"↑↓", "move"}, {"enter", "edit"}, {"←→", "change"}, {"o", "add"}, {"d", "delete"}, {"J/K", "reorder"},
-		{"u", "undo"}, {"ctrl+r", "redo"}, {"ctrl+s", "save"}, {"esc", "leave"}}
+	undo, save := m.keymap.shown(inForm, "u"), m.keymap.shown(inForm, "ctrl+s")
+	reorder := m.keymap.shown(inForm, "J") + "/" + m.keymap.shown(inForm, "K")
+	told := []keyTold{{"↑↓", "move"}, {"enter", "edit"}, {"←→", "change"}, {"o", "add"}, {"d", "delete"}, {reorder, "reorder"},
+		{undo, "undo"}, {m.keymap.shown(inForm, "ctrl+r"), "redo"}, {save, "save"}, {"esc", "leave"}}
 	note := ""
 	switch {
 	case m.focus.field == fieldDrawing && !m.editing && m.reviewing == nil:
 		k := m.drawingKeys
 		told = []keyTold{{"←→↑↓", "select"}, {k.splitRight, "split right"}, {k.splitBelow, "split below"}, {k.remove, "remove"},
-			{k.shrink + "/" + k.grow, "resize"}, {"enter", "edit"}, {"u", "undo"}, {"ctrl+s", "save"}, {"esc", "leave"}}
+			{k.shrink + "/" + k.grow, "resize"}, {"enter", "edit"}, {undo, "undo"}, {save, "save"}, {"esc", "leave"}}
 		if window, ok := m.windowAt(m.focus.window); ok {
 			if _, gridded := window.Grid(); gridded {
-				told = []keyTold{{"←→↑↓", "select"}, {"enter", "edit"}, {"u", "undo"}, {"ctrl+s", "save"}, {"esc", "leave"}}
+				told = []keyTold{{"←→↑↓", "select"}, {"enter", "edit"}, {undo, "undo"}, {save, "save"}, {"esc", "leave"}}
 				note = keysGap + m.theme.muted.Render("the window's areas place these panes")
 			}
 		}
 	case m.reviewing != nil:
 		told = []keyTold{{"↑↓", "scroll"}, {"y", "save"}, {"n", "back to the form"}}
 	case m.editing:
-		told = []keyTold{{"enter", "keep"}, {"esc", "cancel"}, {"ctrl+s", "save"}}
+		told = []keyTold{{"enter", "keep"}, {"esc", "cancel"}, {save, "save"}}
 		if m.edit.at.field == fieldCommand && m.edit.input.Value() == "" {
 			told = append([]keyTold{{"←→", "starts"}}, told...)
 		}

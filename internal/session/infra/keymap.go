@@ -40,6 +40,38 @@ var browserActions = []keyAction{
 	{"quit", "q", []string{inProjects, inTasks}},
 }
 
+// inForm is the config form's one list: an action's key is never
+// another's there, the drawing's keys included.
+const inForm = "the config form"
+
+// formActions are the config form's keys the settings can change, but
+// for the drawing keys, which DrawingKeys holds.
+var formActions = []keyAction{
+	{"undo", "u", []string{inForm}},
+	{"redo", "ctrl+r", []string{inForm}},
+	{"save", "ctrl+s", []string{inForm}},
+	{"move-up", "K", []string{inForm}},
+	{"move-down", "J", []string{inForm}},
+}
+
+// drawingActions are the drawing keys, for checking them with the
+// config form's other keys.
+var drawingActions = []keyAction{
+	{"split-right", "%", []string{inForm}},
+	{"split-below", "\"", []string{inForm}},
+	{"remove", "x", []string{inForm}},
+	{"shrink", "H", []string{inForm}},
+	{"grow", "L", []string{inForm}},
+}
+
+// formFixedKeys are the config form's keys no setting changes, and what
+// they do.
+var formFixedKeys = map[string]string{
+	"up": "move", "down": "move", "k": "move", "j": "move",
+	"left": "change", "right": "change", "h": "change", "l": "change",
+	"enter": "edit", "o": "add", "d": "delete", "esc": "leave", "ctrl+c": "leave",
+}
+
 // browserFixedKeys are the browser's keys no setting changes, and what
 // they do.
 var browserFixedKeys = map[string]string{

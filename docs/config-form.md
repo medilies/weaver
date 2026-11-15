@@ -57,6 +57,9 @@ are kept; going back lets you type another name.
 
 ## Keys
 
+The keys below are the defaults: the [settings](settings.md#keys) can
+move undo, redo, save, J, K and the drawing's keys to others.
+
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a field |

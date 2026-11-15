@@ -660,7 +660,8 @@ func TestGridColumnInCells(t *testing.T) {
 // `weave completion bash` and `weave notes --detached`.
 //
 // `weave` prints
-// `Error: …/settings.yml: keys.remove: key taken: "u" already does undo`
+// `Error: …/settings.yml: keys.remove: key taken: "u" already does
+// keys.undo in the config form`
 // and exits 1 before the browser opens, leaving the config as it was; the
 // others run as usual, and `notes` starts.
 func TestBadSettingsStopOnlyTheBrowser(t *testing.T) {
@@ -671,7 +672,7 @@ func TestBadSettingsStopOnlyTheBrowser(t *testing.T) {
 
 	h.typed("clear; weave; echo exit=$?")
 
-	h.sees("Error: " + h.dir + `/cfg/weaver/settings.yml: keys.remove: key taken: "u" already does undo`)
+	h.sees("Error: " + h.dir + `/cfg/weaver/settings.yml: keys.remove: key taken: "u" already does keys.undo in the config form`)
 	h.paneHasLine("=term:", "exit=1")
 	if n, _ := h.at("q quit").Count(); n > 0 {
 		h.fatal("the browser opened")
