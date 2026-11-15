@@ -310,6 +310,24 @@ func TestSaveKeyTypingTextIsNotOfferedWhileTyping(t *testing.T) {
 
 	d.doesntSee("S save")
 	d.sees("enter keep")
+	if value := d.form.edit.input.Value(); !strings.HasSuffix(value, "S") {
+		d.fatal("the field holds %q, want S typed into it", value)
+	}
+}
+
+func TestSaveKeyMovedSavesFromTheDiffAndCtrlSNoLonger(t *testing.T) {
+	d := editing(t, "notes", notesConfig)
+	d.form.keymap = newKeymap(formActions, map[string]string{"save": "ctrl+w"})
+	d.cursorTo("layout")
+	d.keys("right")
+
+	d.keys("ctrl+s")
+	d.doesntSee("back to the form")
+	d.keys("ctrl+w")
+	d.sees("back to the form")
+	d.keys("ctrl+w")
+
+	d.saved()
 }
 
 func TestUndoWithNothingToUndoSaysSo(t *testing.T) {

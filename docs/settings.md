@@ -82,7 +82,7 @@ such as `space`, `f5`, `ctrl+x` or `alt+s`. A key written otherwise
 nothing, and the keys line shows the new one.
 
 Moving, `enter`, `esc`, Tab and `ctrl+c` can't be changed, nor, in the
-config form, `o`, `d`, `y` and `n`. Two actions
+config form, `h`, `l`, `o`, `d`, `y` and `n`. Two actions
 available at once can't share a key: in the browser, those of the
 project list, or those of the task list.
 

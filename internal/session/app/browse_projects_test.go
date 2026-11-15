@@ -624,6 +624,20 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("builds again a project whose session started", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		s.sessions.running["blog"] = owned(t, "blog")
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "shop")) {
+			if project.Name().String() == "blog" && !project.Previewable() {
+				t.Fatal("got blog not previewable, want its overview built again with its session")
+			}
+		}
+	})
+
 	t.Run("leaves the projects as they were when the sessions can't be listed", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		if err := s.browse(answer(true)); err != nil {

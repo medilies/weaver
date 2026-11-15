@@ -292,7 +292,7 @@ func (m configForm) answer(key string) (configForm, tea.Cmd) {
 // what is typed if it is valid, esc cancels it.
 func (m configForm) typed(msg tea.KeyPressMsg) (configForm, tea.Cmd) {
 	key := msg.String()
-	if msg.Text == "" { // a key typing text is never an action while typing
+	if !typesText(key) { // a key typing text is never an action while typing
 		key = m.keymap.pressed(inForm, key)
 	}
 	switch key {
@@ -459,7 +459,7 @@ func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 	case "ctrl+s":
 		key = "ctrl+s" // the save key, wherever the settings put it
 	case "":
-		return m, nil // ctrl+s, the save key moved elsewhere
+		return m, nil // an action's own key the settings moved, ctrl+s among them
 	}
 	switch key {
 	case "y", "Y", "enter", "ctrl+s":

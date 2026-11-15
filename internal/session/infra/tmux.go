@@ -452,7 +452,7 @@ func (t Tmux) Attach(name domain.ProjectName) error {
 }
 
 // Popup runs weave with args again in a tmux popup the size of the
-// client, in dir, with env, and waits for it to end. The popup closes
+// window, in dir, with env, and waits for it to end. The popup closes
 // when weave succeeds, and stays open on a failure, showing why. Inside the popup,
 // weave has no pane of its own, so it doesn't open another one. It
 // waits as long as the popup is open: tmux's limit doesn't apply.

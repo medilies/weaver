@@ -99,14 +99,18 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 	if _, err := t.run("kill-window", "-t", old); err != nil {
 		return err
 	}
+	if err := t.retie(project, window, oldPanes); err != nil {
+		return err
+	}
 	// swap-window makes the window swapped in current, -d or not.
 	if current == old {
 		current = created
 	}
-	if _, err := t.run("select-window", "-t", current); err != nil {
+	if now, err := t.run("display-message", "-p", "-t", session+":", "#{window_id}"); err != nil || now == current {
 		return err
 	}
-	return t.retie(project, window, oldPanes)
+	_, err = t.run("select-window", "-t", current)
+	return err
 }
 
 // windowTagged is the ID of the first window of the project's session
