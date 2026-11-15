@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -458,4 +460,100 @@ func (h *harness) switchTo(session, window string) {
 func (h *harness) here() string {
 	out, _ := h.tmuxErr("list-clients", "-F", "#{pane_id}")
 	return out
+}
+
+// --- Forms, files and panes -------------------------------------------------
+
+// step presses keys and waits until the screen changes.
+func (h *harness) step(keys ...string) {
+	h.t.Helper()
+	before, _ := h.screen.Text(tuitest.TextOptions{})
+	h.keys(keys...)
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
+		if now, _ := h.screen.Text(tuitest.TextOptions{}); now != before {
+			return
+		}
+	}
+	h.fatal("%q changed nothing", keys)
+}
+
+// cursorTo presses Down until the form's › is on a row matching pattern.
+func (h *harness) cursorTo(pattern string) {
+	h.t.Helper()
+	row := regexp.MustCompile(`› +` + pattern)
+	for range 60 {
+		if screen, _ := h.screen.Text(tuitest.TextOptions{}); row.MatchString(screen) {
+			return
+		}
+		h.step("Down")
+	}
+	h.fatal("the cursor never reached %q", pattern)
+}
+
+// edit opens the project's config form from the browser's e.
+func (h *harness) edit(project string) {
+	h.t.Helper()
+	h.browse(project)
+	h.keys("e")
+	h.sees("↑↓ move")
+}
+
+// settings writes settings.yml.
+func (h *harness) settings(lines ...string) {
+	h.t.Helper()
+	h.write("cfg/weaver/settings.yml", strings.Join(lines, "\n")+"\n")
+}
+
+// config is the project's config as stored.
+func (h *harness) config(project string) string {
+	h.t.Helper()
+	config, err := os.ReadFile(filepath.Join(h.dir, "cfg/weaver/projects", project+".yml"))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return string(config)
+}
+
+// zoom zooms the pane named label in a session's window.
+func (h *harness) zoom(window, label string) {
+	h.t.Helper()
+	h.tmux("resize-pane", "-Z", "-t", h.paneOf(window, label))
+}
+
+// paneShows waits until a pane, shown or not, holds a line containing text.
+func (h *harness) paneShows(pane, text string) {
+	h.t.Helper()
+	h.eventually(fmt.Sprintf("%s shows %q", pane, text), func() bool {
+		out, _ := h.tmuxErr("capture-pane", "-p", "-t", pane)
+		return strings.Contains(out, text)
+	})
+}
+
+// paneHasLine waits until a pane holds the line, whole.
+func (h *harness) paneHasLine(pane, line string) {
+	h.t.Helper()
+	h.eventually(fmt.Sprintf("%s has the line %q", pane, line), func() bool {
+		out, _ := h.tmuxErr("capture-pane", "-p", "-t", pane)
+		return slices.Contains(strings.Split(out, "\n"), line)
+	})
+}
+
+// drawnIn is whether a cell on the screen is drawn in the colour.
+func (h *harness) drawnIn(colour string) bool {
+	cells, err := h.screen.Cells(0, 0, cols, rows)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(cells, func(c tuitest.Cell) bool { return string(c.FG) == colour && strings.TrimSpace(c.Char) != "" })
+}
+
+// seesLoosely waits until text shows, any run of spaces in it matching
+// any other: for columns aligned to the longest value, such as a root
+// under the test's directory.
+func (h *harness) seesLoosely(text string) {
+	h.t.Helper()
+	loose := h.screen.GetByText(text, tuitest.TextSelectorOptions{Whitespace: tuitest.Normalize}).Any()
+	if err := loose.Expect(tuitest.LocatorExpectOptions{}); err != nil {
+		h.fatal("%q never showed", text)
+	}
 }

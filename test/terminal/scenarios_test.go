@@ -234,3 +234,204 @@ func TestPreviewOfZoomedWindowShowsZoomedPane(t *testing.T) {
 		return strings.Contains(screen, "notes.yml · preview") && strings.Contains(screen, "[ edit ]") && both.MatchString(screen)
 	})
 }
+
+// Scenario 3.
+func TestOpenRunsSetupAndLandsOnFocus(t *testing.T) {
+	h := start(t)
+	h.promptIn("term")
+
+	h.typed("clear; weave shop")
+
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
+	if landed := h.tmux("display", "-p", "-t", "=shop:", "#{window_name} #{@label}"); landed != "api back" {
+		h.fatal("the client lands in %q, not api back", landed)
+	}
+	logs, back := h.logsIdle(), h.paneOf("shop:api", "back")
+	for _, pane := range []string{logs, back} {
+		h.tmux("send-keys", "-t", pane, `echo "env=$APP_ENV $LOG"`, "Enter")
+	}
+	h.paneShows(logs, "env=staging info")
+	h.paneShows(back, "env=dev info")
+	h.paneShows("=term:", "setting up shop")
+}
+
+// Scenario 4.
+func TestExitedCommandWarns(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	h.logsIdle()
+	h.browse("shop")
+
+	h.keys("Right")
+
+	h.sees(`⚠ window "api", pane "logs": command exited: sleep 3`)
+	h.seesLoosely("APP_ENV=staging window api, over project's local")
+	h.sees("r rerun")
+	h.keys("Tab")
+	h.gone("r rerun")
+}
+
+// Scenario 7.
+func TestTaskRunStayingLeavesYouInBrowser(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	logs := h.logsIdle()
+	h.browse("shop")
+
+	h.keys("t", "r")
+
+	h.sees("● wait")
+	h.waitRuns(logs, "sleep", 5*time.Second)
+	if on := h.clientOn(); on != "term" {
+		h.fatal("r left the browser for %s", on)
+	}
+	h.tmux("send-keys", "-t", logs, "C-c")
+	h.gone("● wait")
+	h.sees("  wait")
+}
+
+// Scenario 8.
+func TestConfigShowsAsStored(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	h.browse("shop")
+
+	h.keys("y")
+
+	h.sees("setup: [echo setting up shop]")
+	h.keys("y")
+	h.sees("shop.yml · preview")
+	h.gone("setup: [echo setting up shop]")
+}
+
+// Scenario 13.
+func TestGridColumnInCells(t *testing.T) {
+	h := start(t)
+	h.promptIn("term")
+
+	h.typed("clear; weave notes")
+
+	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "notes" })
+	if window := h.tmux("display", "-p", "-t", "=notes:", "#{window_name}"); window != "code" {
+		h.fatal("the window is %q, not code", window)
+	}
+	if size := h.tmux("display", "-p", "-t", "=notes:code", "#{window_width}x#{window_height}"); size != "160x44" {
+		h.fatal("the window is %s, not 160x44", size)
+	}
+	widths := strings.ReplaceAll(h.tmux("list-panes", "-t", "=notes:code", "-F", "#{@label}=#{pane_width}"), "\n", " ")
+	if widths != "files=30 edit=129" {
+		h.fatal("the widths are %s, not files=30 edit=129", widths)
+	}
+}
+
+// Scenario 16.
+func TestBadSettingsStopOnlyTheBrowser(t *testing.T) {
+	h := start(t)
+	h.settings("keys: { remove: u }")
+	before := h.config("notes")
+	h.promptIn("term")
+
+	h.typed("clear; weave; echo exit=$?")
+
+	h.sees("Error: " + h.dir + `/cfg/weaver/settings.yml: keys.remove: key taken: "u" already does undo`)
+	h.paneHasLine("=term:", "exit=1")
+	if n, _ := h.at("q quit").Count(); n > 0 {
+		h.fatal("the browser opened")
+	}
+	if after := h.config("notes"); after != before {
+		t.Fatalf("the config changed:\n%s", after)
+	}
+	h.typed("weave --version >/dev/null && weave completion bash >/dev/null && echo both-ran")
+	h.paneHasLine("=term:", "both-ran")
+	h.started("notes")
+}
+
+// Scenario 22.
+func TestPreviewAndDrawingShareSelectedPane(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	h.browse("notes")
+	h.sees("notes.yml · preview")
+	h.sees("[ files ]")
+
+	h.keys("Tab")
+	h.sees("[ edit ]")
+	h.keys("p")
+	h.gone("· preview")
+	h.sees("[ edit ]")
+	h.keys("Tab")
+	h.sees("[ files ]")
+	h.keys("p")
+	h.sees("· preview")
+	h.sees("[ files ]")
+
+	h.keys("t")
+	h.sees("enter run, go")
+	h.keys("Down")
+	h.sees("[ edit ]")
+	h.keys("Up")
+	h.sees("[ files ]")
+}
+
+// Scenario 23.
+func TestKillUnzoomsFirst(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	h.zoom("notes:code", "edit")
+
+	h.typed("clear; weave kill notes")
+
+	h.eventually("notes ends", func() bool { return !h.running("notes") })
+	if !h.running("term") {
+		t.Fatal("term went with notes: the server crashed")
+	}
+}
+
+// Scenario 25.
+func TestTaskOfBrowsersOwnPaneRunsApart(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	h.switchTo("notes", "code")
+	h.zoom("notes:code", "files")
+	h.browse("notes")
+	h.keys("t")
+	h.sees("enter run, go")
+
+	h.keys("r")
+	h.sees("✗ files runs this browser: w runs ls in a throwaway window")
+	h.keys("w")
+
+	h.sees("Running ls in a throwaway window.")
+	h.eventually("a window ls opens", func() bool {
+		_, err := h.tmuxErr("display", "-p", "-t", "=notes:ls", "")
+		return err == nil
+	})
+	if window := h.tmux("display", "-p", "-t", "=notes:", "#{window_name}"); window != "code" {
+		h.fatal("the current window is %q, not code", window)
+	}
+	h.keys("Down", "r")
+	h.sees("Running echo saved in code › edit.")
+	if pane := h.activePane("notes"); pane != "files" {
+		h.fatal("the current pane is %q, not files", pane)
+	}
+}
+
+// Scenario 26.
+func TestBrowserAsksAboutBusyPaneInPlace(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	edit := h.paneOf("notes:code", "edit")
+	h.tmux("send-keys", "-t", edit, "sleep 300", "Enter")
+	h.waitRuns(edit, "sleep", 5*time.Second)
+	h.browse("notes")
+
+	h.keys("t", "Down", "r")
+
+	h.sees("edit is busy: run echo saved in a throwaway window? (y/n)")
+	h.sees("notes.yml")
+	h.keys("y")
+	h.sees("Running echo saved in a throwaway window.")
+	if on := h.clientOn(); on != "term" {
+		h.fatal("r left the browser for %s", on)
+	}
+}
