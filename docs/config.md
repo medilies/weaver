@@ -3,7 +3,8 @@
 A project is one config file at `~/.config/weaver/projects/<name>.yml`
 (`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
 the project's name and its tmux session's name: letters, digits, `-` and
-`_`, starting with a letter or a digit, and not one of weave's commands.
+`_`, starting with a letter or a digit, and not `bind`, `completion`,
+`edit`, `help`, `kill`, `list` or `show`.
 A config may end in `.yaml` instead; weave saves a new one as `.yml` and
 keeps an existing one's extension. A project with both a `.yml` and a
 `.yaml` config isn't registered: weave warns about it until one is
@@ -21,11 +22,10 @@ root: ~/dev/weaver
 
 ## Toolchains
 
-A back end and a front end on different toolchain versions. weaver
-knows no toolchain: `before` types whatever commands set one up into the
-pane's shell, as you would. An alias only
-changes what you type: tools that run `php` themselves, such as
-`composer`, need a `php` first on `PATH` instead:
+Here a back end and a front end use different toolchain versions.
+weaver knows no toolchain: `before` types the commands that set one up,
+as you would. An alias only changes what you type; tools that run `php`
+themselves, such as `composer`, need the right `php` first on `PATH`:
 
 ```yaml
 root: ~/dev/shop
@@ -52,9 +52,9 @@ windows:
 | `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. The home directory itself is `"~"`, in quotes: YAML reads a bare `~` as null. |
 | `env` | Variables for every pane, and for the `setup` and `teardown` commands. Values are literal. |
 | `setup` | Commands run once in `root`, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. |
-| `teardown` | Commands run in `root`, in order, before `weave kill` ends a session weaver started, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. Killed from inside that session, whose pane goes with it, weave shows the failure and waits for Enter first. |
+| `teardown` | Commands run in `root`, in order, before `weave kill` ends a session weaver started, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
-| `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, a space first so shells ignoring such lines keep it out of their history, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
+| `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, then the `note` printed. Only the screen is cleared: tmux's scrollback keeps them. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
 | `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
 | `windows[].focus` | `true` lands `weave <project>` in this window when it starts the session, instead of the first. At most one window. |
@@ -64,13 +64,13 @@ windows:
 | `windows[].grid` | Lays the window's panes out by naming them, instead of `split`s; see [Grid](#grid). |
 | `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
-| `focus` (pane) | `true` selects this pane in its window, instead of the first. At most one pane per window. Binding a session focuses the window and panes that were active. |
+| `focus` (pane) | `true` selects this pane in its window, instead of the first. At most one pane per window. |
 | `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `clear` (pane) | Whether the pane clears its `before` commands, over its window's and project's `clear`. |
 | `command` | Typed into the shell and run, so it stays in the shell history. |
-| `prefill` | Typed at the prompt but not run: press Enter to run it. |
+| `prefill` | Typed at the prompt but not run: press Enter to run it. Not with `command`. |
 | `note` | Lines printed before the shell starts, or after the `before` commands when the pane clears them. A line holding newlines, such as a `\|` block, prints as the lines it holds. |
 | `env` (pane) | Overrides the window's and the project's, per variable. |
 | `tasks` | Commands the pane offers to run from the browser, in a session weaver started: each a `command` and, optionally, a `name` to show instead. No two share a name, nor two unnamed ones a command. See [tasks in the browser](browser.md#tasks). |
@@ -126,21 +126,14 @@ d e b
 d c c
 ```
 
-`weave bind` writes splits.
-
 ## Validation, comments and schema
 
-Unknown fields are errors: they are usually typos. Comments are kept by
-editing a config raw (`E` in the browser), but not when `weave bind`
-replaces a config or the config form saves it: weaver asks first when a
-config has some.
+Unknown fields are errors: they are usually typos. Comments are kept
+only by editing a config raw (`E` in the browser): the config form
+rewrites it, see [saving](config-form.md#saving).
 
-When weaver saves a config, it writes `weaver.schema.json` next to it
+When the config form saves a config, it writes `weaver.schema.json` next to it
 and points the config at it with a first line of
 `# yaml-language-server: $schema=./weaver.schema.json`, so editors such
 as VS Code (with its YAML extension) complete fields and flag mistakes
 as you type.
-
-Configs from v0.1.0 may still have `repositories:`, which weaver no
-longer reads: delete it by editing the config raw, with `E` in the browser. Saving also
-refreshes `weaver.schema.json`, which until then still allows it.

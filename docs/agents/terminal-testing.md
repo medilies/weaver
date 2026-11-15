@@ -41,12 +41,13 @@ CI runs the tests on what it builds. After a release, test what users get, each 
 ```sh
 mkdir -p /tmp/wvr/gobin && cd /tmp/wvr
 GOBIN=/tmp/wvr/gobin go install github.com/medilies/weaver/cmd/weave@vX.Y.Z
-gh release download vX.Y.Z -R medilies/weaver -p '*inux*amd64*' -p checksums.txt
+gh release download vX.Y.Z -R medilies/weaver -p 'weaver_*_linux_amd64.tar.gz' -p 'weaver_*_amd64.deb' -p checksums.txt
 sha256sum -c --ignore-missing checksums.txt
-mkdir asset && tar -xzf *inux*amd64*.tar.gz -C asset
-gobin/weave --version; asset/weave --version   # both vX.Y.Z
+mkdir asset && tar -xzf weaver_*_linux_amd64.tar.gz -C asset
+dpkg-deb -x weaver_*_amd64.deb deb
+gobin/weave --version; asset/weave --version; deb/usr/bin/weave --version   # all vX.Y.Z
 cd - && cd test/terminal
-go test -tags terminal . -weave /tmp/wvr/gobin && go test -tags terminal . -weave /tmp/wvr/asset
+for dir in /tmp/wvr/gobin /tmp/wvr/asset /tmp/wvr/deb/usr/bin; do go test -tags terminal . -weave $dir || break; done
 rm -rf /tmp/wvr
 ```
 
@@ -96,7 +97,7 @@ Each is a test, in [`scenarios_test.go`](../../test/terminal/scenarios_test.go),
 
 ## Adding scenarios
 
-The list grows. Add a scenario whenever a case it misses turns up: a new feature or a changed behaviour, a bug found by hand, by a review or by a user, or anything a run shows that no test checks. A case of the config form's logic alone goes in `tea_config_form_test.go` instead. Add a test, in `form_test.go` for the config form and `scenarios_test.go` otherwise, named for what it checks, with a comment above it saying what it does, then what it expects, in the shorthand above; and add what its sample needs to `testdata/projects`. In the test:
+The list grows. Add a scenario whenever a case it misses turns up: a new feature or a changed behaviour, a bug found by hand, by a review or by a user, or anything a run shows that no test checks. Add a test as [Scenarios](#scenarios) says, and what its sample needs to `testdata/projects`. In the test:
 
 - Start with `h := start(t)`, and set up the rest: `h.started("shop")`, `h.logsIdle()`, `h.settings(…)`.
 - Act as a user: `h.keys`, `h.types`, `h.typed`, `h.clicks`. Act from outside with `h.tmux`.

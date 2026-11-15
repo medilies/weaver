@@ -5,33 +5,38 @@ go build ./...               # build everything
 go run ./cmd/weave X         # run without building
 go test ./...                # run tests (the tmux adapter's need tmux)
 golangci-lint run ./...      # format check, static analysis, layer boundaries
+
+cd test/terminal
+go test -tags terminal .                    # weave in a real terminal emulator
+golangci-lint run --build-tags terminal ./...
 ```
 
-The tmux adapter's tests start private tmux servers on their own
-sockets; they never touch your sessions.
+Tests that need tmux start private tmux servers on their own sockets;
+they never touch your sessions. The terminal tests are described in
+[docs/agents/terminal-testing.md](agents/terminal-testing.md).
 
 ## Architecture
 
-The `Session` bounded context is organized by layer. `domain` imports
-only the standard library, and `app` only that and `domain`, which
-depguard allow-lists in `.golangci.yml` enforce. Use cases depend on ports; `infra`
-implements them and `cmd/weave` wires everything together.
+Use cases depend on ports; `infra` implements them and `cmd/weave`
+wires everything together. The layer rules are in
+[CLAUDE.md](../CLAUDE.md#design). The types below are examples, not a
+full list.
 
 ```mermaid
 graph TD
     subgraph cmd["cmd/weave (Cobra CLI)"]
-        CLI["weave, bind, edit, kill, list, show, completion"]
+        CLI["weave, bind, kill, completion"]
     end
     subgraph app["internal/session/app"]
-        UC["BrowseProjects, OpenProject, BindProject,<br/>EditProject, KillProject, ListProjects"]
-        AP["ProjectBrowser, ProjectForm, Confirmer,<br/>ConfigEditor, ProjectDocuments (ports)"]
+        UC["use cases, e.g. OpenProject, BindProject, RunTask"]
+        AP["ports for the user, e.g. ProjectBrowser, ProjectForm"]
     end
     subgraph domain["internal/session/domain"]
-        M["Project, Window, Pane, Split, Command, Env<br/>SessionPlan, WindowPlacement"]
-        DP["ProjectRegistry, SessionFinder, SessionLauncher,<br/>SessionLister, SessionKiller, SessionCapturer,<br/>SessionLocator, Workspace (ports)"]
+        M["model, e.g. Project, Window, Pane, SessionPlan"]
+        DP["ports, e.g. ProjectRegistry, SessionLauncher, Workspace"]
     end
     subgraph infra["internal/session/infra"]
-        A["FileProjectRegistry + schema, Tmux,<br/>LocalWorkspace, Editor,<br/>TeaConfirmer, TeaBrowser, TeaConfigForm"]
+        A["adapters, e.g. FileProjectRegistry, Tmux, TeaBrowser"]
     end
 
     CLI --> UC
@@ -43,5 +48,10 @@ graph TD
     A -.implements.-> AP
 ```
 
-Agent workflows, such as testing weave in a real terminal, are in
-[docs/agents/](agents/).
+## Releasing
+
+Pushing a `vX.Y.Z` tag runs the tests, then GoReleaser builds the
+binaries and a `.deb`, and the apt repository on GitHub Pages is rebuilt,
+signed with the key in the `APT_SIGNING_KEY` secret. Then run the
+terminal tests on the published binaries, as
+[terminal-testing.md](agents/terminal-testing.md#before-and-after-a-release) says.
