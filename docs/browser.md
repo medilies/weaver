@@ -135,7 +135,7 @@ or that leaves a quote open, marks its pane.
 | s | start it, like `weave -d <project>`: the browser stays, saying what was started |
 | b | bind the current directory, like `weave bind` |
 | e | change its config in the [config form](config-form.md) |
-| E | edit its config raw in $VISUAL, else $EDITOR, else vi (with VS Code, `VISUAL="code --wait"`), keeping its comments; only a valid config is saved: on a mistake, weaver asks whether to discard your changes, and otherwise reopens the editor on what you wrote |
+| E | edit its config raw in the [settings](settings.md#editor)' editor, else $VISUAL, else $EDITOR, else vi (with VS Code, `VISUAL="code --wait"`), keeping its comments; only a valid config is saved: on a mistake, weaver asks whether to discard your changes, and otherwise reopens the editor on what you wrote |
 | x | kill its session, after you confirm |
 | d | delete its config, after you confirm; a running session keeps running |
 | q or esc | quit (esc hides the config, then clears the filter, first) |

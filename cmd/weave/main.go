@@ -72,8 +72,13 @@ func wire() (application, error) {
 	}))
 
 	weaver := application{
-		bindProject:  app.NewBindProject(projects, tmux, workspace, configForm),
-		editProject:  app.NewEditProject(projects, projects, configForm, infra.NewEditor(), confirm),
+		bindProject: app.NewBindProject(projects, tmux, workspace, configForm),
+		editProject: app.NewEditProject(projects, projects, configForm, infra.NewEditor().Preferring(func() string {
+			if s, err := settings(); err == nil {
+				return s.Editor()
+			}
+			return ""
+		}), confirm),
 		sessions:     tmux,
 		openProject:  app.NewOpenProject(projects, tmux, workspace, commands),
 		killProject:  app.NewKillProject(tmux, tmux, projects, commands, infra.NewLineAcknowledger(os.Stdin, os.Stderr)),

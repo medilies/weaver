@@ -38,12 +38,19 @@ type Settings struct {
 	previewEvery time.Duration
 	miniatures   bool
 	mouse        bool
+	editor       string
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
 // set.
 type DrawingKeys struct {
 	splitRight, splitBelow, remove, shrink, grow string
+}
+
+// Editor is the editor the settings open configs in, or "" to go by
+// $VISUAL and $EDITOR.
+func (s Settings) Editor() string {
+	return s.editor
 }
 
 // DefaultSettings are the settings without a settings file: cyan, and
@@ -106,6 +113,7 @@ type settingsFile struct {
 	PreviewEvery   *string   `yaml:"preview-every"`
 	Miniatures     *bool     `yaml:"miniatures"`
 	Mouse          *bool     `yaml:"mouse"`
+	Editor         *string   `yaml:"editor"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -143,6 +151,8 @@ var (
 	// ErrInvalidDuration is returned for a duration that isn't one, such
 	// as "1 second", or is out of its setting's range.
 	ErrInvalidDuration = errors.New("invalid duration")
+	// ErrEmptyEditor is returned for an editor set to nothing.
+	ErrEmptyEditor = errors.New("an editor can't be empty")
 	// ErrTrailingSettings is returned when the settings file holds a
 	// second document.
 	ErrTrailingSettings = errors.New("unexpected data after the settings object")
@@ -173,6 +183,12 @@ func decodeSettings(raw []byte) (Settings, error) {
 	}
 	if file.Preview != nil {
 		settings.preview = *file.Preview
+	}
+	if file.Editor != nil {
+		if strings.TrimSpace(*file.Editor) == "" {
+			return Settings{}, fmt.Errorf("editor: %w", ErrEmptyEditor)
+		}
+		settings.editor = *file.Editor
 	}
 	if file.Mouse != nil {
 		settings.mouse = *file.Mouse

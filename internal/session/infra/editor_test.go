@@ -42,6 +42,15 @@ func TestEditor(t *testing.T) {
 		}
 	})
 
+	t.Run("prefers the settings' editor to $VISUAL", func(t *testing.T) {
+		t.Setenv("VISUAL", "sed -i s/shop/visual/")
+		preferred := func() string { return "sed -i s/shop/settings/" }
+		edited, err := infra.NewEditor().Preferring(preferred).Edit(app.ConfigDocument{File: "shop.yml", Content: []byte("root: /srv/shop")})
+		if err != nil || string(edited) != "root: /srv/settings" {
+			t.Fatalf("got %q (%v), want the settings' editor's edit", edited, err)
+		}
+	})
+
 	t.Run("reports an editor that fails", func(t *testing.T) {
 		if _, err := edit(t, "", "false"); err == nil {
 			t.Fatal("got no error, want the editor's failure")

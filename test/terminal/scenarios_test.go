@@ -59,6 +59,24 @@ func TestMouseSettingOff(t *testing.T) {
 	h.sees("─ blog.yml ")
 }
 
+// TestEditorSetting: settings `editor: sed -i s/info/debug/`: `weave`,
+// select `shop`, `E`.
+//
+// The settings' editor edits the config: `Saved shop.`, and `shop.yml`
+// sets `LOG: debug`.
+func TestEditorSetting(t *testing.T) {
+	h := start(t)
+	h.settings("editor: sed -i s/info/debug/")
+	h.browse("shop")
+
+	h.keys("E")
+
+	h.sees("Saved shop.")
+	if config := h.config("shop"); !strings.Contains(config, "LOG: debug") {
+		h.fatal("shop.yml is %q, want LOG: debug", config)
+	}
+}
+
 // TestClickPicksPane: `weave`, select `blog`, click `shell` in the pane
 // list.
 //

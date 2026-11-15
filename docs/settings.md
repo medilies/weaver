@@ -54,6 +54,12 @@ Whether the browser, the config form and the questions weave asks take
 clicks. With `false`, your terminal selects text with the mouse again.
 `true` unless set.
 
+## `editor`
+
+The editor `E` in the browser opens a config in, written as `$VISUAL`
+is, such as `code --wait`: the config's path is added after it.
+`$VISUAL`, else `$EDITOR`, else `vi` unless set.
+
 ## `keys`
 
 The config form's keys on the drawing, tmux's unless set. Write a key
