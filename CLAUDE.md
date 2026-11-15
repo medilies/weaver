@@ -84,6 +84,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 ## Tests
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
+- Never run `go test` with `-v`: its output floods the context (about 136 KB for the unit tests). A failure prints without it; narrow one down with `-run`, and the terminal tests' `-keep` or `-traces`.
 - tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
 - The config form's model is unit-tested in `tea_config_form_test.go`; the browser's and the confirmation dialog's models aren't. What needs tmux or a real terminal is checked by the terminal tests in `test/terminal`: see `docs/agents/terminal-testing.md`, including how never to reach the user's tmux server. A case they miss, once found, is added there.
 
@@ -99,6 +100,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 ## Workflow
 
+- At the end of each iteration of work, run the tests, the terminal tests and both lints (commands in `docs/development.md`), and fix what fails before going on.
 - At the end of each change, ask: review then commit / commit then review / commit without review.
 - Reviews always run in a fresh subagent that has not seen the work, never in the main context.
 - Commits follow Conventional Commits v1.0.0. Never add Co-Authored-By trailers or any mention of Claude/AI to commits or PRs.
