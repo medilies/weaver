@@ -14,6 +14,20 @@ builds:
 archives:
   - files: [LICENSE, README.md]
 
+nfpms:
+  - package_name: weaver
+    homepage: https://github.com/medilies/weaver
+    maintainer: medilies
+    description: Drives tmux sessions, windows and panes from a per-project YAML config.
+    license: MIT
+    section: utils
+    formats: [deb]
+    dependencies: [tmux]
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/weaver/copyright
+
 checksum:
   name_template: checksums.txt
 

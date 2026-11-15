@@ -29,3 +29,38 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # A flat apt repository holding the release's packages, signed with
+      # the key in the APT_SIGNING_KEY secret, served from GitHub Pages.
+      - name: Build the apt repository
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          mkdir apt
+          cp dist/*.deb apt/
+          cd apt
+          gpg --batch --import <<< "$APT_SIGNING_KEY"
+          gpg --export > weaver.gpg
+          apt-ftparchive packages . > Packages
+          gzip -k9 Packages
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin=weaver \
+            -o APT::FTPArchive::Release::Label=weaver \
+            release . > Release
+          gpg --batch --yes --clearsign -o InRelease Release
+          gpg --batch --yes -abs -o Release.gpg Release
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: apt
+
+  apt:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5

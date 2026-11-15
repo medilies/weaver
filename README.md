@@ -63,7 +63,19 @@ tab pane  t tasks  y config  / filter  q quit
 
 ## Install
 
-Download a binary for Linux or macOS from the
+On Ubuntu or Debian, from weaver's apt repository, which also
+installs tmux:
+
+```sh
+sudo curl -fsSLo /etc/apt/keyrings/weaver.gpg https://medilies.github.io/weaver/weaver.gpg
+echo "deb [signed-by=/etc/apt/keyrings/weaver.gpg] https://medilies.github.io/weaver/ ./" \
+  | sudo tee /etc/apt/sources.list.d/weaver.list
+sudo apt update && sudo apt install weaver
+```
+
+`sudo apt upgrade` then brings each new release.
+
+Elsewhere, download a binary for Linux or macOS from the
 [releases](https://github.com/medilies/weaver/releases), or build it with
 Go 1.26 or newer:
 
