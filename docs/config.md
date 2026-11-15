@@ -9,6 +9,10 @@ keeps an existing one's extension. A project with both a `.yml` and a
 `.yaml` config isn't registered: weave warns about it until one is
 removed.
 
+A config may be a symbolic link, as dotfiles managers make. Saving
+replaces the file it points to and keeps the link; deleting, with `d` in
+the browser, removes only the link.
+
 The smallest config opens one window with one shell in the root:
 
 ```yaml

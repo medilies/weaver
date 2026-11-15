@@ -751,6 +751,28 @@ func TestFileProjectRegistryDelete(t *testing.T) {
 		}
 	})
 
+	t.Run("removes a link to the config, keeping the file it points to", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(t.TempDir(), "dotfiles-shop.yml")
+		if err := os.WriteFile(target, []byte("root: /srv/shop\n"), 0o600); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "shop.yml")); err != nil {
+			t.Fatalf("linking fixture: %v", err)
+		}
+		configs := infra.NewFileProjectRegistry(dir)
+
+		if err := configs.Delete(name); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := configs.FindByName(name); !isNotFound(err) {
+			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
+		}
+		if _, err := os.Stat(target); err != nil {
+			t.Fatalf("got %v, want the link's target kept", err)
+		}
+	})
+
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		if err := infra.NewFileProjectRegistry(t.TempDir()).Delete(name); !isNotFound(err) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
