@@ -112,6 +112,19 @@ func TestLoadSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("read how long to wait on tmux", func(t *testing.T) {
+		got, err := settingsIn(t, "tmux-timeout: 10s\n")
+		if err != nil || got.TmuxTimeout() != 10*time.Second {
+			t.Fatalf("got %v (%v), want 10s", got.TmuxTimeout(), err)
+		}
+	})
+
+	t.Run("refuse a tmux timeout out of its range", func(t *testing.T) {
+		if _, err := settingsIn(t, "tmux-timeout: 100ms\n"); !errors.Is(err, ErrInvalidDuration) || !strings.Contains(err.Error(), "tmux-timeout: ") {
+			t.Fatalf("got %v, want ErrInvalidDuration naming tmux-timeout", err)
+		}
+	})
+
 	t.Run("refuse a colour that is neither a number to 255 nor #rrggbb", func(t *testing.T) {
 		for _, colour := range []string{"256", "-1", "cyan", `"#fff"`, `"6"`, "[6]"} {
 			if _, err := settingsIn(t, "selected-colour: "+colour+"\n"); !errors.Is(err, ErrInvalidColour) {

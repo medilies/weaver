@@ -39,6 +39,7 @@ type Settings struct {
 	miniatures   bool
 	mouse        bool
 	editor       string
+	tmuxTimeout  time.Duration
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -53,6 +54,12 @@ func (s Settings) Editor() string {
 	return s.editor
 }
 
+// TmuxTimeout is how long weave waits on a tmux command before giving
+// up.
+func (s Settings) TmuxTimeout() time.Duration {
+	return s.tmuxTimeout
+}
+
 // DefaultSettings are the settings without a settings file: cyan, and
 // tmux's keys.
 func DefaultSettings() Settings {
@@ -63,6 +70,7 @@ func DefaultSettings() Settings {
 		previewEvery: time.Second,
 		miniatures:   true,
 		mouse:        true,
+		tmuxTimeout:  5 * time.Second,
 	}
 }
 
@@ -114,6 +122,7 @@ type settingsFile struct {
 	Miniatures     *bool     `yaml:"miniatures"`
 	Mouse          *bool     `yaml:"mouse"`
 	Editor         *string   `yaml:"editor"`
+	TmuxTimeout    *string   `yaml:"tmux-timeout"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -183,6 +192,13 @@ func decodeSettings(raw []byte) (Settings, error) {
 	}
 	if file.Preview != nil {
 		settings.preview = *file.Preview
+	}
+	if file.TmuxTimeout != nil {
+		timeout, err := parseDuration("tmux-timeout", *file.TmuxTimeout, 500*time.Millisecond, time.Minute)
+		if err != nil {
+			return Settings{}, err
+		}
+		settings.tmuxTimeout = timeout
 	}
 	if file.Editor != nil {
 		if strings.TrimSpace(*file.Editor) == "" {

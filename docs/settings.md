@@ -16,7 +16,7 @@ keys:
 The browser (`weave`) and the config form (`weave bind`) read the
 settings, and refuse to start while the file is invalid, naming the file
 and the field; the other commands, the help, the version and completion
-run either way. Each saves `settings.schema.json` beside the file once
+run either way, with every setting at its default. Each saves `settings.schema.json` beside the file once
 that folder exists, so an editor with a YAML language server completes
 and checks it; failing to save it only warns.
 
@@ -59,6 +59,12 @@ clicks. With `false`, your terminal selects text with the mouse again.
 The editor `E` in the browser opens a config in, written as `$VISUAL`
 is, such as `code --wait`: the config's path is added after it.
 `$VISUAL`, else `$EDITOR`, else `vi` unless set.
+
+## `tmux-timeout`
+
+How long weave waits on a tmux command before giving up, so a tmux
+server that stops answering can't freeze it. A duration in quotes from
+`"500ms"` to `"1m"`, such as `"10s"`. `"5s"` unless set.
 
 ## `keys`
 

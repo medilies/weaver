@@ -25,7 +25,7 @@ func stuckTmux(t *testing.T) {
 
 func TestTmuxGivesUpOnATmuxThatDoesNotAnswer(t *testing.T) {
 	stuckTmux(t)
-	tmux := infra.NewTmux(infra.TmuxOptions{Limit: 100 * time.Millisecond})
+	tmux := infra.NewTmux(infra.TmuxOptions{Limit: func() time.Duration { return 100 * time.Millisecond }})
 	name, err := domain.NewProjectName("shop")
 	if err != nil {
 		t.Fatal(err)

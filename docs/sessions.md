@@ -69,4 +69,4 @@ saving shows what it replaces.
 ## When tmux doesn't answer
 
 weave gives up on a tmux command that doesn't answer within 5 seconds,
-naming it.
+naming it. The [settings](settings.md#tmux-timeout) can change how long.

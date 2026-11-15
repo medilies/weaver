@@ -8,10 +8,11 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-// The settings only change how the confirmation dialog, the config form
-// and the browser look, so they are read the first time one of those is
-// shown: invalid settings stop what shows them, not the help, the
-// version, completion or a command that never shows them.
+// The settings mostly change how the confirmation dialog, the config
+// form and the browser look and behave, so they are read the first time
+// one of those is shown: invalid settings stop what shows them, not the
+// help, the version, completion or a command that never shows them,
+// which keeps tmux's default limit.
 
 // builtOnce returns the adapter built from the settings, building it
 // the first time it is asked for.

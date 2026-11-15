@@ -40,9 +40,9 @@ type TmuxOptions struct {
 	// tmux's default size applies.
 	Size func() (cols, rows int, ok bool)
 	// Limit is how long one tmux command may take before weaver gives up
-	// on it, so a server that stops answering can't freeze weaver; zero
-	// means callLimit.
-	Limit time.Duration
+	// on it, so a server that stops answering can't freeze weaver, read
+	// as each command runs; nil, or zero, means callLimit.
+	Limit func() time.Duration
 }
 
 // callLimit is how long a tmux command may take unless TmuxOptions says
@@ -1247,7 +1247,10 @@ func directionFlag(direction domain.Direction) string {
 // run runs one tmux command and returns its output without the final
 // newline.
 func (t Tmux) run(args ...string) (string, error) {
-	limit := t.opts.Limit
+	var limit time.Duration
+	if t.opts.Limit != nil {
+		limit = t.opts.Limit()
+	}
 	if limit == 0 {
 		limit = callLimit
 	}

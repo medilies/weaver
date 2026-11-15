@@ -34,6 +34,11 @@
       "type": "string",
       "minLength": 1
     },
+    "tmux-timeout": {
+      "description": "How long weave waits on a tmux command before giving up: a duration from \"500ms\" to \"1m\", such as \"10s\". \"5s\" unless set.",
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+    },
     "keys": {
       "description": "The config form's keys on the drawing, tmux's unless set. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c), nor two the same.",
       "type": "object",

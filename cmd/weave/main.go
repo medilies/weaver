@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -62,7 +63,15 @@ func wire() (application, error) {
 	if inside {
 		pane = os.Getenv("TMUX_PANE")
 	}
-	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize})
+	// Invalid settings leave tmux's limit as it is, rather than stop
+	// commands that show no screen.
+	limit := func() time.Duration {
+		if s, err := settings(); err == nil {
+			return s.TmuxTimeout()
+		}
+		return 0
+	}
+	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize, Limit: limit})
 	workspace := infra.NewLocalWorkspace()
 	commands := infra.NewShellRunner(os.Stdin, os.Stdout, os.Stderr)
 
