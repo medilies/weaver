@@ -36,6 +36,7 @@ type Settings struct {
 	keys         DrawingKeys
 	preview      bool
 	previewEvery time.Duration
+	miniatures   bool
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -52,6 +53,7 @@ func DefaultSettings() Settings {
 		keys:         DrawingKeys{splitRight: "%", splitBelow: "\"", remove: "x", shrink: "H", grow: "L"},
 		preview:      true,
 		previewEvery: time.Second,
+		miniatures:   true,
 	}
 }
 
@@ -100,6 +102,7 @@ type settingsFile struct {
 	Keys           keysFile  `yaml:"keys"`
 	Preview        *bool     `yaml:"preview"`
 	PreviewEvery   *string   `yaml:"preview-every"`
+	Miniatures     *bool     `yaml:"miniatures"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -167,6 +170,9 @@ func decodeSettings(raw []byte) (Settings, error) {
 	}
 	if file.Preview != nil {
 		settings.preview = *file.Preview
+	}
+	if file.Miniatures != nil {
+		settings.miniatures = *file.Miniatures
 	}
 	if file.PreviewEvery != nil {
 		every, err := parseDuration("preview-every", *file.PreviewEvery, 100*time.Millisecond, time.Minute)

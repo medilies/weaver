@@ -155,6 +155,21 @@ func TestMiniaturesNeedLines(t *testing.T) {
 	h.laidOut()
 }
 
+// TestMiniaturesSettingOff: settings `miniatures: false`: `weave`, select
+// `notes`.
+//
+// The window list names `code` and `shell` without their miniatures.
+func TestMiniaturesSettingOff(t *testing.T) {
+	h := start(t)
+	h.settings("miniatures: false")
+	h.browse("notes")
+
+	names := regexp.MustCompile(` code +shell `)
+	h.screenShows("the window names alone", func(screen string) bool {
+		return !strings.Contains(screen, "┌──┬─ edit") && names.MatchString(screen)
+	})
+}
+
 // TestTaskRunsInItsPane: `shop` started: `weave`, select `shop`, `t`,
 // Enter on `wait`.
 //

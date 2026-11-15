@@ -42,6 +42,12 @@ projects run, the selected project's summary and its task list's ●
 marks. A duration in quotes from `"100ms"` to `"1m"`, such as `"500ms"`
 or `"2s"`. `"1s"` unless set.
 
+## `miniatures`
+
+Whether the browser's window list draws each window small under its
+name, when the project has several windows and there are lines to spare.
+`true` unless set.
+
 ## `keys`
 
 The config form's keys on the drawing, tmux's unless set. Write a key

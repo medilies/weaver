@@ -33,6 +33,7 @@ type TeaBrowser struct {
 	kept   *browserPlace
 	theme  theme
 	every  time.Duration // how often the browser finds what it shows again
+	small  bool          // whether the window list draws miniatures
 	screen *browserScreen
 	held   *HeldOutput
 }
@@ -86,6 +87,7 @@ type browserPlace struct {
 func NewTeaBrowser(settings Settings, held *HeldOutput) TeaBrowser {
 	return TeaBrowser{
 		kept: &browserPlace{drawings: !settings.preview}, theme: settings.theme(), every: settings.previewEvery,
+		small:  settings.miniatures,
 		screen: &browserScreen{}, held: held,
 	}
 }
@@ -200,7 +202,7 @@ func (b TeaBrowser) Leave() error {
 // show puts the browser on screen.
 func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
 	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
-	model := browser{projects: projects, notice: notice, theme: b.theme, every: b.every, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
+	model := browser{projects: projects, notice: notice, theme: b.theme, every: b.every, small: b.small, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
 	model.filter, model.config = b.kept.filter, b.kept.config
 	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Name() == selected }) {
 		model.filter = ""
@@ -259,6 +261,7 @@ var browserKeys = map[string]app.Action{
 type browser struct {
 	theme      theme
 	every      time.Duration
+	small      bool // whether the window list draws miniatures
 	projects   []app.ProjectOverview
 	cursor     int
 	top        int
@@ -1167,7 +1170,7 @@ func (m browser) laidOut(project app.ProjectOverview, windows []domain.WindowPla
 		levelLines = levels(m.theme, project.Project(), index, pane, width)
 	}
 	var miniatures []string
-	if below-miniatureHeight-1 >= minDrawingHeight+1+min(len(levelLines), 3) {
+	if m.small && below-miniatureHeight-1 >= minDrawingHeight+1+min(len(levelLines), 3) {
 		miniatures = m.miniatures(project, windows, index, width)
 		below -= len(miniatures)
 	}

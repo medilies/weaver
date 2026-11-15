@@ -85,6 +85,13 @@ func TestLoadSettings(t *testing.T) {
 		}
 	})
 
+	t.Run("turn the miniatures off", func(t *testing.T) {
+		got, err := settingsIn(t, "miniatures: false\n")
+		if err != nil || got.miniatures {
+			t.Fatalf("got miniatures %t (%v), want them off", got.miniatures, err)
+		}
+	})
+
 	t.Run("refuse a colour that is neither a number to 255 nor #rrggbb", func(t *testing.T) {
 		for _, colour := range []string{"256", "-1", "cyan", `"#fff"`, `"6"`, "[6]"} {
 			if _, err := settingsIn(t, "selected-colour: "+colour+"\n"); !errors.Is(err, ErrInvalidColour) {
