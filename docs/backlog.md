@@ -216,6 +216,60 @@ open; `wait` orders the panes among themselves.
   [Shared groundwork](#shared-groundwork). Deferred on 2026-11-09: its
   need isn't clear yet.
 
+### Open once the panes are ready (M)
+
+**Use**: opening a project lands you in panes still working through
+their `before` commands, `clear` and note, the screen scrolling under
+you. Added on 2026-11-15.
+
+Open puts you in the session once every pane it created is ready: its
+`before` commands ran, `clear` typed if set, its note printed, and its
+`command` started or its `prefill` typed. A pane with none of these is
+ready at once, so a plain project attaches as today.
+
+- Meanwhile weave lists the panes not yet ready under `window › pane`,
+  crossing each off as it gets there; enter or ctrl+c attaches at once.
+  No time limit: a slow `npm install` in `before` is normal.
+- Only open waits. Start leaves you where you are, so it doesn't.
+  Reopening an owned session waits for the panes of the windows it
+  restores, and only those.
+- Always on, no config field, until a config needs one.
+- Open question: how weave tells a pane is ready. Start types
+  everything ahead (`before`, `clear`, the note, then the startup) and
+  the shell works through it alone, so weave can't tell from what it
+  sent. The idle-shell check sees a shell at its prompt, but not
+  whether lines typed ahead are still waiting, and a `command` pane is
+  never idle once ready. Whatever the answer, it must not run anything
+  the config doesn't say, nor leave traces in the pane's history.
+- `wait`, below, could later add its own conditions to what ready
+  means; the two stay separate until then.
+
+### Reload (M)
+
+**Use**: a pane got into a bad state, or its config changed, and the
+only way back today is killing the project and opening it again. Added
+on 2026-11-15.
+
+In the browser, `R` asks in the status line: "Reload pane back, or the
+whole api window? (p/w, anything else cancels)". Asking doubles as the
+confirmation, since reloading ends what runs. Only in an owned session.
+
+- A pane is restarted in place, its size and position kept, with its
+  dir, env, `before` commands, `clear`, note and `command` or
+  `prefill`, all from the config as stored now.
+- A window is replaced in place, at the same position, its panes laid
+  out again by its splits or grid, the pane `focus` sets selected.
+- Throwaway windows of its tasks are left alone.
+- A pane the session lacks is refused, pointing to reloading its window;
+  a window the session lacks is restored, as open would.
+- The pane the browser runs in, or the window holding it, is refused,
+  as for tasks.
+- You stay in the browser; the preview shows the result.
+- Not rerun, which types an exited command again and ends nothing, nor
+  restoration, which only puts back missing windows; it reuses
+  restoration's placement and the one pane listing (`projectPanes`,
+  `pick`), see [Shared groundwork](#shared-groundwork).
+
 ### Lazy windows (L)
 
 **Use**: a project has heavy windows you don't always want (an
@@ -399,6 +453,7 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   not worth changing while bind is interactive, since splitting
   free-text paths and labels out of one line adds parsing risk.
 - A second CLI argument serves lazy windows.
+- Restoration's placement of one window serves lazy windows and reload.
 - The browser's tick (`previewTick`), with its numbered asks, serves the
   preview and the task list's marks, and would serve live overviews.
 - Unzooming before a kill (`Tmux.Kill`, `unzoomed_kill` in the
