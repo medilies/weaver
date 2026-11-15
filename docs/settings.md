@@ -68,10 +68,19 @@ server that stops answering can't freeze it. A duration in quotes from
 
 ## `keys`
 
-The config form's keys on the drawing, tmux's unless set. Write a key
-as the terminal sends it: a character (`|`, `-`), or a name such as
-`space`, `f5`, `ctrl+x` or `alt+s`. A key written otherwise (`" "`,
-`ctrl-x`) is refused.
+The keys of the browser's and the config form's actions, one key each.
+Write a key as the terminal sends it: a character (`|`, `-`), or a name
+such as `space`, `f5`, `ctrl+x` or `alt+s`. A key written otherwise
+(`" "`, `ctrl-x`) is refused. Once moved, an action's own key does
+nothing, and the keys line shows the new one.
+
+Moving, `enter`, `esc`, Tab and `ctrl+c` can't be changed. Two actions
+available at once can't share a key: in the browser, those of the
+project list, or those of the task list.
+
+### The config form's drawing
+
+tmux's keys unless set.
 
 | Setting | Does | Default |
 | --- | --- | --- |
@@ -83,6 +92,27 @@ as the terminal sends it: a character (`|`, `-`), or a name such as
 
 A key the config form already uses (the arrows, `h` `j` `k` `l`,
 `enter`, `o`, `d`, `J`, `K`, `u`, `ctrl+r`, `ctrl+s`, `esc`, `ctrl+c`)
-is refused, as are two settings on the same key.
+is refused, as are two drawing keys on the same key.
 weave reads only this file, never your tmux bindings: see
 [ADR 0001](adr/0001-drawing-keys-are-a-setting-not-read-from-tmux.md).
+
+### The browser
+
+| Setting | Does | Default |
+| --- | --- | --- |
+| `start` | start the selected project | `s` |
+| `bind` | bind the current directory | `b` |
+| `edit` | change the config in the config form | `e` |
+| `edit-raw` | edit the config raw in the editor | `E` |
+| `kill` | kill the session | `x` |
+| `delete` | delete the config | `d` |
+| `rerun` | rerun the selected pane's exited command | `r` |
+| `reload` | reload the selected pane or its window | `R` |
+| `interrupt` | interrupt the selected pane, or a task in the task list | `i` |
+| `preview` | switch between the preview and the drawing | `p` |
+| `config` | show the config instead of the drawing | `y` |
+| `tasks` | move the cursor into the task list | `t` |
+| `filter` | filter the projects by name | `/` |
+| `run` | in the task list, run the selected task, staying | `r` |
+| `throwaway` | in the task list, run it in a throwaway window | `w` |
+| `quit` | quit | `q` |

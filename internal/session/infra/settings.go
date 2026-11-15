@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type Settings struct {
 	mouse        bool
 	editor       string
 	tmuxTimeout  time.Duration
+	browserKeys  map[string]string // the browser's keys set, by setting name
 }
 
 // DrawingKeys are the config form's keys on the drawing: tmux's unless
@@ -132,6 +134,43 @@ type keysFile struct {
 	Remove     *string `yaml:"remove"`
 	Shrink     *string `yaml:"shrink"`
 	Grow       *string `yaml:"grow"`
+	// The browser's.
+	Start     *string `yaml:"start"`
+	Bind      *string `yaml:"bind"`
+	Edit      *string `yaml:"edit"`
+	EditRaw   *string `yaml:"edit-raw"`
+	Kill      *string `yaml:"kill"`
+	Delete    *string `yaml:"delete"`
+	Rerun     *string `yaml:"rerun"`
+	Reload    *string `yaml:"reload"`
+	Preview   *string `yaml:"preview"`
+	Config    *string `yaml:"config"`
+	Tasks     *string `yaml:"tasks"`
+	Filter    *string `yaml:"filter"`
+	Run       *string `yaml:"run"`
+	Throwaway *string `yaml:"throwaway"`
+	Interrupt *string `yaml:"interrupt"`
+	Quit      *string `yaml:"quit"`
+}
+
+// written are the keys the file sets, by setting name, in the order the
+// file's format lists them.
+func (k keysFile) written() []writtenKey {
+	all := []writtenKey{
+		{"split-right", k.SplitRight}, {"split-below", k.SplitBelow}, {"remove", k.Remove},
+		{"shrink", k.Shrink}, {"grow", k.Grow},
+		{"start", k.Start}, {"bind", k.Bind}, {"edit", k.Edit}, {"edit-raw", k.EditRaw},
+		{"kill", k.Kill}, {"delete", k.Delete}, {"rerun", k.Rerun}, {"reload", k.Reload},
+		{"preview", k.Preview}, {"config", k.Config}, {"tasks", k.Tasks}, {"filter", k.Filter},
+		{"run", k.Run}, {"throwaway", k.Throwaway}, {"interrupt", k.Interrupt}, {"quit", k.Quit},
+	}
+	return slices.DeleteFunc(all, func(w writtenKey) bool { return w.value == nil })
+}
+
+// writtenKey is a key setting the file sets.
+type writtenKey struct {
+	field string
+	value *string
 }
 
 // settingsTypes names the file's shapes in YAML's errors as the file
@@ -219,30 +258,35 @@ func decodeSettings(raw []byte) (Settings, error) {
 		}
 		settings.previewEvery = every
 	}
-	keys := &settings.keys
-	for _, key := range []struct {
-		field string
-		value *string
-		into  *string
-	}{
-		{"split-right", file.Keys.SplitRight, &keys.splitRight},
-		{"split-below", file.Keys.SplitBelow, &keys.splitBelow},
-		{"remove", file.Keys.Remove, &keys.remove},
-		{"shrink", file.Keys.Shrink, &keys.shrink},
-		{"grow", file.Keys.Grow, &keys.grow},
-	} {
-		if key.value == nil {
-			continue
-		}
+	set := map[string]string{}
+	for _, key := range file.Keys.written() {
 		if *key.value == "" {
 			return Settings{}, fmt.Errorf("keys.%s: %w", key.field, ErrEmptyKey)
 		}
 		if !keyName.MatchString(*key.value) || shiftedCharacter.MatchString(*key.value) {
 			return Settings{}, fmt.Errorf("keys.%s: %w: %q (want a character, or a name such as space or ctrl+x)", key.field, ErrInvalidKey, *key.value)
 		}
-		*key.into = *key.value
+		set[key.field] = *key.value
+	}
+	keys := &settings.keys
+	for field, into := range map[string]*string{
+		"split-right": &keys.splitRight, "split-below": &keys.splitBelow, "remove": &keys.remove,
+		"shrink": &keys.shrink, "grow": &keys.grow,
+	} {
+		if key, ok := set[field]; ok {
+			*into = key
+		}
 	}
 	if err := keys.free(); err != nil {
+		return Settings{}, err
+	}
+	settings.browserKeys = map[string]string{}
+	for _, action := range browserActions {
+		if key, ok := set[action.field]; ok {
+			settings.browserKeys[action.field] = key
+		}
+	}
+	if err := checkKeys(browserActions, settings.browserKeys, browserFixedKeys); err != nil {
 		return Settings{}, err
 	}
 	return settings, nil

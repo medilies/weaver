@@ -40,7 +40,7 @@
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
     },
     "keys": {
-      "description": "The config form's keys on the drawing, tmux's unless set. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c), nor two the same.",
+      "description": "The keys of the browser's and the config form's actions, one key each, their own unless set. Moving, enter, esc, Tab and ctrl+c stay fixed. None may be a key the config form already uses (arrows, h/j/k/l, enter, o, d, J, K, u, ctrl+r, ctrl+s, esc, ctrl+c) for the drawing keys, and two actions available at once can't share a key.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -48,7 +48,23 @@
         "split-below": { "$ref": "#/definitions/key", "description": "Split the selected pane, the new one below. \" unless set." },
         "remove": { "$ref": "#/definitions/key", "description": "Remove the selected pane. x unless set." },
         "shrink": { "$ref": "#/definitions/key", "description": "Make the selected pane smaller. H unless set." },
-        "grow": { "$ref": "#/definitions/key", "description": "Make the selected pane larger. L unless set." }
+        "grow": { "$ref": "#/definitions/key", "description": "Make the selected pane larger. L unless set." },
+        "start": { "$ref": "#/definitions/key", "description": "Browser: start the selected project, staying. s unless set." },
+        "bind": { "$ref": "#/definitions/key", "description": "Browser: bind the current directory. b unless set." },
+        "edit": { "$ref": "#/definitions/key", "description": "Browser: change the selected project's config in the config form. e unless set." },
+        "edit-raw": { "$ref": "#/definitions/key", "description": "Browser: edit the selected project's config raw in the editor. E unless set." },
+        "kill": { "$ref": "#/definitions/key", "description": "Browser: kill the selected project's session. x unless set." },
+        "delete": { "$ref": "#/definitions/key", "description": "Browser: delete the selected project's config. d unless set." },
+        "rerun": { "$ref": "#/definitions/key", "description": "Browser: rerun the selected pane's exited command. r unless set." },
+        "reload": { "$ref": "#/definitions/key", "description": "Browser: reload the selected pane or its window. R unless set." },
+        "preview": { "$ref": "#/definitions/key", "description": "Browser: switch between the preview and the drawing. p unless set." },
+        "config": { "$ref": "#/definitions/key", "description": "Browser: show the config instead of the drawing. y unless set." },
+        "tasks": { "$ref": "#/definitions/key", "description": "Browser: move the cursor into the task list. t unless set." },
+        "filter": { "$ref": "#/definitions/key", "description": "Browser: filter the projects by name. / unless set." },
+        "run": { "$ref": "#/definitions/key", "description": "Browser's task list: run the selected task, staying. r unless set." },
+        "throwaway": { "$ref": "#/definitions/key", "description": "Browser's task list: run the selected task in a throwaway window. w unless set." },
+        "interrupt": { "$ref": "#/definitions/key", "description": "Browser: interrupt the selected pane, or the selected task in the task list. i unless set." },
+        "quit": { "$ref": "#/definitions/key", "description": "Browser: quit. q unless set." }
       }
     }
   },

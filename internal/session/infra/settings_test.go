@@ -195,6 +195,44 @@ func TestLoadSettings(t *testing.T) {
 	})
 }
 
+func TestBrowserKeys(t *testing.T) {
+	t.Run("move an action to the key set, its own doing nothing", func(t *testing.T) {
+		got, err := settingsIn(t, "keys:\n  kill: K\n")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		keys := newKeymap(browserActions, got.browserKeys)
+		if keys.pressed(inProjects, "K") != "x" || keys.pressed(inProjects, "x") != "" || keys.shown(inProjects, "x") != "K" {
+			t.Fatalf("got K %q, x %q, shown %q; want K killing and x doing nothing", keys.pressed(inProjects, "K"), keys.pressed(inProjects, "x"), keys.shown(inProjects, "x"))
+		}
+	})
+
+	t.Run("keep the keys of the task list apart from the project list's", func(t *testing.T) {
+		got, err := settingsIn(t, "keys:\n  run: s\n")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		keys := newKeymap(browserActions, got.browserKeys)
+		if keys.pressed(inTasks, "s") != "r" || keys.pressed(inProjects, "r") != "r" || keys.pressed(inProjects, "s") != "s" {
+			t.Fatal("want s running a task in the task list, and r rerunning, s starting in the project list")
+		}
+	})
+
+	t.Run("refuse two actions of one list on a key, naming the one set", func(t *testing.T) {
+		_, err := settingsIn(t, "keys:\n  start: x\n")
+		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.start: key taken: "x" already does keys.kill in the project list`) {
+			t.Fatalf("got %v, want x refused as kill's", err)
+		}
+	})
+
+	t.Run("refuse a key the browser keeps", func(t *testing.T) {
+		_, err := settingsIn(t, "keys:\n  quit: esc\n")
+		if !errors.Is(err, ErrKeyTaken) || !strings.Contains(err.Error(), `keys.quit: key taken: "esc" already does go back`) {
+			t.Fatalf("got %v, want esc refused", err)
+		}
+	})
+}
+
 func TestLoadSettingsSavesTheSchema(t *testing.T) {
 	t.Run("in a folder that exists", func(t *testing.T) {
 		dir := t.TempDir()

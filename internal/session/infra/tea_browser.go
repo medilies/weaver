@@ -35,6 +35,7 @@ type TeaBrowser struct {
 	every  time.Duration // how often the browser finds what it shows again
 	small  bool          // whether the window list draws miniatures
 	mouse  bool          // whether it takes clicks
+	keys   keymap        // its keys, as the settings set them
 	screen *browserScreen
 	held   *HeldOutput
 }
@@ -88,7 +89,7 @@ type browserPlace struct {
 func NewTeaBrowser(settings Settings, held *HeldOutput) TeaBrowser {
 	return TeaBrowser{
 		kept: &browserPlace{drawings: !settings.preview}, theme: settings.theme(), every: settings.previewEvery,
-		small: settings.miniatures, mouse: settings.mouse,
+		small: settings.miniatures, mouse: settings.mouse, keys: newKeymap(browserActions, settings.browserKeys),
 		screen: &browserScreen{}, held: held,
 	}
 }
@@ -203,7 +204,7 @@ func (b TeaBrowser) Leave() error {
 // show puts the browser on screen.
 func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
 	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
-	model := browser{projects: projects, notice: notice, theme: b.theme, every: b.every, small: b.small, mouse: b.mouse, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
+	model := browser{projects: projects, notice: notice, theme: b.theme, every: b.every, small: b.small, mouse: b.mouse, keymap: b.keys, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
 	model.filter, model.config = b.kept.filter, b.kept.config
 	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Name() == selected }) {
 		model.filter = ""
@@ -262,8 +263,9 @@ var browserKeys = map[string]app.Action{
 type browser struct {
 	theme      theme
 	every      time.Duration
-	small      bool // whether the window list draws miniatures
-	mouse      bool // whether it takes clicks
+	small      bool   // whether the window list draws miniatures
+	mouse      bool   // whether it takes clicks
+	keymap     keymap // its keys, as the settings set them
 	projects   []app.ProjectOverview
 	cursor     int
 	top        int
@@ -522,6 +524,9 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	if m.reloading != "" {
 		return m.reloadAnswered(key), nil
+	}
+	if key = m.keymap.pressed(m.keyList(), key); key == "" {
+		return m, nil // an action's own key, moved elsewhere by the settings
 	}
 	if m.tasking && key != "q" && key != "ctrl+c" {
 		next, _ := m.pressInTasks(key)
@@ -842,6 +847,15 @@ func (m browser) pressedWaiting(key string) (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
+// keyList is the list the browser's keys act on: the task list while it
+// holds the cursor, else the project list.
+func (m browser) keyList() string {
+	if m.tasking {
+		return inTasks
+	}
+	return inProjects
+}
+
 // asksReload is m asking what to reload in the selected project's owned
 // session: the selected pane, when it is in the config, or the window
 // drawn.
@@ -1017,6 +1031,10 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if m.tasking {
 		line, spots, told = "", nil, m.taskingKeys()
+	}
+	told = slices.Clone(told)
+	for i := range told {
+		told[i].key = m.keymap.shown(m.keyList(), told[i].key)
 	}
 	keys, keySpots := m.theme.keys(told)
 	offset := ansi.StringWidth(line)

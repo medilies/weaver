@@ -118,6 +118,9 @@ or that leaves a quote open, marks its pane.
 
 ## Keys
 
+The keys below are the defaults: the [settings](settings.md#keys) can
+move the browser's actions to other keys.
+
 | Key | Does |
 | --- | --- |
 | ↑ ↓ or k j | select a project |

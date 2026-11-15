@@ -77,6 +77,22 @@ func TestEditorSetting(t *testing.T) {
 	}
 }
 
+// TestBrowserKeySetting: settings `keys: {config: Y}`: `weave`, select
+// `shop`, `y`, then `Y`.
+//
+// The keys line reads `Y config`; `y` does nothing, `Y` shows the config.
+func TestBrowserKeySetting(t *testing.T) {
+	h := start(t)
+	h.settings("keys:", "  config: Y")
+	h.browse("shop")
+	h.sees("Y config")
+
+	h.keys("y", "Y")
+
+	h.sees("root: ")
+	h.sees("Y drawing")
+}
+
 // TestClickPicksPane: `weave`, select `blog`, click `shell` in the pane
 // list.
 //
