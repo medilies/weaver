@@ -108,6 +108,8 @@ Each is a function `sN` in the script, starting fresh. *Started* means started w
 | 22 | `notes` started: `weave`, select `notes`, Tab, `p`, Tab, `p`, `t`, ↓, ↑ | The preview selects `files`, then `edit`; the drawing keeps `edit`, then selects `files`, and the preview keeps `files`. Moving between `ls` and `echo saved` in the task list selects `files` and `edit` in the preview. |
 | 23 | `notes` started, `code` zoomed on `edit`: `weave kill notes` | `notes` is gone and `term` still runs: weave unzooms first, as tmux 3.4 crashes killing a session with a zoomed window, taking every session along. |
 | 24 | `weave`, select `notes`, `e`, ↓ until the project card scrolls out of view, ↑ back to `root` | The project card shows whole again, its border and the `name` row above `root` included, though the cursor never stops on `name`. |
+| 25 | `notes` started, `code` zoomed on `files`: in `files`, `weave`, select `notes`, `t`, `r` on `ls`, `w`, ↓, `r` on `echo saved` | `r` on `ls` is refused in red: `✗ files runs this browser: w runs ls in a throwaway window`. `w` runs it in a throwaway window `ls`, `code` staying the current window. `echo saved` runs in `edit`, `files` staying the current pane. |
+| 26 | `notes` started, `edit` busy: `weave`, select `notes`, `t`, ↓, `r`, `y` | The browser asks in its status line, staying on screen: `edit is busy: run echo saved in a throwaway window? (y/n)`. After `y` it says the task runs in a throwaway window, and the client stays in the browser. |
 
 ## Sample projects
 

@@ -156,10 +156,12 @@ func (o ProjectOverview) WindowCount() (present, configured int) {
 
 // BrowseProjects lets the user act on the registered projects from a
 // browser until they open one or quit. After each action, the browser
-// shows the projects again, with what happened.
+// shows the projects again, with what happened. It stays on screen while
+// an action runs, asking there what the action asks, unless the action
+// needs the terminal: the config form, the editor, setup or teardown
+// commands, or going into a session.
 type BrowseProjects struct {
 	browser   ProjectBrowser
-	confirm   Confirmer
 	projects  domain.ProjectRegistry
 	documents ProjectDocuments
 	workspace domain.Workspace
@@ -177,7 +179,6 @@ type BrowseProjects struct {
 // cases the browser offers.
 func NewBrowseProjects(
 	browser ProjectBrowser,
-	confirm Confirmer,
 	projects domain.ProjectRegistry,
 	documents ProjectDocuments,
 	workspace domain.Workspace,
@@ -191,17 +192,22 @@ func NewBrowseProjects(
 	rerun RerunCommand,
 ) BrowseProjects {
 	return BrowseProjects{
-		browser: browser, confirm: confirm, projects: projects, documents: documents, workspace: workspace,
+		browser: browser, projects: projects, documents: documents, workspace: workspace,
 		sessions: sessions, list: list, open: open, bind: bind, edit: edit, kill: kill, run: run, rerun: rerun,
 	}
 }
 
 // Handle shows the browser until the user opens a project, runs a task
 // and goes where it runs, reruns a command, or quits; a project bound from
-// it is rooted at workingDir.
-func (uc BrowseProjects) Handle(workingDir string) error {
+// it is rooted at workingDir. The browser has left once it returns.
+func (uc BrowseProjects) Handle(workingDir string) (err error) {
+	defer func() {
+		if left := uc.browser.Leave(); err == nil {
+			err = left
+		}
+	}()
 	var selected domain.ProjectName
-	notice := ""
+	var notice Notice
 	for {
 		overviews, err := uc.overviews()
 		if err != nil {
@@ -214,14 +220,17 @@ func (uc BrowseProjects) Handle(workingDir string) error {
 		if err != nil {
 			return err
 		}
-		selected, notice, err = uc.act(choice, workingDir, overviews)
+		var said string
+		selected, said, err = uc.act(choice, workingDir, overviews)
 		switch {
 		case err == nil && (choice.Action == ActionOpen || choice.Action == ActionRunTask || choice.Action == ActionRerun):
 			return nil // the user is in the session
 		case errors.Is(err, ErrAborted):
-			notice = "Nothing done."
+			notice = Telling("Nothing done.")
 		case err != nil:
-			notice = err.Error()
+			notice = FailingWith(err)
+		default:
+			notice = Telling(said)
 		}
 	}
 }
@@ -513,6 +522,24 @@ func runs(pane domain.PanePlan, cmd domain.Command) (string, bool) {
 // select next and what to tell the user. Declining to confirm is ErrAborted.
 func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []ProjectOverview) (domain.ProjectName, string, error) {
 	name := choice.Project
+	var project domain.Project
+	for _, overview := range overviews {
+		if overview.Name() == name {
+			project = overview.project
+		}
+	}
+	switch choice.Action {
+	case ActionOpen, ActionBind, ActionEdit, ActionEditRaw, ActionRunTask, ActionRerun:
+		if err := uc.browser.Leave(); err != nil {
+			return name, "", err
+		}
+	case ActionStart:
+		if len(project.Setup()) > 0 {
+			if err := uc.browser.Leave(); err != nil {
+				return name, "", err
+			}
+		}
+	}
 	switch choice.Action {
 	case ActionOpen:
 		return name, "", uc.open.Handle(name.String())
@@ -545,6 +572,11 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		if err := uc.ask(fmt.Sprintf("Kill %s's session and everything running in it?", name)); err != nil {
 			return name, "", err
 		}
+		if len(project.Teardown()) > 0 {
+			if err := uc.browser.Leave(); err != nil {
+				return name, "", err
+			}
+		}
 		return name, fmt.Sprintf("Killed %s.", name), uc.kill.Handle(name.String())
 	case ActionDelete:
 		if err := uc.ask(fmt.Sprintf("Delete %s's config? A running session keeps running.", name)); err != nil {
@@ -558,6 +590,9 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		return name, "", uc.run.Handle(name, choice.Task)
 	case ActionRunTaskStaying:
 		notice, err := uc.run.HandleStaying(name, choice.Task)
+		return name, notice, err
+	case ActionRunTaskApart:
+		notice, err := uc.run.HandleApart(name, choice.Task)
 		return name, notice, err
 	case ActionRerun:
 		return name, "", uc.rerun.Handle(name, choice.Pane)
@@ -584,7 +619,7 @@ func neighbour(overviews []ProjectOverview, name domain.ProjectName) domain.Proj
 
 // ask returns ErrAborted unless the user answers yes to question.
 func (uc BrowseProjects) ask(question string) error {
-	yes, err := uc.confirm.Confirm(question)
+	yes, err := uc.browser.Confirm(question)
 	if err == nil && !yes {
 		return ErrAborted
 	}

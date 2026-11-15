@@ -48,12 +48,29 @@ func (l lazyConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 
 type lazyBrowser func() (infra.TeaBrowser, error)
 
-func (l lazyBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.LiveSessions) (app.Choice, error) {
+func (l lazyBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, previews app.LiveSessions) (app.Choice, error) {
 	browser, err := l()
 	if err != nil {
 		return app.Choice{}, err
 	}
 	return browser.Browse(projects, selected, notice, previews)
+}
+
+func (l lazyBrowser) Confirm(question string) (bool, error) {
+	browser, err := l()
+	if err != nil {
+		return false, err
+	}
+	return browser.Confirm(question)
+}
+
+// Leave has nothing to take off screen when the browser couldn't be built.
+func (l lazyBrowser) Leave() error {
+	browser, err := l()
+	if err != nil {
+		return nil //nolint:nilerr // never shown, so never left
+	}
+	return browser.Leave()
 }
 
 var (

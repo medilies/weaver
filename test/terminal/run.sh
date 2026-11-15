@@ -685,6 +685,41 @@ s23() {
 	T has-session -t =term 2>/dev/null || fail "term went with notes: the server crashed"
 }
 
+s25() {
+	started notes || return
+	AT=$(pane_of notes:code files)
+	[ -n "$AT" ] || fail "notes has no files pane" || return
+	zoom notes:code files || return
+	browse notes || return
+	keys t
+	wait_for 'enter run, go' || return
+	keys r
+	wait_for '✗ files runs this browser: w runs ls in a throwaway window' || return
+	keys w
+	wait_for 'Running ls in a throwaway window.' || return
+	until_ 5 T has-session -t =notes:ls 2>/dev/null || fail "no window ls" || return
+	expect "the current window" "$(T display -p -t =notes: '#{window_name}')" code || return
+	keys Down r
+	wait_for 'Running echo saved in code › edit.' || return
+	expect "the current pane" "$(T display -p -t =notes: '#{@label}')" files
+}
+
+s26() {
+	started notes || return
+	local edit
+	edit=$(pane_of notes:code edit)
+	[ -n "$edit" ] || fail "notes has no edit pane" || return
+	T send-keys -t "$edit" 'sleep 300' Enter
+	wait_runs "$edit" sleep || return
+	browse notes || return
+	keys t Down r
+	wait_for 'edit is busy: run echo saved in a throwaway window? (y/n)' || return
+	shows 'notes.yml' || fail "the browser left for the question" || return
+	keys y
+	wait_for 'Running echo saved in a throwaway window.' || return
+	on term || fail "r left the browser"
+}
+
 # --- Running ----------------------------------------------------------------
 
 main() {

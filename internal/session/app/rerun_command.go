@@ -59,7 +59,7 @@ func (uc RerunCommand) Handle(name domain.ProjectName, at PaneAt) error {
 	if busy {
 		return fmt.Errorf("%w: the command of %s is running", ErrNothingToRerun, where(window, pane))
 	}
-	if err := uc.tasks.Type(name, window, at.Pane, cmd); err != nil {
+	if err := uc.tasks.Type(name, window, at.Pane, cmd, true); err != nil {
 		return err
 	}
 	if err := uc.tasks.Attach(name); err != nil {

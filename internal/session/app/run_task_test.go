@@ -16,22 +16,29 @@ import (
 // asked to run.
 type fakeTasks struct {
 	*fakeSessions
-	busy  map[string]bool // "window/index"
-	typed []string        // "window/index: command"
-	apart []string        // "throwaway window in dir: command"
+	busy    map[string]bool // "window/index"
+	weaver  string          // the pane weaver runs in, "window/index"
+	typed   []string        // "window/index: command"
+	apart   []string        // "throwaway window in dir: command"
+	landing []bool          // whether each run landed there
 }
 
 func (f *fakeTasks) Busy(_ domain.ProjectName, window domain.WindowPlan, index int) (bool, error) {
+	if paneKey(window, index) == f.weaver {
+		return true, domain.ErrPaneRunsWeaver
+	}
 	return f.busy[paneKey(window, index)], nil
 }
 
-func (f *fakeTasks) Type(_ domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command) error {
+func (f *fakeTasks) Type(_ domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command, landing bool) error {
 	f.typed = append(f.typed, paneKey(window, index)+": "+cmd.String())
+	f.landing = append(f.landing, landing)
 	return nil
 }
 
-func (f *fakeTasks) RunApart(_ domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
+func (f *fakeTasks) RunApart(_ domain.ProjectName, window domain.WindowPlan, index int, task domain.Task, landing bool) error {
 	f.apart = append(f.apart, task.ThrowawayWindow().String()+" in "+window.Panes()[index].Dir()+": "+task.Command().String())
+	f.landing = append(f.landing, landing)
 	return nil
 }
 
@@ -161,6 +168,28 @@ func TestRunTask(t *testing.T) {
 		}
 	})
 
+	t.Run("lands where the task runs, so the user is put there", func(t *testing.T) {
+		tasks := runningShop(t)
+		if err := runTask(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(tasks.landing, []bool{true}) {
+			t.Fatalf("got landing %v, want the run to land", tasks.landing)
+		}
+	})
+
+	t.Run("refuses the pane the browser runs in, pointing to w", func(t *testing.T) {
+		tasks := runningShop(t)
+		tasks.weaver = "shop/1"
+		err := runTask(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		if !errors.Is(err, domain.ErrPaneRunsWeaver) || err.Error() != "front runs this browser: w runs migrate in a throwaway window" {
+			t.Fatalf("got %v, want front refused as running this browser, pointing to w", err)
+		}
+		if len(tasks.typed)+len(tasks.apart)+len(tasks.attached) > 0 {
+			t.Fatalf("ran %q %q, attached %q, want nothing run", tasks.typed, tasks.apart, tasks.attached)
+		}
+	})
+
 	t.Run("rejects a task the pane doesn't offer", func(t *testing.T) {
 		err := runTask(t, runningShop(t), answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 0, Task: 0})
 		if !errors.Is(err, domain.ErrTaskNotFound) {
@@ -205,12 +234,73 @@ func TestRunTaskStaying(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves the session's current window and pane where they are", func(t *testing.T) {
+		tasks := runningShop(t)
+		staying(t, tasks, answer(false), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
+		if !slices.Equal(tasks.landing, []bool{false}) {
+			t.Fatalf("got landing %v, want the run not to land", tasks.landing)
+		}
+	})
+
 	t.Run("says a task run apart runs in a throwaway window", func(t *testing.T) {
 		tasks := runningShop(t)
 		tasks.busy = map[string]bool{"shop/1": true}
 		said := staying(t, tasks, answer(true), app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0})
 		if said != "Running migrate in a throwaway window." || len(tasks.apart) != 1 {
 			t.Fatalf("got %q, apart %q; want migrate run apart", said, tasks.apart)
+		}
+	})
+}
+
+func TestRunTaskApart(t *testing.T) {
+	// apart runs the task at of the tasked shop project in a throwaway
+	// window, its session in tasks, asking confirm.
+	apart := func(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) (string, error) {
+		t.Helper()
+		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
+		name, err := domain.NewProjectName("shop")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return app.NewRunTask(configs, tasks, confirm).HandleApart(name, at)
+	}
+	migrate := func(t *testing.T) app.TaskAt {
+		return app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}
+	}
+
+	t.Run("runs the task in a throwaway window without asking, its pane idle", func(t *testing.T) {
+		tasks, confirm := runningShop(t), &countingConfirmer{}
+		said, err := apart(t, tasks, confirm, migrate(t))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if said != "Running migrate in a throwaway window." || len(tasks.apart) != 1 || len(tasks.typed) > 0 || confirm.asked != 0 {
+			t.Fatalf("got %q, apart %q, typed %q after %d questions; want migrate apart, unasked", said, tasks.apart, tasks.typed, confirm.asked)
+		}
+	})
+
+	t.Run("runs a task of the pane the browser runs in", func(t *testing.T) {
+		tasks := runningShop(t)
+		tasks.weaver = "shop/1"
+		if _, err := apart(t, tasks, answer(false), migrate(t)); err != nil || len(tasks.apart) != 1 {
+			t.Fatalf("got %v, apart %q; want migrate apart", err, tasks.apart)
+		}
+	})
+
+	t.Run("leaves the user where they are", func(t *testing.T) {
+		tasks := runningShop(t)
+		if _, err := apart(t, tasks, answer(false), migrate(t)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(tasks.landing, []bool{false}) || len(tasks.attached) > 0 {
+			t.Fatalf("got landing %v, attached %q; want neither", tasks.landing, tasks.attached)
+		}
+	})
+
+	t.Run("refuses a project that isn't running", func(t *testing.T) {
+		tasks := &fakeTasks{fakeSessions: &fakeSessions{}}
+		if _, err := apart(t, tasks, answer(true), migrate(t)); !errors.Is(err, domain.ErrSessionNotRunning) || len(tasks.apart) > 0 {
+			t.Fatalf("got %v, apart %q; want ErrSessionNotRunning and nothing run", err, tasks.apart)
 		}
 	})
 }

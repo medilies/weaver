@@ -79,9 +79,14 @@ when something
 runs there, or the pane is in copy mode, weaver asks before running the task in a throwaway window
 instead, named after the task (or its command's program), starting in
 the pane's directory with its `env` and `before` commands, and kept open
-once the task ends until you close it. `weave bind` leaves throwaway
-windows out, and opening the project doesn't restore them. Either way
-weaver then puts you where the task runs, as opening the project does.
+once the task ends until you close it. `w` runs a task in a throwaway
+window without asking, whether its pane is busy or not. `weave bind` leaves throwaway
+windows out, and opening the project doesn't restore them. With enter,
+weaver then puts you where the task runs, as opening the project does;
+with `r`, `w` or a click, you stay in the browser, and the session's
+current window and pane stay as they were. A task of the pane the browser
+runs in is never typed there, which would type it into the browser: the
+status line says so, and `w` runs it in a throwaway window.
 A pane offers tasks under `tasks:`:
 
 ```yaml
@@ -106,8 +111,8 @@ or that leaves a quote open, marks its pane.
 | r | rerun the selected pane's command once it exited: typed into the pane again, as a task is, then you are put in that pane. Only in a session weaver started, on a pane run with `command`, not `prefill` |
 | p | switch between the preview of the selected window and its drawing, for as long as the browser stays open. Only in a session weaver started |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
-| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it and puts you where it runs, r runs it and keeps you in the browser, saying where it runs, esc goes back |
-| click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
+| t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing, enter runs it and puts you where it runs, r runs it and keeps you in the browser, saying where it runs, w runs it in a throwaway window, keeping you in the browser, esc goes back |
+| click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list, as r does; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it: start it, then attach or switch, like `weave <project>` |
 | s | start it, like `weave -d <project>`: the browser stays, saying what was started |
@@ -119,6 +124,11 @@ or that leaves a quote open, marks its pane.
 | q or esc | quit (esc hides the config, then clears the filter, first) |
 
 After starting, binding, editing, killing, deleting or running a task, the list
-comes back, unfiltered, with what happened. Since the browser and the config form take
+comes back with what happened in the status line, a failure in red after
+✗, the filter kept while it shows the project acted on. The browser
+stays on screen while the action runs, asking there what it asks
+(`y` or enter answers yes, any other key no), unless the action needs
+the terminal: the config form, the editor, `setup` or `teardown`
+commands, or going into a session. Since the browser and the config form take
 the mouse, most terminals select text with shift held, and the wheel
 doesn't scroll them.

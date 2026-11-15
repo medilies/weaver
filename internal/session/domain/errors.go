@@ -143,6 +143,9 @@ var (
 	// ErrPaneNotRunning is returned when running a task in a pane its
 	// project's running session lacks.
 	ErrPaneNotRunning = errors.New("the running session lacks this pane")
+	// ErrPaneRunsWeaver is returned when typing a task into the pane the
+	// browser runs in, which would type it into the browser.
+	ErrPaneRunsWeaver = errors.New("runs this browser")
 	// ErrWindowNotRunning is returned when previewing a window its
 	// project's running session lacks.
 	ErrWindowNotRunning = errors.New("the running session lacks this window")

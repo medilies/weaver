@@ -136,13 +136,13 @@ func (m browser) withPreview(msg previewed) browser {
 			failure = fmt.Sprintf("preview: %s's window %s closed", msg.project, msg.window)
 		}
 		if failure != m.previewFailure {
-			m.notice, m.previewFailure = failure, failure
+			m.notice, m.previewFailure = app.Telling(failure), failure
 		}
 		return m
 	}
 	before, wasShown := m.shownPreview()
-	if m.previewFailure != "" && m.notice == m.previewFailure {
-		m.notice = "" // the failure is over
+	if m.previewFailure != "" && m.notice.Text() == m.previewFailure {
+		m.notice = app.Notice{} // the failure is over
 	}
 	m.preview, m.hasPreview, m.previewFailure = msg, true, ""
 	if wasShown && m.previewPane < len(before.Panes()) {
@@ -197,8 +197,8 @@ func (m browser) switchedView() browser {
 		m.drawings = true
 		return m
 	}
-	if m.previewFailure != "" && m.notice == m.previewFailure {
-		m.notice = "" // told again if it fails again
+	if m.previewFailure != "" && m.notice.Text() == m.previewFailure {
+		m.notice = app.Notice{} // told again if it fails again
 	}
 	m.drawings, m.previewFailure = false, ""
 	shown := m.shown()
@@ -209,11 +209,11 @@ func (m browser) switchedView() browser {
 	session, running := project.Session()
 	switch {
 	case !running:
-		m.notice = fmt.Sprintf("preview: %s isn't running", project.Name())
+		m.notice = app.Telling(fmt.Sprintf("preview: %s isn't running", project.Name()))
 	case !session.Owned():
-		m.notice = fmt.Sprintf("preview: %s's session wasn't started by weaver", project.Name())
+		m.notice = app.Telling(fmt.Sprintf("preview: %s's session wasn't started by weaver", project.Name()))
 	case !m.roomToDraw():
-		m.notice = "preview: the terminal is too small"
+		m.notice = app.Telling("preview: the terminal is too small")
 	}
 	return m
 }

@@ -13,11 +13,21 @@ import (
 )
 
 // scriptedBrowser is an app.ProjectBrowser making the next scripted choice
-// on each call, then quitting, and recording what each call showed.
+// on each call, then quitting, recording what each call showed, answering
+// questions as confirm does, and recording the questions and when it left.
 type scriptedBrowser struct {
 	choices  []app.Choice
 	shown    []browserView
 	previews app.LiveSessions // the last call's
+	confirm  app.Confirmer
+	onScreen bool
+	events   []string // "asked on screen", "asked off screen", "left"
+}
+
+// asking is b answering questions as confirm does.
+func (b *scriptedBrowser) asking(confirm app.Confirmer) *scriptedBrowser {
+	b.confirm = confirm
+	return b
 }
 
 // browserView is what one call to Browse showed.
@@ -25,17 +35,35 @@ type browserView struct {
 	projects []app.ProjectOverview
 	selected domain.ProjectName
 	notice   string
+	failure  bool
 }
 
-func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, previews app.LiveSessions) (app.Choice, error) {
-	b.previews = previews
-	b.shown = append(b.shown, browserView{projects: projects, selected: selected, notice: notice})
+func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, previews app.LiveSessions) (app.Choice, error) {
+	b.previews, b.onScreen = previews, true
+	b.shown = append(b.shown, browserView{projects: projects, selected: selected, notice: notice.Text(), failure: notice.Failure()})
 	if len(b.choices) == 0 {
 		return app.Choice{}, app.ErrAborted
 	}
 	choice := b.choices[0]
 	b.choices = b.choices[1:]
 	return choice, nil
+}
+
+func (b *scriptedBrowser) Confirm(question string) (bool, error) {
+	if b.onScreen {
+		b.events = append(b.events, "asked on screen")
+	} else {
+		b.events = append(b.events, "asked off screen")
+	}
+	return b.confirm.Confirm(question)
+}
+
+func (b *scriptedBrowser) Leave() error {
+	if b.onScreen {
+		b.events = append(b.events, "left")
+	}
+	b.onScreen = false
+	return nil
 }
 
 // last is what the browser showed after the scripted choices.
@@ -139,13 +167,13 @@ func newBrowseSetup(t *testing.T, choices ...app.Choice) browseSetup {
 func (s browseSetup) browse(confirm app.Confirmer) error {
 	server := tmuxServer{s.sessions}
 	return app.NewBrowseProjects(
-		s.browser, confirm, s.configs, s.documents, s.workspace, server,
+		s.browser.asking(confirm), s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace, &fakeCommands{}),
 		app.NewBindProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form),
 		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
 		app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}),
-		app.NewRunTask(s.configs, &fakeTasks{fakeSessions: s.sessions}, confirm),
+		app.NewRunTask(s.configs, &fakeTasks{fakeSessions: s.sessions}, s.browser),
 		app.NewRerunCommand(s.configs, &fakeTasks{fakeSessions: s.sessions}),
 	).Handle("/srv/new")
 }
@@ -184,7 +212,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("shows why a readable config isn't valid, beside the config", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		err := app.NewBrowseProjects(s.browser, answer(true), invalidConfig{s.configs, "shop"}, s.documents, s.workspace, tmuxServer{s.sessions},
+		err := app.NewBrowseProjects(s.browser.asking(answer(true)), invalidConfig{s.configs, "shop"}, s.documents, s.workspace, tmuxServer{s.sessions},
 			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.BindProject{}, app.EditProject{}, app.KillProject{}, app.RunTask{}, app.RerunCommand{},
 		).Handle("/srv/new")
 		if err != nil {
@@ -273,7 +301,7 @@ func TestBrowseProjects(t *testing.T) {
 
 	t.Run("keeps the summary when tmux can't describe a running session", func(t *testing.T) {
 		s := newBrowseSetup(t)
-		err := app.NewBrowseProjects(s.browser, answer(true), s.configs, s.documents, s.workspace,
+		err := app.NewBrowseProjects(s.browser.asking(answer(true)), s.configs, s.documents, s.workspace,
 			unfindableSessions{errors.New("tmux gone")},
 			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.BindProject{}, app.EditProject{}, app.KillProject{}, app.RunTask{}, app.RerunCommand{},
 		).Handle("/srv/new")
@@ -449,6 +477,51 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		if got := s.browser.last().notice; len(s.browser.shown) != 2 || got != "Running tail in logs." {
 			t.Fatalf("browser shown %d times, last with %q; want it back saying tail runs", len(s.browser.shown), got)
+		}
+	})
+
+	t.Run("stays on screen while a task runs staying, asking there", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		choice := choose(t, app.ActionRunTaskStaying, "shop")
+		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		s.browser.choices = []app.Choice{choice}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want the browser to leave only once done", s.browser.events)
+		}
+	})
+
+	t.Run("runs a task apart, staying, saying so", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		choice := choose(t, app.ActionRunTaskApart, "shop")
+		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		s.browser.choices = []app.Choice{choice}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.browser.last().notice; len(s.browser.shown) != 2 || got != "Running tail in a throwaway window." {
+			t.Fatalf("browser shown %d times, last with %q; want it back saying tail runs apart", len(s.browser.shown), got)
+		}
+	})
+
+	t.Run("leaves the screen before running a task and going there", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["shop"] = tasked(t)
+		s.sessions.running["shop"] = owned(t, "shop", "logs")
+		choice := choose(t, app.ActionRunTask, "shop")
+		choice.Task = app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		s.browser.choices = []app.Choice{choice}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left"}; !slices.Equal(s.browser.events, want) || len(s.sessions.attached) != 1 {
+			t.Fatalf("got %q, attached %q; want the browser left, then the session attached", s.browser.events, s.sessions.attached)
 		}
 	})
 
@@ -755,7 +828,7 @@ func TestBrowseProjects(t *testing.T) {
 		s.configs.projects["blog"] = serving(t, "", "hugo server")
 		s.workspace.programs = map[string]bool{"hugo": true}
 		s.sessions.running["blog"] = owned(t, "blog")
-		err := app.NewBrowseProjects(s.browser, answer(true), s.configs, s.documents, s.workspace,
+		err := app.NewBrowseProjects(s.browser.asking(answer(true)), s.configs, s.documents, s.workspace,
 			uninspectableSessions{s.sessions},
 			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.BindProject{}, app.EditProject{}, app.KillProject{}, app.RunTask{}, app.RerunCommand{},
 		).Handle("/srv/new")
@@ -814,6 +887,47 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("asks to kill on screen, staying there without teardown commands", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"asked on screen", "left"}; !slices.Equal(s.browser.events, want) {
+			t.Fatalf("got %q, want %q", s.browser.events, want)
+		}
+	})
+
+	t.Run("leaves the screen for teardown commands once the kill is confirmed", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		s.configs.projects["shop"] = shop(t).TearingDown(command(t, "docker compose down"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"asked on screen", "left"}; !slices.Equal(s.browser.events[:2], want) || len(s.browser.shown) != 2 {
+			t.Fatalf("got %q after %d views, want %q, then the browser back", s.browser.events, len(s.browser.shown), want)
+		}
+	})
+
+	t.Run("tells a failure as one", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "blog"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !s.browser.last().failure {
+			t.Fatalf("got notice %q told as no failure, want a failure", s.browser.last().notice)
+		}
+	})
+
+	t.Run("tells what an action did as no failure", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s.browser.last().failure {
+			t.Fatalf("got notice %q told as a failure, want none", s.browser.last().notice)
+		}
+	})
+
 	t.Run("says a session isn't running without asking to kill it", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "blog"))
 		confirm := &countingConfirmer{answer: true}
@@ -829,7 +943,7 @@ func TestBrowseProjects(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
 		server := tmuxServer{s.sessions}
 		err := app.NewBrowseProjects(
-			s.browser, answer(true), s.configs, s.documents, s.workspace, server,
+			s.browser.asking(answer(true)), s.configs, s.documents, s.workspace, server,
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.BindProject{}, app.EditProject{},
 			app.NewKillProject(unkillableSessions{err: errors.New("tmux kill-session: lost server")}, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}), app.RunTask{}, app.RerunCommand{},
 		).Handle("/srv/new")
@@ -846,7 +960,7 @@ func TestBrowseProjects(t *testing.T) {
 		confirm := &countingConfirmer{answer: true}
 		server := tmuxServer{s.sessions}
 		err := app.NewBrowseProjects(
-			s.browser, confirm, s.configs, s.documents, s.workspace, unfindableSessions{errors.New("tmux: not found")},
+			s.browser.asking(confirm), s.configs, s.documents, s.workspace, unfindableSessions{errors.New("tmux: not found")},
 			app.NewListProjects(s.configs, server), app.OpenProject{}, app.BindProject{}, app.EditProject{},
 			app.NewKillProject(server, capturedSessions{}, s.configs, &fakeCommands{}, &fakeAcks{}), app.RunTask{}, app.RerunCommand{},
 		).Handle("/srv/new")
@@ -951,6 +1065,17 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves the screen for the config form", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionEdit, "shop"))
+		s.form.project = shop(t)
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"left", "left"}; !slices.Equal(s.browser.events, want) || len(s.browser.shown) != 2 {
+			t.Fatalf("got %q after %d views, want the browser to leave for the form, then come back", s.browser.events, len(s.browser.shown))
+		}
+	})
+
 	t.Run("says when a raw edit saved the config", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionEditRaw, "shop"))
 		s.editor.saves = []string{"root: /srv/store\n"}
@@ -976,7 +1101,7 @@ func TestBrowseProjects(t *testing.T) {
 	t.Run("reports a browser that fails", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		failing := errors.New("no terminal")
-		err := app.NewBrowseProjects(failingBrowser{failing}, answer(true), s.configs, s.documents, s.workspace, tmuxServer{s.sessions},
+		err := app.NewBrowseProjects(failingBrowser{failing}, s.configs, s.documents, s.workspace, tmuxServer{s.sessions},
 			app.NewListProjects(s.configs, tmuxServer{s.sessions}), app.OpenProject{}, app.BindProject{}, app.EditProject{}, app.KillProject{}, app.RunTask{}, app.RerunCommand{},
 		).Handle("/srv/new")
 		if !errors.Is(err, failing) {
@@ -1025,8 +1150,16 @@ func isProjectNotFound(err error) bool {
 // failingBrowser is an app.ProjectBrowser that can't show anything.
 type failingBrowser struct{ err error }
 
-func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, string, app.LiveSessions) (app.Choice, error) {
+func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, app.Notice, app.LiveSessions) (app.Choice, error) {
 	return app.Choice{}, b.err
+}
+
+func (b failingBrowser) Confirm(string) (bool, error) {
+	return false, b.err
+}
+
+func (b failingBrowser) Leave() error {
+	return nil
 }
 
 // invalidConfig is a registry whose config for the project named

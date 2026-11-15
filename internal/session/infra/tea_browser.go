@@ -19,13 +19,44 @@ import (
 // the left, narrowed by a filter, the selected one's summary and
 // a drawing of its windows in the middle, or the preview of the selected
 // window of its owned session, its tasks on the right, and what the last
-// action did below. It only shows and picks: the use case acts. Shown
-// again on the same project, it keeps the window, pane and task selected,
-// and the cursor in the task list; shown again at all, the drawing when it
-// was switched to.
+// action did below. It only shows and picks: the use case acts. It stays
+// on screen from one choice to the next, until it leaves. Shown again on
+// the same project, it keeps the window, pane and task selected, and the
+// cursor in the task list; shown again at all, the drawing when it was
+// switched to.
 type TeaBrowser struct {
-	kept  *browserPlace
-	theme theme
+	kept   *browserPlace
+	theme  theme
+	screen *browserScreen
+}
+
+// browserScreen is the browser while it is on screen: its program, the
+// choices it makes and its end. Zero while it is off screen.
+type browserScreen struct {
+	program *tea.Program
+	chosen  chan app.Choice
+	ended   chan browserEnded
+}
+
+// browserEnded is how the browser's program ended.
+type browserEnded struct {
+	final tea.Model
+	err   error
+}
+
+// reshown is the projects shown again in the browser on screen, after an
+// action.
+type reshown struct {
+	projects []app.ProjectOverview
+	selected domain.ProjectName
+	notice   app.Notice
+}
+
+// asked is a question the browser on screen asks in its status line,
+// answered on answer.
+type asked struct {
+	question string
+	answer   chan<- bool
 }
 
 // browserPlace is what the browser had selected when it last ended.
@@ -38,12 +69,56 @@ type browserPlace struct {
 
 // NewTeaBrowser constructs a TeaBrowser styled by the settings' theme.
 func NewTeaBrowser(settings Settings) TeaBrowser {
-	return TeaBrowser{kept: &browserPlace{}, theme: settings.theme()}
+	return TeaBrowser{kept: &browserPlace{}, theme: settings.theme(), screen: &browserScreen{}}
 }
 
 // Browse implements app.ProjectBrowser.
-func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice string, live app.LiveSessions) (app.Choice, error) {
-	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings}
+func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) (app.Choice, error) {
+	if b.screen.program != nil {
+		b.screen.program.Send(reshown{projects: projects, selected: selected, notice: notice})
+	} else {
+		b.show(projects, selected, notice, live)
+	}
+	select {
+	case choice := <-b.screen.chosen:
+		return choice, nil
+	case end := <-b.screen.ended:
+		return app.Choice{}, b.ended(end)
+	}
+}
+
+// Confirm implements app.ProjectBrowser: in the status line while the
+// browser is on screen, else in the confirmation dialog.
+func (b TeaBrowser) Confirm(question string) (bool, error) {
+	if b.screen.program == nil {
+		return TeaConfirmer{theme: b.theme}.Confirm(question)
+	}
+	answer := make(chan bool, 1)
+	b.screen.program.Send(asked{question: question, answer: answer})
+	select {
+	case yes := <-answer:
+		return yes, nil
+	case end := <-b.screen.ended:
+		return false, b.ended(end)
+	}
+}
+
+// Leave implements app.ProjectBrowser.
+func (b TeaBrowser) Leave() error {
+	if b.screen.program == nil {
+		return nil
+	}
+	b.screen.program.Quit()
+	if err := b.ended(<-b.screen.ended); !errors.Is(err, app.ErrAborted) {
+		return err
+	}
+	return nil
+}
+
+// show puts the browser on screen.
+func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
+	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
+	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings, chosen: chosen}
 	for i, project := range projects {
 		if project.Name() == selected {
 			model.cursor = i
@@ -56,21 +131,29 @@ func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.Proje
 			model.tasking, model = true, model.taskSelected(kept.task)
 		}
 	}
-	final, err := tea.NewProgram(model).Run()
-	if err != nil {
-		return app.Choice{}, err
+	program := tea.NewProgram(model)
+	ended := make(chan browserEnded, 1)
+	go func() {
+		final, err := program.Run()
+		ended <- browserEnded{final: final, err: err}
+	}()
+	*b.screen = browserScreen{program: program, chosen: chosen, ended: ended}
+}
+
+// ended is the browser off screen, what it had selected kept, and the
+// error it ended with, or ErrAborted when the user quit.
+func (b TeaBrowser) ended(end browserEnded) error {
+	*b.screen = browserScreen{}
+	if end.err != nil {
+		return end.err
 	}
-	last := final.(browser)
+	last := end.final.(browser)
 	b.kept.drawings = last.drawings
 	if shown := last.shown(); len(shown) > 0 {
 		*b.kept = browserPlace{project: shown[last.cursor].Name(), window: last.window, pane: last.pane,
 			task: last.task, tasking: last.tasking, drawings: last.drawings}
 	}
-	choice := last.choice
-	if choice.Action == 0 {
-		return app.Choice{}, app.ErrAborted
-	}
-	return choice, nil
+	return app.ErrAborted
 }
 
 // browserKeys are the keys making a choice.
@@ -111,9 +194,16 @@ type browser struct {
 	tasksStarted    bool // asked, or found there is nothing to ask
 	tasksAsked      int  // the asks for the running tasks
 	tasksAnswered   int  // the last ask answered
-	notice          string
+	notice          app.Notice
 	width, height   int
-	choice          app.Choice
+	// choice is the one just made, sent on chosen; the browser then waits
+	// for the projects to be shown again, while it may ask the question
+	// whose answer goes on answer.
+	choice   app.Choice
+	chosen   chan<- app.Choice
+	waiting  bool
+	question string
+	answer   chan<- bool
 }
 
 // shown are the projects whose names contain the filter, ignoring case.
@@ -218,8 +308,36 @@ func (m browser) Init() tea.Cmd {
 // Update is m after msg, its list scrolled to keep the cursor in view,
 // and the preview captured at once when another one is wanted.
 func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	start := m // as it was, to tell what changed
+	switch msg := msg.(type) {
+	case reshown:
+		m = m.reshown(msg)
+	case asked:
+		m.question, m.answer = msg.question, msg.answer
+		return m, nil
+	case tea.KeyPressMsg:
+		if m.question != "" {
+			return m.answered(msg.String())
+		}
+		if m.waiting {
+			return m, nil
+		}
+	case tea.MouseClickMsg:
+		if m.question != "" || m.waiting {
+			return m, nil
+		}
+	}
 	model, cmd := m.update(msg)
 	next := model.(browser)
+	if next.choice.Action != 0 {
+		choice, chosen := next.choice, next.chosen
+		next.choice, next.waiting = app.Choice{}, true
+		cmd = tea.Batch(cmd, func() tea.Msg {
+			chosen <- choice
+			return nil
+		})
+	}
+	m = start
 	_, _, _, height, _ := next.frame()
 	next.top = next.firstShown(height)
 	before, beforeWindow, wanted := m.previewKey()
@@ -287,10 +405,7 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // the choice the key makes.
 func (m browser) press(key string) (tea.Model, tea.Cmd) {
 	if m.tasking && key != "q" && key != "ctrl+c" {
-		next, chosen := m.pressInTasks(key)
-		if chosen {
-			return next, tea.Quit
-		}
+		next, _ := m.pressInTasks(key)
 		return next, nil
 	}
 	switch key {
@@ -321,7 +436,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		pane, _ := m.selectedInConfig(len(window.Panes()))
 		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Name(),
 			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
-		return m, tea.Quit
+		return m, nil
 	case "t":
 		if len(m.tasksShown()) > 0 {
 			m.tasking = true
@@ -348,7 +463,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		if len(shown) > 0 {
 			m.choice.Project = shown[m.cursor].Name()
 		}
-		return m, tea.Quit
+		return m, nil
 	}
 	return m, nil
 }
@@ -436,7 +551,8 @@ func (m browser) clicked(x, y int) (tea.Model, tea.Cmd) {
 		_, tasks := m.taskList(taskListWidth(m.projects, m.width), height)
 		if y < len(tasks) && tasks[y] >= 0 {
 			if next, chosen := m.runningTask(tasks[y]); chosen {
-				return next, tea.Quit
+				next.choice.Action = app.ActionRunTaskStaying // a click leaves the user in the browser
+				return next, nil
 			}
 		}
 		return m, nil
@@ -524,9 +640,57 @@ func (m browser) frame() (notice, list, tasks string, height, width int) {
 }
 
 // noticeLine is the notice as frame lays it out, on as many lines as
-// the width makes it.
+// the width makes it: the question asked in the selected colour, a
+// failure in red after ✗.
 func (m browser) noticeLine() string {
-	return lipgloss.NewStyle().Width(m.width).Render(strings.Join(strings.Fields(m.notice), " "))
+	style := lipgloss.NewStyle().Width(m.width)
+	text := m.notice.Text()
+	switch {
+	case m.question != "":
+		style, text = style.Inherit(m.theme.picked), m.question+" (y/n)"
+	case m.notice.Failure():
+		style, text = style.Inherit(m.theme.problem), "✗ "+text
+	}
+	return style.Render(strings.Join(strings.Fields(text), " "))
+}
+
+// reshown is m showing the projects again after an action, no longer
+// waiting: the filter kept while it shows the project selected, the
+// window, pane and task kept while that project is the one selected
+// before.
+func (m browser) reshown(msg reshown) browser {
+	before := m.selectedName()
+	m.projects, m.notice, m.waiting = msg.projects, msg.notice, false
+	m.tasksStarted, m.hasRunning = false, false
+	if !slices.ContainsFunc(m.shown(), func(p app.ProjectOverview) bool { return p.Name() == msg.selected }) {
+		m.filter, m.filtering = "", false
+	}
+	m.cursor = 0
+	for i, project := range m.shown() {
+		if project.Name() == msg.selected {
+			m.cursor = i
+		}
+	}
+	m = m.reselected(before)
+	if m.tasking {
+		if len(m.tasksShown()) == 0 {
+			m.tasking = false
+		} else {
+			m = m.taskSelected(m.task) // the config may have changed: the task decides what is drawn
+		}
+	}
+	return m
+}
+
+// answered is m after key answers the question it asks: y or enter yes,
+// anything else no.
+func (m browser) answered(key string) (tea.Model, tea.Cmd) {
+	yes, answer := key == "y" || key == "enter", m.answer
+	m.question, m.answer = "", nil
+	return m, func() tea.Msg {
+		answer <- yes
+		return nil
+	}
 }
 
 // cardSides is the cells across a card's borders and the spaces inside
@@ -568,7 +732,7 @@ var (
 )
 
 // taskingKeys are told while the cursor is in the task list.
-var taskingKeys = []keyTold{{"enter", "run, go"}, {"r", "run"}, {"esc", "back"}, {"q", "quit"}}
+var taskingKeys = []keyTold{{"enter", "run, go"}, {"r", "run"}, {"w", "throwaway"}, {"esc", "back"}, {"q", "quit"}}
 
 // keys are the filter being typed and what its keys do, or the filter
 // kept and the keys acting on what it shows, cut to the width; with the

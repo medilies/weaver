@@ -1239,7 +1239,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("types a task into the pane labelled with its name", func(t *testing.T) {
-		if err := server.tmux().Type(project, api, 1, greet.Command()); err != nil {
+		if err := server.tmux().Type(project, api, 1, greet.Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		server.waitFor(t, back, "hi-before task-42")
@@ -1253,7 +1253,7 @@ func TestTmuxTasks(t *testing.T) {
 
 	t.Run("cuts what is at the prompt before typing a task", func(t *testing.T) {
 		server.query(t, "send-keys", "-t", back, "-l", "echo prefilled")
-		if err := server.tmux().Type(project, api, 1, greet.Command()); err != nil {
+		if err := server.tmux().Type(project, api, 1, greet.Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shown := server.waitFor(t, back, "$ echo \"$GREETING-$B\" task-$((40+2))\nhi-before task-42")
@@ -1280,7 +1280,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("types a task into a window's only pane", func(t *testing.T) {
-		if err := server.tmux().Type(project, logs, 0, logs.Panes()[0].Tasks()[0].Command()); err != nil {
+		if err := server.tmux().Type(project, logs, 0, logs.Panes()[0].Tasks()[0].Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		server.waitFor(t, "=tasks:logs", "logs-42")
@@ -1289,6 +1289,24 @@ func TestTmuxTasks(t *testing.T) {
 	t.Run("selects the window a task is typed into", func(t *testing.T) {
 		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "logs" {
 			t.Fatalf("got %q current, want logs", got)
+		}
+	})
+
+	t.Run("leaves the current window when typing a task without landing", func(t *testing.T) {
+		server.query(t, "send-keys", "-t", back, "clear", "Enter")
+		if err := server.tmux().Type(project, api, 1, greet.Command(), false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		server.waitFor(t, back, "hi-before task-42")
+		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "logs" {
+			t.Fatalf("got %q current, want logs still", got)
+		}
+	})
+
+	t.Run("refuses the pane weaver runs in, which it would type into", func(t *testing.T) {
+		inside := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true, Pane: back})
+		if _, err := inside.Busy(project, api, 1); !errors.Is(err, domain.ErrPaneRunsWeaver) {
+			t.Fatalf("got %v, want ErrPaneRunsWeaver", err)
 		}
 	})
 
@@ -1311,7 +1329,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("runs a task apart in a throwaway window, in the pane's dir with its env and before commands", func(t *testing.T) {
-		if err := server.tmux().RunApart(project, api, 1, greet); err != nil {
+		if err := server.tmux().RunApart(project, api, 1, greet, true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shown := server.waitFor(t, "=tasks:greet", "hi-before task-42")
@@ -1324,6 +1342,23 @@ func TestTmuxTasks(t *testing.T) {
 		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "greet" {
 			t.Fatalf("got %q current, want greet", got)
 		}
+	})
+
+	t.Run("leaves the current window when running a task apart without landing", func(t *testing.T) {
+		current := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_id}")
+		before := strings.Fields(server.query(t, "list-windows", "-t", "=tasks", "-F", "#{window_id}"))
+		if err := server.tmux().RunApart(project, api, 1, greet, false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_id}"); got != current {
+			t.Fatalf("got window %q current, want %q still", got, current)
+		}
+		after := strings.Fields(server.query(t, "list-windows", "-t", "=tasks", "-F", "#{window_id}"))
+		added := slices.DeleteFunc(after, func(id string) bool { return slices.Contains(before, id) })
+		if len(added) != 1 {
+			t.Fatalf("got %q added, want one throwaway window", added)
+		}
+		server.query(t, "kill-window", "-t", added[0])
 	})
 
 	t.Run("skips the throwaway window when capturing", func(t *testing.T) {
@@ -1441,14 +1476,14 @@ func TestTmuxRunningCommands(t *testing.T) {
 	})
 
 	t.Run("finds a command typed into a pane running", func(t *testing.T) {
-		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command()); err != nil {
+		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		running(t, "api/0: sleep 300")
 	})
 
 	t.Run("finds a task run apart running, as its pane's", func(t *testing.T) {
-		if err := server.tmux().RunApart(project, api, 1, api.Panes()[1].Tasks()[0]); err != nil {
+		if err := server.tmux().RunApart(project, api, 1, api.Panes()[1].Tasks()[0], true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		running(t, "api/0: sleep 300", "api/1: sleep 301")
@@ -1461,7 +1496,7 @@ func TestTmuxRunningCommands(t *testing.T) {
 
 	t.Run("doesn't find a command in the pane weaver runs in, which weaver keeps busy", func(t *testing.T) {
 		shell := server.paneLabelled(t, "running", "shell")
-		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command()); err != nil {
+		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		running(t, "api/0: sleep 300", "api/1: sleep 301")

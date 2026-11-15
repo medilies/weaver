@@ -77,9 +77,11 @@ func wire() (application, error) {
 		listProjects: app.NewListProjects(projects, tmux),
 		settings:     settings,
 	}
-	weaver.browseProjects = app.NewBrowseProjects(lazyBrowser(builtOnce(settings, infra.NewTeaBrowser)), confirm, projects, projects, workspace, tmux,
+	// The browser asks its own questions, in its status line while on screen.
+	browser := lazyBrowser(builtOnce(settings, infra.NewTeaBrowser))
+	weaver.browseProjects = app.NewBrowseProjects(browser, projects, projects, workspace, tmux,
 		weaver.listProjects, weaver.openProject, weaver.bindProject, weaver.editProject, weaver.killProject,
-		app.NewRunTask(projects, tmux, confirm), app.NewRerunCommand(projects, tmux))
+		app.NewRunTask(projects, tmux, browser), app.NewRerunCommand(projects, tmux))
 	return weaver, nil
 }
 

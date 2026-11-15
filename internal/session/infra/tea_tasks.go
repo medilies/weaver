@@ -139,8 +139,8 @@ func (m browser) taskSelected(index int) browser {
 }
 
 // pressInTasks is m after key, pressed with the cursor in the task list:
-// ↑↓ select a task, enter runs it and goes there, r runs it, staying,
-// esc goes back to the projects.
+// ↑↓ select a task, enter runs it and goes there, r runs it, staying, w
+// runs it in a throwaway window, staying, esc goes back to the projects.
 func (m browser) pressInTasks(key string) (browser, bool) {
 	switch key {
 	case "up", "k":
@@ -156,6 +156,12 @@ func (m browser) pressInTasks(key string) (browser, bool) {
 		next, chosen := m.runningTask(m.selectedTask(len(m.tasksShown())))
 		if chosen {
 			next.choice.Action = app.ActionRunTaskStaying
+		}
+		return next, chosen
+	case "w":
+		next, chosen := m.runningTask(m.selectedTask(len(m.tasksShown())))
+		if chosen {
+			next.choice.Action = app.ActionRunTaskApart
 		}
 		return next, chosen
 	}

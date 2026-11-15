@@ -462,6 +462,9 @@ func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index i
 	if err != nil {
 		return false, err
 	}
+	if id == t.opts.Pane {
+		return true, domain.ErrPaneRunsWeaver
+	}
 	inMode, err := t.run("display-message", "-p", "-t", id, "#{pane_in_mode}")
 	if err != nil {
 		return false, err
@@ -478,18 +481,20 @@ func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index i
 
 // Type implements domain.TaskRunner. Whatever is at the prompt, as a
 // prefill not run yet, is cut first, with C-e C-u, which shells keep to
-// paste back with C-y, so the task's command isn't added to it. The pane
-// and its window are selected first, so a failure types nothing.
-func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command) error {
+// paste back with C-y, so the task's command isn't added to it. Landing,
+// the pane and its window are selected first, so a failure types nothing.
+func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command, landing bool) error {
 	id, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
 	}
-	if _, err := t.run("select-window", "-t", id); err != nil {
-		return err
-	}
-	if _, err := t.run("select-pane", "-t", id); err != nil {
-		return err
+	if landing {
+		if _, err := t.run("select-window", "-t", id); err != nil {
+			return err
+		}
+		if _, err := t.run("select-pane", "-t", id); err != nil {
+			return err
+		}
 	}
 	if _, err := t.run("send-keys", "-t", id, "C-e", "C-u"); err != nil {
 		return err
@@ -501,8 +506,9 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 }
 
 // RunApart implements domain.TaskRunner. The window takes the
-// session's first free index, so it may sit between others, and is selected.
-func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task) error {
+// session's first free index, so it may sit between others, and is
+// selected when landing.
+func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task, landing bool) error {
 	source, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
@@ -521,6 +527,9 @@ func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, ind
 		"-n", formatArgument(task.ThrowawayWindow().String()),
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{window_id} #{pane_id}",
+	}
+	if !landing {
+		args = append(args, "-d")
 	}
 	ids, err := t.runIDs(2, append(args, startScript(pane.Env(), nil, defaultCommand)...)...)
 	if err != nil {

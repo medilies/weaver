@@ -105,6 +105,9 @@ const (
 	// ActionRunTaskStaying runs the chosen task of the chosen project, the
 	// browser staying.
 	ActionRunTaskStaying
+	// ActionRunTaskApart runs the chosen task of the chosen project in a
+	// throwaway window, the browser staying.
+	ActionRunTaskApart
 )
 
 // Choice is what the user picked in the project browser: an action, and
@@ -119,15 +122,50 @@ type Choice struct {
 	Pane    PaneAt
 }
 
+// Notice is what the browser's status line tells: what the last action
+// did, or why it failed.
+type Notice struct {
+	text    string
+	failure bool
+}
+
+// Telling is the notice saying what an action did, such as "Saved shop.".
+func Telling(text string) Notice {
+	return Notice{text: text}
+}
+
+// FailingWith is the notice saying why an action failed.
+func FailingWith(err error) Notice {
+	return Notice{text: err.Error(), failure: true}
+}
+
+// Text is what the notice says.
+func (n Notice) Text() string {
+	return n.text
+}
+
+// Failure reports whether the notice says why an action failed.
+func (n Notice) Failure() bool {
+	return n.failure
+}
+
 // ProjectBrowser shows the registered projects and lets the user pick
-// what to do next.
+// what to do next. It stays on screen from one choice to the next, until
+// it leaves.
 type ProjectBrowser interface {
 	// Browse shows projects, the one named selected highlighted and
 	// notice in a status line, and returns the user's choice, or
-	// ErrAborted when they quit. While it shows a project whose
-	// Previewable reports true, it keeps asking live for the preview of
-	// the selected window and the tasks still running.
-	Browse(projects []ProjectOverview, selected domain.ProjectName, notice string, live LiveSessions) (Choice, error)
+	// ErrAborted when they quit. Already on screen, it shows them in
+	// place; after a choice, it stays on screen, waiting. While it shows
+	// a project whose Previewable reports true, it keeps asking live for
+	// the preview of the selected window and the tasks still running.
+	Browse(projects []ProjectOverview, selected domain.ProjectName, notice Notice, live LiveSessions) (Choice, error)
+	// Confirm asks in the status line while the browser is on screen,
+	// otherwise as a Confirmer of its own.
+	Confirmer
+	// Leave takes the browser off screen, for what needs the terminal;
+	// the next Browse shows it again.
+	Leave() error
 }
 
 // LiveSessions tells how projects' owned sessions are now, for the

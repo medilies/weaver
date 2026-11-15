@@ -150,16 +150,18 @@ type TaskRunner interface {
 	// Busy reports whether something runs in the pane at index of window,
 	// in the project's running session, rather than its shell idling at
 	// its prompt; an error wrapping ErrPaneNotRunning when the session
-	// lacks the pane.
+	// lacks the pane, or ErrPaneRunsWeaver when weaver runs in it.
 	Busy(project ProjectName, window WindowPlan, index int) (bool, error)
-	// Type types cmd into that pane and runs it, the pane becoming its
-	// session's current one: a task's command, or the pane's own run again.
-	Type(project ProjectName, window WindowPlan, index int, cmd Command) error
+	// Type types cmd into that pane and runs it: a task's command, or the
+	// pane's own run again. Landing, the pane becomes its session's
+	// current one, where attaching lands; otherwise the session's current
+	// window and pane stay.
+	Type(project ProjectName, window WindowPlan, index int, cmd Command, landing bool) error
 	// RunApart runs task, a task of the pane at index of window, in a
 	// throwaway window of the project's running session, named after it,
 	// starting in the pane's dir with its env and before commands, and
-	// kept open once the task ends, the window becoming its session's
-	// current one. Capture skips throwaway windows, and restoration
-	// ignores them.
-	RunApart(project ProjectName, window WindowPlan, index int, task Task) error
+	// kept open once the task ends. Landing, the window becomes its
+	// session's current one, as Type's pane does. Capture skips throwaway
+	// windows, and restoration ignores them.
+	RunApart(project ProjectName, window WindowPlan, index int, task Task, landing bool) error
 }
