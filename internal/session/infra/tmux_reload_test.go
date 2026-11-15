@@ -79,6 +79,17 @@ func TestTmuxReload(t *testing.T) {
 		}
 	})
 
+	t.Run("leaves the session's last window as it was", func(t *testing.T) {
+		server.query(t, "select-window", "-t", "=reload:last")
+		server.query(t, "select-window", "-t", "=reload:first")
+		if err := server.tmux().ReloadWindow(project, api); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if last := server.query(t, "display-message", "-p", "-t", "=reload:last", "#{window_last_flag}"); last != "1" {
+			t.Fatalf("last's last-window flag is %q, want it still the last window", last)
+		}
+	})
+
 	t.Run("restarts a pane without a command or env as a plain shell", func(t *testing.T) {
 		first := plan.Windows()[0]
 		pane := server.query(t, "display-message", "-p", "-t", "=reload:first", "#{pane_id}")

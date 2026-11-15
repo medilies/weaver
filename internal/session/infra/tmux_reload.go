@@ -70,7 +70,7 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 	if slices.Contains(listed, t.opts.Pane) {
 		return domain.ErrPaneRunsWeaver
 	}
-	current, err := t.run("display-message", "-p", "-t", session+":", "#{window_id}")
+	current, last, err := t.currentAndLast(session)
 	if err != nil {
 		return err
 	}
@@ -102,15 +102,43 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 	if err := t.retie(project, window, oldPanes); err != nil {
 		return err
 	}
-	// swap-window makes the window swapped in current, -d or not.
+	// swap-window makes the window swapped in current, -d or not, which
+	// changes the session's last window too: both are put back, the new
+	// window standing for the old one.
 	if current == old {
 		current = created
 	}
-	if now, err := t.run("display-message", "-p", "-t", session+":", "#{window_id}"); err != nil || now == current {
-		return err
+	if last == old {
+		last = created
 	}
-	_, err = t.run("select-window", "-t", current)
-	return err
+	for _, window := range []string{last, current} {
+		if window == "" {
+			continue
+		}
+		if _, err := t.run("select-window", "-t", window); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// currentAndLast are the IDs of the session's current window and of its
+// last one, which tmux's last-window goes back to; "" when there is none.
+func (t Tmux) currentAndLast(session string) (current, last string, err error) {
+	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} #{window_active}#{window_last_flag}")
+	if err != nil {
+		return "", "", err
+	}
+	for line := range strings.Lines(out) {
+		id, flags, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		switch flags {
+		case "10":
+			current = id
+		case "01":
+			last = id
+		}
+	}
+	return current, last, nil
 }
 
 // windowTagged is the ID of the first window of the project's session
