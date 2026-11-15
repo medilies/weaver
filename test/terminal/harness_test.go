@@ -355,6 +355,15 @@ func (h *harness) sees(text string) {
 	}
 }
 
+// seesWithin waits until text shows, for up to wait: for what weave
+// takes longer than sees waits to do.
+func (h *harness) seesWithin(text string, wait time.Duration) {
+	h.t.Helper()
+	if err := h.at(text).Expect(tuitest.LocatorExpectOptions{Timeout: &wait}); err != nil {
+		h.fatal("%q never showed within %s", text, wait)
+	}
+}
+
 // at is where text shows, once or more.
 func (h *harness) at(text string) *tuitest.Locator {
 	return h.screen.GetByText(text, tuitest.TextSelectorOptions{}).Any()

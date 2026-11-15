@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -102,6 +103,10 @@ func (s tmuxServer) Running() ([]string, error) {
 	return slices.Sorted(maps.Keys(s.running)), nil
 }
 
+func (s tmuxServer) InterruptPanes(domain.ProjectName, time.Duration) ([]string, error) {
+	return nil, nil
+}
+
 func (s tmuxServer) Kill(name domain.ProjectName) error {
 	if _, ok := s.running[name.String()]; !ok {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
@@ -144,6 +149,10 @@ type unkillableSessions struct {
 
 func (s unkillableSessions) Find(domain.ProjectName) (domain.RunningSession, bool, error) {
 	return domain.NewRunningSession(false), true, nil
+}
+
+func (s unkillableSessions) InterruptPanes(domain.ProjectName, time.Duration) ([]string, error) {
+	return nil, nil
 }
 
 func (s unkillableSessions) Kill(domain.ProjectName) error {

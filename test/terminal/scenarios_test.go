@@ -181,6 +181,37 @@ func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	}
 }
 
+// TestKillInterruptsFirst: a `zine` whose `server` pane cleans up on
+// ctrl+c, whose `stubborn` pane ignores it, and whose teardown checks the
+// clean-up was done: `weave zine --detached`, then `weave kill zine`.
+//
+// The teardown passes, `zine` ends, and weave says `srv › stubborn still
+// ran; killed anyway.`
+func TestKillInterruptsFirst(t *testing.T) {
+	h := start(t)
+	h.write("cfg/weaver/projects/zine.yml", "root: "+h.dir+"/notes\n"+`teardown: ["test -e cleaned"]
+windows:
+  - name: srv
+    panes:
+      - name: server
+        command: sh -c 'trap "touch cleaned; exit" INT; sleep 300 & wait'
+      - name: stubborn
+        split: { direction: right }
+        command: sh -c 'trap "" INT; sleep 301'
+`)
+	h.started("zine")
+	h.waitRuns(h.paneOf("zine:srv", "server"), "sh", 5*time.Second)
+	h.waitRuns(h.paneOf("zine:srv", "stubborn"), "sh", 5*time.Second)
+
+	h.typed("clear; weave kill zine")
+
+	h.seesWithin("srv › stubborn still ran; killed anyway.", 10*time.Second)
+	if h.running("zine") {
+		t.Fatal("zine still runs")
+	}
+	h.gone("teardown")
+}
+
 // TestKillAsksWithItsKeys: `notes` started: `weave`, select `notes`, `x`,
 // then `n`.
 //

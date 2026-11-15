@@ -601,7 +601,11 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 			}
 		}
 		uc.browser.Working(fmt.Sprintf("Killing %s…", name))
-		return name, fmt.Sprintf("Killed %s.", name), uc.kill.Handle(name.String())
+		lingering, err := uc.kill.HandleShowing(name.String(), uc.browser.Working)
+		if err != nil {
+			return name, "", err
+		}
+		return name, strings.TrimSpace(fmt.Sprintf("Killed %s. %s", name, lingering)), nil
 	case ActionDelete:
 		if err := uc.ask(fmt.Sprintf("Delete %s's config? A running session keeps running.", name)); err != nil {
 			return name, "", err

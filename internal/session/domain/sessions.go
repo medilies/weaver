@@ -203,6 +203,14 @@ type SessionKiller interface {
 	// Kill ends the project's session and everything running in it, or
 	// returns an error wrapping ErrSessionNotRunning.
 	Kill(name ProjectName) error
+	// InterruptPanes types ctrl+c into each pane of the project's session
+	// whose shell isn't idle at its prompt, throwaway windows' included,
+	// but the one weaver runs in, as if the user pressed it there; then
+	// waits, up to within, until their shells are idle. It returns the
+	// panes still busy then, each as its window's name, followed by " › "
+	// and its own when it has one; or an error wrapping
+	// ErrSessionNotRunning.
+	InterruptPanes(name ProjectName, within time.Duration) ([]string, error)
 }
 
 // TaskRunner runs panes' tasks in projects' running sessions, and puts

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
@@ -13,9 +14,12 @@ import (
 
 // fakeKiller is an in-memory domain.SessionKiller over running sessions.
 type fakeKiller struct {
-	running map[string]domain.RunningSession
-	findErr error
-	killed  []string
+	running      map[string]domain.RunningSession
+	findErr      error
+	killed       []string
+	interrupted  []string // the sessions whose panes were interrupted
+	lingering    []string // the panes still busy once interrupted
+	interruptErr error
 }
 
 // runningOwned is the sessions named, each started by weaver.
@@ -30,6 +34,11 @@ func runningOwned(names ...string) map[string]domain.RunningSession {
 func (k *fakeKiller) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
 	session, ok := k.running[name.String()]
 	return session, ok, k.findErr
+}
+
+func (k *fakeKiller) InterruptPanes(name domain.ProjectName, _ time.Duration) ([]string, error) {
+	k.interrupted = append(k.interrupted, name.String())
+	return k.lingering, k.interruptErr
 }
 
 func (k *fakeKiller) Kill(name domain.ProjectName) error {
@@ -58,6 +67,57 @@ func tornDownShop(t *testing.T) inMemoryRegistry {
 	return inMemoryRegistry{projects: map[string]domain.Project{"shop": torn}}
 }
 
+func TestKillProjectInterrupts(t *testing.T) {
+	t.Run("interrupts the panes of a session weaver started before tearing it down", func(t *testing.T) {
+		killer := &fakeKiller{running: runningOwned("shop")}
+		commands := &fakeCommands{}
+		commands.onRun = func() {
+			if len(killer.interrupted) == 0 {
+				t.Fatalf("got a teardown command run before the panes were interrupted")
+			}
+		}
+		if _, err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !slices.Equal(killer.interrupted, []string{"shop"}) {
+			t.Fatalf("got %q interrupted, want shop", killer.interrupted)
+		}
+	})
+
+	t.Run("doesn't interrupt a session weaver didn't start", func(t *testing.T) {
+		killer := &fakeKiller{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}
+		if _, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(killer.interrupted) != 0 {
+			t.Fatalf("got %q interrupted, want none", killer.interrupted)
+		}
+	})
+
+	t.Run("says which panes still ran", func(t *testing.T) {
+		killer := &fakeKiller{running: runningOwned("shop"), lingering: []string{"api › logs", "web"}}
+		said, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop")
+		if want := "api › logs, web still ran; killed anyway."; err != nil || said != want {
+			t.Fatalf("got %q (%v), want %q", said, err, want)
+		}
+	})
+
+	t.Run("says nothing when every pane ended", func(t *testing.T) {
+		killer := &fakeKiller{running: runningOwned("shop")}
+		if said, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop"); err != nil || said != "" {
+			t.Fatalf("got %q (%v), want nothing said", said, err)
+		}
+	})
+
+	t.Run("kills the session when interrupting fails, and reports it", func(t *testing.T) {
+		killer := &fakeKiller{running: runningOwned("shop"), interruptErr: errors.New("tmux: lost")}
+		_, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop")
+		if err == nil || !strings.Contains(err.Error(), "interrupting the panes: tmux: lost") || !slices.Equal(killer.killed, []string{"shop"}) {
+			t.Fatalf("got %v, %q killed; want the failure told and shop killed", err, killer.killed)
+		}
+	})
+}
+
 func TestKillProjectTearsDown(t *testing.T) {
 	t.Run("runs the teardown commands in the root, in order, with the project's env, before killing", func(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("shop")}
@@ -67,7 +127,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 				t.Fatalf("got a teardown command run after the kill")
 			}
 		}
-		if err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop"); err != nil {
+		if _, err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got := commands.commandsRun(); !slices.Equal(got, []string{"docker compose down", "rm -f .lock"}) {
@@ -97,7 +157,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 	t.Run("doesn't tear down a session weaver didn't start", func(t *testing.T) {
 		killer := &fakeKiller{running: map[string]domain.RunningSession{"shop": domain.NewRunningSession(false)}}
 		commands := &fakeCommands{}
-		if err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop"); err != nil {
+		if _, err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if len(commands.ran) != 0 || !slices.Equal(killer.killed, []string{"shop"}) {
@@ -107,7 +167,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 
 	t.Run("doesn't tear down a session that isn't running", func(t *testing.T) {
 		commands := &fakeCommands{}
-		err := app.NewKillProject(&fakeKiller{}, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop")
+		_, err := app.NewKillProject(&fakeKiller{}, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop")
 		if !errors.Is(err, domain.ErrSessionNotRunning) || len(commands.ran) != 0 {
 			t.Fatalf("got %v with %q run, want ErrSessionNotRunning and nothing run", err, commands.commandsRun())
 		}
@@ -116,7 +176,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 	t.Run("kills the session when a teardown command fails, stopping at it, and reports it", func(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("shop")}
 		commands := &fakeCommands{fails: map[string]bool{"docker compose down": true}}
-		err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop")
+		_, err := app.NewKillProject(killer, capturedSessions{}, tornDownShop(t), commands, &fakeAcks{}).Handle("shop")
 		if !errors.Is(err, domain.ErrCommandFailed) || !strings.Contains(err.Error(), "teardown: docker compose down: ") ||
 			!strings.HasSuffix(err.Error(), "shop's session was killed anyway") {
 			t.Fatalf("got %v, want the failing teardown command named and the kill told", err)
@@ -164,7 +224,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("shop")}
 		commands := &fakeCommands{fails: map[string]bool{"docker compose down": true}}
 		acks := &fakeAcks{}
-		_ = app.NewKillProject(killer, capturedSessions{current: "blog"}, tornDownShop(t), commands, acks).Handle("shop")
+		_, _ = app.NewKillProject(killer, capturedSessions{current: "blog"}, tornDownShop(t), commands, acks).Handle("shop")
 		if len(acks.shown) != 0 {
 			t.Fatalf("got %q shown, want nothing", acks.shown)
 		}
@@ -173,7 +233,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 	t.Run("kills the session when its config can't be read, saying teardown was skipped", func(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("broken")}
 		registry := withBrokenConfig{inMemoryRegistry: noProjects()}
-		err := app.NewKillProject(killer, capturedSessions{}, registry, &fakeCommands{}, &fakeAcks{}).Handle("broken")
+		_, err := app.NewKillProject(killer, capturedSessions{}, registry, &fakeCommands{}, &fakeAcks{}).Handle("broken")
 		if !errors.Is(err, domain.ErrInvalidConfig) || !strings.HasPrefix(err.Error(), "teardown skipped: ") {
 			t.Fatalf("got %v, want teardown skipped for the invalid config", err)
 		}
@@ -186,7 +246,7 @@ func TestKillProjectTearsDown(t *testing.T) {
 func TestKillProject(t *testing.T) {
 	t.Run("kills the project's session", func(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("shop")}
-		if err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop"); err != nil {
+		if _, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(killer.killed, []string{"shop"}) {
@@ -195,7 +255,7 @@ func TestKillProject(t *testing.T) {
 	})
 
 	t.Run("reports a session that isn't running", func(t *testing.T) {
-		err := app.NewKillProject(&fakeKiller{}, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop")
+		_, err := app.NewKillProject(&fakeKiller{}, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("shop")
 		if !errors.Is(err, domain.ErrSessionNotRunning) {
 			t.Fatalf("got %v, want ErrSessionNotRunning", err)
 		}
@@ -203,7 +263,7 @@ func TestKillProject(t *testing.T) {
 
 	t.Run("rejects an invalid name before killing anything", func(t *testing.T) {
 		killer := &fakeKiller{running: runningOwned("my.app")}
-		err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("my.app")
+		_, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("my.app")
 		if !errors.Is(err, domain.ErrInvalidProjectName) || len(killer.killed) != 0 {
 			t.Fatalf("got %v with %q killed, want ErrInvalidProjectName and nothing killed", err, killer.killed)
 		}
@@ -253,7 +313,7 @@ func TestKillProject(t *testing.T) {
 
 	t.Run("kills a named session weaver didn't start", func(t *testing.T) {
 		killer := &fakeKiller{running: map[string]domain.RunningSession{"0": domain.NewRunningSession(false)}}
-		if err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("0"); err != nil {
+		if _, err := app.NewKillProject(killer, capturedSessions{}, noProjects(), &fakeCommands{}, &fakeAcks{}).Handle("0"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !slices.Equal(killer.killed, []string{"0"}) {

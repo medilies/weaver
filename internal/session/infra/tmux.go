@@ -431,6 +431,88 @@ func (t Tmux) Kill(name domain.ProjectName) error {
 	return err
 }
 
+// InterruptPanes implements domain.SessionKiller. A pane in a mode, such
+// as copy mode, leaves it first, for ctrl+c to reach what runs there.
+func (t Tmux) InterruptPanes(name domain.ProjectName, within time.Duration) ([]string, error) {
+	session := "=" + name.String()
+	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} "+sized("window_name"))
+	if absent(err) {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	if err != nil {
+		return nil, err
+	}
+	windows := map[string]string{} // names by ID
+	for line := range strings.Lines(out) {
+		id, printed, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		windows[id] = verbatim(printed)
+	}
+	out, err = t.run("list-panes", "-s", "-t", session, "-F", "#{window_id} #{pane_id} #{pane_pid} #{pane_in_mode} "+sized("@label"))
+	if absent(err) {
+		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+	}
+	if err != nil {
+		return nil, err
+	}
+	type pane struct{ id, pid, shown string }
+	var panes []pane
+	var pids []string
+	modes := map[string]bool{}
+	for line := range strings.Lines(out) {
+		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 5)
+		if len(fields) < 5 || fields[1] == t.opts.Pane {
+			continue
+		}
+		shown := windows[fields[0]]
+		if label := verbatim(fields[4]); label != "" {
+			shown += " › " + label
+		}
+		panes = append(panes, pane{id: fields[1], pid: fields[2], shown: shown})
+		pids = append(pids, fields[2])
+		modes[fields[1]] = fields[3] != "0"
+	}
+	idle, seen, err := t.idleShells(name, pids)
+	if err != nil {
+		return nil, err
+	}
+	var busy []pane
+	for _, p := range panes {
+		if idle[p.pid] || !seen[p.pid] {
+			continue
+		}
+		if modes[p.id] {
+			if _, err := t.run("send-keys", "-X", "-t", p.id, "cancel"); err != nil && !lost(err) && !absent(err) {
+				return nil, err
+			}
+		}
+		if _, err := t.run("send-keys", "-t", p.id, "C-c"); err != nil && !lost(err) && !absent(err) {
+			return nil, err
+		}
+		busy = append(busy, p)
+	}
+	deadline := time.Now().Add(within)
+	for len(busy) > 0 && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+		pids = pids[:0]
+		for _, p := range busy {
+			pids = append(pids, p.pid)
+		}
+		idle, seen, err := t.idleShells(name, pids)
+		if errors.Is(err, domain.ErrSessionNotRunning) {
+			return nil, nil // it ended meanwhile: nothing still runs
+		}
+		if err != nil {
+			return nil, err
+		}
+		busy = slices.DeleteFunc(busy, func(p pane) bool { return idle[p.pid] || !seen[p.pid] })
+	}
+	var lingering []string
+	for _, p := range busy {
+		lingering = append(lingering, p.shown)
+	}
+	return lingering, nil
+}
+
 // Attach implements domain.SessionLauncher. Outside tmux it replaces
 // weaver with `tmux attach-session`, like the shell scripts it replaces.
 func (t Tmux) Attach(name domain.ProjectName) error {

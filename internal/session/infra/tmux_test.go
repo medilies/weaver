@@ -654,6 +654,61 @@ func TestTmuxKill(t *testing.T) {
 	})
 }
 
+func TestTmuxInterruptPanes(t *testing.T) {
+	server := newTmuxServer(t)
+	name, _ := domain.NewProjectName("doomed")
+	// started is doomed, its pane a running sleep, and b a sleep that
+	// ignores ctrl+c, once both run.
+	started := func(t *testing.T) {
+		t.Helper()
+		_ = server.tmux().Kill(name)
+		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q, "windows": [{"name": "w", "panes": [
+			{"name": "a", "command": "sleep 300"},
+			{"name": "b", "split": {"direction": "right"}, "command": "trap '' INT; sleep 301"}]}]}`, t.TempDir()))); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for range 100 {
+			if strings.Count(server.query(t, "list-panes", "-t", "=doomed:w", "-F", "#{pane_current_command}"), "sleep") == 2 {
+				return
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		t.Fatal("the sleeps never ran")
+	}
+	sleeping := func(t *testing.T, label string) bool {
+		t.Helper()
+		return server.query(t, "display-message", "-p", "-t", server.paneLabelled(t, "doomed", label), "#{pane_current_command}") == "sleep"
+	}
+
+	t.Run("reports a session that isn't running", func(t *testing.T) {
+		if _, err := server.tmux().InterruptPanes(name, time.Second); !errors.Is(err, domain.ErrSessionNotRunning) {
+			t.Fatalf("got %v, want ErrSessionNotRunning", err)
+		}
+	})
+
+	t.Run("interrupts what runs, and names the panes still busy once the time is up", func(t *testing.T) {
+		started(t)
+		lingering, err := server.tmux().InterruptPanes(name, 500*time.Millisecond)
+		if err != nil || !slices.Equal(lingering, []string{"w › b"}) {
+			t.Fatalf("got %q (%v), want only w › b, which ignores ctrl+c", lingering, err)
+		}
+		if sleeping(t, "a") {
+			t.Fatal("got a still sleeping, want it interrupted")
+		}
+	})
+
+	t.Run("leaves the pane weaver runs in alone", func(t *testing.T) {
+		started(t)
+		inside := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true, Pane: server.paneLabelled(t, "doomed", "a")})
+		if _, err := inside.InterruptPanes(name, 200*time.Millisecond); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !sleeping(t, "a") {
+			t.Fatal("got a interrupted, want weaver's pane left alone")
+		}
+	})
+}
+
 func TestTmuxRunning(t *testing.T) {
 	server := newTmuxServer(t)
 

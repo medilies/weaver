@@ -41,12 +41,21 @@ does the same and keeps the browser open, the notice saying it.
 
 ## Kill
 
-`weave kill <project>` runs the config's `teardown` commands in the root
-before killing an owned session, and kills it even when one fails,
-reporting the failure. Anything a pane started that left it, such as
-containers, keeps running unless teardown stops it. Killed from inside
-that session, whose pane goes with it, weave shows a failed teardown and
-waits for Enter first.
+`weave kill <project>` ends a session. An owned one is ended in steps:
+
+1. Ctrl-C is typed into each pane where something runs, throwaway
+   windows included, but the one weave runs in. weave waits, up to 5
+   seconds, for them to be back at their prompts, so a dev server can
+   clean up after itself.
+2. The config's `teardown` commands run in the root.
+3. The session is killed, even when a pane still runs or a teardown
+   command fails. weave names the panes that still ran, and reports the
+   failure.
+
+A session weave didn't start is killed at once. Anything a pane started
+that left it, such as containers, keeps running unless teardown stops
+it. Killed from inside that session, whose pane goes with it, weave
+shows a failed teardown and waits for Enter first.
 
 ## Bind
 
