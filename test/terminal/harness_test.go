@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -37,6 +38,10 @@ var (
 var weave string
 
 func TestMain(m *testing.M) {
+	if err := tolerateDanglingPointers(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	flag.Parse()
 	code, err := run(m)
 	if err != nil {
@@ -44,6 +49,29 @@ func TestMain(m *testing.M) {
 		os.Exit(2)
 	}
 	os.Exit(code)
+}
+
+// tolerateDanglingPointers re-runs the tests with GODEBUG=invalidptr=0. The
+// tui-test binding (v0.1.1) hands an empty Rust string to Go as the pointer
+// 0x1, as in a cell without a link, and the runtime aborts when it finds one
+// while moving a goroutine's stack. The runtime reads invalidptr only as the
+// process starts, so setting it here needs a fresh exec.
+func tolerateDanglingPointers() error {
+	godebug := os.Getenv("GODEBUG")
+	if strings.Contains(godebug, "invalidptr=0") {
+		return nil
+	}
+	if godebug != "" {
+		godebug += ","
+	}
+	if err := os.Setenv("GODEBUG", godebug+"invalidptr=0"); err != nil {
+		return err
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return syscall.Exec(self, os.Args, os.Environ())
 }
 
 func run(m *testing.M) (int, error) {
