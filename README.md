@@ -36,30 +36,13 @@ windows:
 ```
 
 `weave nimbus` opens it from anywhere. `weave` alone browses your
-projects, drawing each window as it will open and warning about what
-would likely fail:
+projects, drawing each window as it will open. Here it starts `nimbus`,
+runs a task, shows the config form, then opens it:
 
-```text
-╭─ projects ─╮╭─ tasks ──────────╮╭─ nimbus.yml ─────────────────────────────────────────────────────────────╮
-│ ›   nimbus ││   api › task dev ││ ~/dev/nimbus                                                             │
-│     weaver ││     migrate      ││                                                                          │
-│            ││                  ││  api    app    repo                                               ←→ 1/3 │
-│            ││                  ││ ┌─[ api shell ]───────────────────────────┬─ task dev ─────────────────┐ │
-│            ││                  ││ │ api/                                    │ api/                       │ │
-│            ││                  ││ │ $ █                                     │ $ task dev                 │ │
-│            ││                  ││ │                                         │                            │ │
-│            ││                  ││ │                                         │                            │ │
-│            ││                  ││ │                                         ├─ psql ─────────────────────┤ │
-│            ││                  ││ │                                         │ $ nimbus psql              │ │
-│            ││                  ││ │                                         │                            │ │
-│            ││                  ││ │                                         │                            │ │
-│            ││                  ││ └─────────────────────────────────────────┴────────────────────────────┘ │
-│            ││                  ││  api shell   task dev   psql                                             │
-│            ││                  ││ api shell  ~/dev/nimbus/api  window api                                  │
-╰────────────╯╰──────────────────╯╰──────────────────────────────────────────────────────────────────────────╯
+![weave browsing nimbus: its windows and panes drawn, started, a task run, its config form shown, then opened](docs/assets/demo.gif)
 
-enter open  s start  b bind  e edit  E raw  x kill  d delete  tab pane  t tasks  y config  / filter  q quit
-```
+The browser also warns about what would likely fail, such as a missing
+directory or program.
 
 ## Install
 
@@ -84,7 +67,8 @@ go install github.com/medilies/weaver/cmd/weave@latest   # puts weave in ~/go/bi
 ```
 
 weaver needs tmux, and is tested only with tmux 3.4. Other versions
-may work; if one doesn't, please open an issue.
+may work; if one doesn't, please open an issue. New to tmux? Start with
+[tmux for weaver](docs/tmux.md).
 
 To complete project names with Tab, load weave's completion in your
 `~/.bashrc` (zsh, fish and PowerShell work too, see
@@ -119,4 +103,5 @@ nothing, and creates no directories.
 - [The browser](docs/browser.md): summary and warnings, the drawing, tasks, keys
 - [The config form](docs/config-form.md): cards, editing on the drawing, keys
 - [Settings](docs/settings.md): the selected colour and the drawing's keys
+- [tmux for weaver](docs/tmux.md): a starting config, the keys you need, the demo's theme
 - [Development](docs/development.md): building, testing, architecture

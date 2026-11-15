@@ -92,7 +92,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 ## Docs
 
 - A change updates, in the same commit, every doc it makes wrong: the README and `docs/*.md`, the schemas' descriptions, this file's glossary (its Code column included), `docs/development.md`, `docs/agents/`, and the backlog (a done item leaves it for its Order section). Before committing, grep the docs for each key, flag, command, file and identifier the change renames or removes.
-- Each fact lives in one doc, and the others link to it. Users: the README (what weaver is, install, usage), `config.md` (fields), `sessions.md` (open, start, kill, bind), `browser.md`, `config-form.md`, `settings.md`. Contributors: `development.md` (commands, architecture, releasing). Agents: this file and `docs/agents/`.
+- Each fact lives in one doc, and the others link to it. Users: the README (what weaver is, install, usage), `config.md` (fields), `sessions.md` (open, start, kill, bind), `browser.md`, `config-form.md`, `settings.md`, `tmux.md` (tmux for newcomers, the demo's theme). Contributors: `development.md` (commands, architecture, releasing). Agents: this file and `docs/agents/`.
 - Never list in full what the code lists (use cases, ports, adapters, keys a screen already shows): name a few as examples, so the list can't go stale.
 - User docs say what weave does, not how: no internals, no reasons behind workarounds, no history. History is in git, decisions in ADRs, which are records and aren't updated.
 - A screen shown in a doc is copied from a real run (a terminal-test snapshot, or weave on a private tmux server with its own `TMUX_TMPDIR`), never drawn by hand.

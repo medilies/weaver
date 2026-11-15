@@ -12,6 +12,7 @@ go test -tags terminal .                          # all of them, in parallel, ab
 go test -tags terminal . -run TestRerun           # some
 go test -tags terminal . -record /tmp/rec         # a GIF of each test's screen, to watch afterwards
 go test -tags terminal . -shots /tmp/shots        # a PNG of the screen each test ends on
+go test -tags terminal . -run 'TestDemo$' -demo /tmp/demo.gif  # the README's GIF, see Demo
 go test -tags terminal . -keep -run TestOpenGrid  # a failed test's tmux server kept, to look around
 go test -tags terminal . -traces /tmp/traces      # a trace of each failed test
 go test -tags terminal . -run LooksAsBefore -update  # the snapshots rewritten, to accept a change of look
@@ -33,6 +34,24 @@ A failed test's trace, with `-traces`, holds `trace.html` to open, `session.cast
 ## Snapshots
 
 The `LooksAsBefore` tests, in [`snapshots_test.go`](../../test/terminal/snapshots_test.go), compare a whole screen with its text in `testdata/snapshots`: the browser on `notes` at 160x45 and at 80x24, and the config form on `notes`. Every change of look fails them: rewrite them with `-update`, and the diff of the snapshots is what to review. The test's directory shows as `/tmp/wvt-XXXXXXXX`, of the same length, so that what is aligned after it doesn't move. Keep them few, for screens worth seeing whole; check anything else with `sees` and the like.
+
+## Demo
+
+The GIF in the README, [`docs/assets/demo.gif`](../assets/demo.gif), is a recording of `TestDemo`, in [`demo_test.go`](../../test/terminal/demo_test.go). It runs only with `-demo FILE`, and needs ffmpeg and fontconfig's `fc-match`.
+
+- It is a story, not a check: `nimbus`, the README's project, is browsed, started, one of its tasks run, its config form shown, then opened.
+- Its world: a 112x30 terminal, tmux in Catppuccin Mocha, mauve the selected colour, and made-up `task` and `nimbus` programs on `PATH`. Its tmux options, `demoTmux`, are the ones the [Theming](../tmux.md#theming) section gives users: change both together.
+- A caption under the terminal names what each step shows. The test notes when each starts, then ffmpeg crops the recorder's window frame off, draws the captions in Noto Sans and shrinks the GIF.
+- It is the one test that sleeps, to pace the story for a viewer. It never sleeps to wait for weave.
+
+Record it again when the browser's look changes:
+
+```sh
+cd test/terminal
+go test -tags terminal . -run 'TestDemo$' -demo ../../docs/assets/demo.gif
+```
+
+The crop, in `demoFilter`, fits a 112x30 terminal at the recording's zoom, 0.45: change either, and measure the terminal's cells in a frame again. Watch the result before committing it: the keys it presses are the ones the README shows off.
 
 ## Before and after a release
 

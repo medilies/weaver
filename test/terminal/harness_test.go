@@ -31,6 +31,7 @@ var (
 	keep     = flag.Bool("keep", false, "keep a failed test's directory and tmux server")
 	shots    = flag.String("shots", "", "write a PNG of the screen each test ends on to DIR")
 	record   = flag.String("record", "", "write a GIF of each test's screen, from start to end, to DIR")
+	demo     = flag.String("demo", "", "run TestDemo, writing the README's GIF to FILE, with ffmpeg")
 	traces   = flag.String("traces", "", "write a trace of each failed test to DIR")
 )
 
@@ -107,9 +108,24 @@ type harness struct {
 	screen *tuitest.Client
 }
 
+// world is what a test's terminal and tmux server start with, when it is
+// not the usual. Only the demo asks for more.
+type world struct {
+	cols, rows uint16
+	tmuxConf   string            // appended to the test's tmux config
+	tools      map[string]string // programs on PATH, by name, with their sh script
+	record     bool              // start recording at once, with -record
+}
+
 // start sets up a test's world, running beside the others, and tears it
 // down when the test ends.
 func start(t *testing.T) *harness {
+	t.Helper()
+	return startIn(t, world{cols: cols, rows: rows, record: true})
+}
+
+// startIn is start in a world of its own.
+func startIn(t *testing.T, w world) *harness {
 	t.Helper()
 	t.Parallel()
 	dir := testDir(t)
@@ -125,10 +141,11 @@ func start(t *testing.T) *harness {
 		"PATH=" + filepath.Dir(weave) + ":" + filepath.Dir(tmuxBin) + ":/usr/bin:/bin",
 	}
 	h.files()
+	h.add(w)
 	t.Cleanup(h.clean)
 
 	h.tmux("-f", filepath.Join(dir, "tmux.conf"), "new-session", "-d", "-s", "term",
-		"-x", fmt.Sprint(cols), "-y", fmt.Sprint(rows), "bash", "--norc", "--noprofile")
+		"-x", fmt.Sprint(w.cols), "-y", fmt.Sprint(w.rows), "bash", "--norc", "--noprofile")
 	options := tuitest.ClientOptions{}
 	if *traces != "" {
 		options.Trace = &tuitest.TraceOptions{Mode: tuitest.TraceOnFailure, Directory: *traces}
@@ -142,12 +159,12 @@ func start(t *testing.T) *harness {
 	client := append([]string{"-i"}, h.env...)
 	client = append(client, "TERM=xterm-256color", "tmux", "-S", h.sock, "attach", "-t", "term")
 	if _, err := screen.Run("env", client, tuitest.SpawnOptions{
-		Cols: tuitest.Ptr(uint16(cols)), Rows: tuitest.Ptr(uint16(rows)), WaitReady: tuitest.Ptr(false),
+		Cols: tuitest.Ptr(w.cols), Rows: tuitest.Ptr(w.rows), WaitReady: tuitest.Ptr(false),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	h.eventually("a client attaches to term", func() bool { return h.clientOn() == "term" })
-	if *record != "" {
+	if *record != "" && w.record {
 		if err := screen.StartRecording(filepath.Join(*record, t.Name()+".gif"), tuitest.RecordingOptions{}); err != nil {
 			t.Fatalf("recording: %v", err)
 		}
@@ -156,6 +173,38 @@ func start(t *testing.T) *harness {
 	h.typed("command -v weave")
 	h.sees(weave)
 	return h
+}
+
+// add sets a world's tools and tmux config up, before the server starts.
+func (h *harness) add(w world) {
+	h.t.Helper()
+	if w.tmuxConf != "" {
+		conf, err := os.OpenFile(filepath.Join(h.dir, "tmux.conf"), os.O_APPEND|os.O_WRONLY, 0o600)
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		defer func() { _ = conf.Close() }()
+		if _, err := conf.WriteString(w.tmuxConf); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	if len(w.tools) == 0 {
+		return
+	}
+	bin := filepath.Join(h.dir, "bin")
+	if err := os.MkdirAll(bin, 0o700); err != nil {
+		h.t.Fatal(err)
+	}
+	for name, script := range w.tools {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+script), 0o700); err != nil {
+			h.t.Fatal(err)
+		}
+	}
+	for i, kv := range h.env {
+		if path, ok := strings.CutPrefix(kv, "PATH="); ok {
+			h.env[i] = "PATH=" + bin + ":" + path
+		}
+	}
 }
 
 // testDir makes the test's directory, /tmp/wvt- and 8 hex digits: not
