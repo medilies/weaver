@@ -173,6 +173,7 @@ type BrowseProjects struct {
 	kill      KillProject
 	run       RunTask
 	rerun     RerunCommand
+	interrupt Interrupt
 }
 
 // NewBrowseProjects constructs the use case against its ports and the use
@@ -190,10 +191,12 @@ func NewBrowseProjects(
 	kill KillProject,
 	run RunTask,
 	rerun RerunCommand,
+	interrupt Interrupt,
 ) BrowseProjects {
 	return BrowseProjects{
 		browser: browser, projects: projects, documents: documents, workspace: workspace,
 		sessions: sessions, list: list, open: open, bind: bind, edit: edit, kill: kill, run: run, rerun: rerun,
+		interrupt: interrupt,
 	}
 }
 
@@ -597,6 +600,12 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 		return name, notice, err
 	case ActionRerun:
 		return name, "", uc.rerun.Handle(name, choice.Pane)
+	case ActionInterruptTask:
+		notice, err := uc.interrupt.HandleTask(name, choice.Task)
+		return name, notice, err
+	case ActionInterruptPane:
+		notice, err := uc.interrupt.HandlePane(name, choice.Pane)
+		return name, notice, err
 	}
 	return name, "", fmt.Errorf("unknown action %d", choice.Action)
 }

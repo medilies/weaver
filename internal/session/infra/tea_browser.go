@@ -534,6 +534,19 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Name(),
 			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
 		return m, nil
+	case "i":
+		windows := m.windowsShown()
+		if len(windows) == 0 || !m.shown()[m.cursor].Previewable() {
+			break // only an owned session's panes are interrupted
+		}
+		window := windows[m.drawn(windows)]
+		pane, inConfig := m.selectedInConfig(len(window.Panes()))
+		if !inConfig {
+			break
+		}
+		m.choice = app.Choice{Action: app.ActionInterruptPane, Project: m.shown()[m.cursor].Name(),
+			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
+		return m, nil
 	case "t":
 		if len(m.tasksShown()) > 0 {
 			m.tasking = true
@@ -841,11 +854,14 @@ var (
 // configKey y, or drawingKey while the config is shown, when there is a
 // project.
 var (
-	paneKey    = keyTold{"tab", "pane"}
-	rerunKey   = keyTold{"r", "rerun"}
-	taskKey    = keyTold{"t", "tasks"}
-	configKey  = keyTold{"y", "config"}
-	drawingKey = keyTold{"y", "drawing"}
+	paneKey  = keyTold{"tab", "pane"}
+	rerunKey = keyTold{"r", "rerun"}
+	// interruptKey i when the selected project's session can be previewed,
+	// or, in the task list, when the selected task runs.
+	interruptKey = keyTold{"i", "interrupt"}
+	taskKey      = keyTold{"t", "tasks"}
+	configKey    = keyTold{"y", "config"}
+	drawingKey   = keyTold{"y", "drawing"}
 	// previewKey p, or previewDrawingKey while the preview is shown, when
 	// the selected project's session can be previewed.
 	previewKey        = keyTold{"p", "preview"}
@@ -871,7 +887,7 @@ func (m browser) taskingKeys() []keyTold {
 	}
 	told := slices.Clone(taskingKeys)
 	told[0] = keyTold{"enter", "go"}
-	return told
+	return slices.Insert(told, 3, interruptKey)
 }
 
 // keys are the filter being typed and what its keys do, or the filter
@@ -903,6 +919,9 @@ func (m browser) keys() (string, []hotspot) {
 	}
 	if !m.filtering && m.selectedExited() {
 		told = slices.Insert(slices.Clone(told), len(told)-2, rerunKey)
+	}
+	if !m.filtering && len(m.shown()) > 0 && m.shown()[m.cursor].Previewable() {
+		told = slices.Insert(slices.Clone(told), len(told)-2, interruptKey)
 	}
 	if !m.filtering && len(m.tasksShown()) > 0 {
 		told = slices.Insert(slices.Clone(told), len(told)-2, taskKey)

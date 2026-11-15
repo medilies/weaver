@@ -581,15 +581,50 @@ func (t Tmux) tagTask(id string, cmd domain.Command) error {
 // Reach implements domain.TaskRunner: run's place is the ID of the pane
 // it runs in.
 func (t Tmux) Reach(project domain.ProjectName, run domain.RunningCommand) error {
-	session, err := t.run("display-message", "-p", "-t", run.Place(), "#{session_name}")
-	if err != nil || session != project.String() {
-		return fmt.Errorf("%w: it ended", domain.ErrPaneNotRunning)
+	if err := t.ownedBy(project, run.Place()); err != nil {
+		return err
 	}
 	if _, err := t.run("select-window", "-t", run.Place()); err != nil {
 		return err
 	}
-	_, err = t.run("select-pane", "-t", run.Place())
+	_, err := t.run("select-pane", "-t", run.Place())
 	return err
+}
+
+// Interrupt implements domain.TaskRunner.
+func (t Tmux) Interrupt(project domain.ProjectName, window domain.WindowPlan, index int) error {
+	id, _, err := t.paneOf(project, window, index)
+	if err != nil {
+		return err
+	}
+	if id == t.opts.Pane {
+		return domain.ErrPaneRunsWeaver
+	}
+	_, err = t.run("send-keys", "-t", id, "C-c")
+	return err
+}
+
+// InterruptRun implements domain.TaskRunner: run's place is the ID of the
+// pane it runs in.
+func (t Tmux) InterruptRun(project domain.ProjectName, run domain.RunningCommand) error {
+	if err := t.ownedBy(project, run.Place()); err != nil {
+		return err
+	}
+	if run.Place() == t.opts.Pane {
+		return domain.ErrPaneRunsWeaver
+	}
+	_, err := t.run("send-keys", "-t", run.Place(), "C-c")
+	return err
+}
+
+// ownedBy returns an error wrapping ErrPaneNotRunning unless the pane id
+// is in the project's session.
+func (t Tmux) ownedBy(project domain.ProjectName, id string) error {
+	session, err := t.run("display-message", "-p", "-t", id, "#{session_name}")
+	if err != nil || session != project.String() {
+		return fmt.Errorf("%w: it ended", domain.ErrPaneNotRunning)
+	}
+	return nil
 }
 
 // paneOf is the ID and process of the pane at index of window in the

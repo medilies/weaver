@@ -108,13 +108,19 @@ const (
 	// ActionRunTaskApart runs the chosen task of the chosen project in a
 	// throwaway window, the browser staying.
 	ActionRunTaskApart
+	// ActionInterruptTask types ctrl+c into a copy of the chosen task of
+	// the chosen project, the browser staying.
+	ActionInterruptTask
+	// ActionInterruptPane types ctrl+c into the chosen pane of the chosen
+	// project, the browser staying.
+	ActionInterruptPane
 )
 
 // Choice is what the user picked in the project browser: an action, and
 // the project highlighted then, which the action applies to (binding a
 // project applies to none, but the browser comes back to it), the task
-// picked when running one, and the pane picked when rerunning its
-// command.
+// picked when running or interrupting one, and the pane picked when
+// rerunning its command or interrupting it.
 type Choice struct {
 	Action  Action
 	Project domain.ProjectName

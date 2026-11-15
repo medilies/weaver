@@ -23,6 +23,17 @@ type fakeTasks struct {
 	apart   []string        // "throwaway window in dir: command"
 	landing []bool          // whether each run landed there
 	reached []string        // the places of the running commands reached
+	stopped []string        // "window/index" or a running command's place, interrupted
+}
+
+func (f *fakeTasks) Interrupt(_ domain.ProjectName, window domain.WindowPlan, index int) error {
+	f.stopped = append(f.stopped, paneKey(window, index))
+	return nil
+}
+
+func (f *fakeTasks) InterruptRun(_ domain.ProjectName, run domain.RunningCommand) error {
+	f.stopped = append(f.stopped, run.Place())
+	return nil
 }
 
 func (f *fakeTasks) Reach(_ domain.ProjectName, run domain.RunningCommand) error {

@@ -212,4 +212,12 @@ type TaskRunner interface {
 	// window's, its session's current one, where attaching lands; an
 	// error wrapping ErrPaneNotRunning once it is gone.
 	Reach(project ProjectName, run RunningCommand) error
+	// Interrupt types ctrl+c into the pane at index of window, in the
+	// project's running session, as if the user pressed it there; an
+	// error wrapping ErrPaneNotRunning when the session lacks the pane,
+	// or ErrPaneRunsWeaver when weaver runs in it.
+	Interrupt(project ProjectName, window WindowPlan, index int) error
+	// InterruptRun types ctrl+c into the pane run runs in, as Interrupt
+	// does; an error wrapping ErrPaneNotRunning once it is gone.
+	InterruptRun(project ProjectName, run RunningCommand) error
 }

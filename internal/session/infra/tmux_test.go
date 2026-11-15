@@ -1557,6 +1557,37 @@ func TestTmuxRunningCommands(t *testing.T) {
 			t.Fatalf("got %d other commands running, want sleep 301 still found", others)
 		}
 	})
+
+	t.Run("interrupts a command where it runs, apart or in its pane", func(t *testing.T) {
+		commands, err := server.tmux().RunningCommands(project, plan.Windows())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, c := range commands {
+			if err := server.tmux().InterruptRun(project, c); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		}
+		running(t)
+	})
+
+	t.Run("interrupts what runs in a pane", func(t *testing.T) {
+		if err := server.tmux().Type(project, api, 0, api.Panes()[0].Tasks()[0].Command(), false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		running(t, "api/0: sleep 300")
+		if err := server.tmux().Interrupt(project, api, 0); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		running(t)
+	})
+
+	t.Run("refuses to interrupt the pane weaver runs in", func(t *testing.T) {
+		inside := infra.NewTmux(infra.TmuxOptions{Global: server.global, Env: server.env, Inside: true, Pane: server.paneLabelled(t, "running", "shell")})
+		if err := inside.Interrupt(project, api, 0); !errors.Is(err, domain.ErrPaneRunsWeaver) {
+			t.Fatalf("got %v, want ErrPaneRunsWeaver", err)
+		}
+	})
 }
 
 func TestTmuxIdle(t *testing.T) {

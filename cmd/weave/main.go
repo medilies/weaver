@@ -84,7 +84,7 @@ func wire() (application, error) {
 	browser := lazyBrowser(builtOnce(settings, func(s infra.Settings) infra.TeaBrowser { return infra.NewTeaBrowser(s, warnings) }))
 	weaver.browseProjects = app.NewBrowseProjects(browser, projects, projects, workspace, tmux,
 		weaver.listProjects, weaver.openProject, weaver.bindProject, weaver.editProject, weaver.killProject,
-		app.NewRunTask(projects, tmux, browser), app.NewRerunCommand(projects, tmux))
+		app.NewRunTask(projects, tmux, browser), app.NewRerunCommand(projects, tmux), app.NewInterrupt(projects, tmux))
 	return weaver, nil
 }
 

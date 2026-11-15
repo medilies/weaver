@@ -203,6 +203,51 @@ func TestEnterGoesToRunningTask(t *testing.T) {
 	}
 }
 
+// TestInterruptTask: `shop` started: `weave`, select `shop`, `t`, `r` on
+// `wait`, then `i` once `● wait` shows.
+//
+// `sleep 300` ends in `logs`, the ● goes, the status line says
+// `Interrupted wait in api › logs.`, and the client stays in the browser.
+func TestInterruptTask(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	logs := h.logsIdle()
+	h.browse("shop")
+
+	h.keys("t", "r")
+	h.sees("● wait")
+	h.waitRuns(logs, "sleep", 5*time.Second)
+	h.keys("i")
+
+	h.sees("Interrupted wait in api › logs.")
+	h.gone("● wait")
+	if on := h.clientOn(); on != "term" {
+		h.fatal("i left the browser for %s", on)
+	}
+}
+
+// TestInterruptPane: `shop` started, `sleep 300` typed into `logs`:
+// `weave`, select `shop`, →, `i`, then `i` again.
+//
+// `sleep 300` ends, the status line says `Interrupted api › logs.`, and
+// the second `i` says there is nothing to interrupt.
+func TestInterruptPane(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	logs := h.logsIdle()
+	h.tmux("send-keys", "-t", logs, "sleep 300", "Enter")
+	h.waitRuns(logs, "sleep", 5*time.Second)
+	h.browse("shop")
+	h.keys("Right")
+	h.sees("i interrupt")
+
+	h.keys("i")
+	h.sees("Interrupted api › logs.")
+	h.promptIn(logs)
+	h.keys("i")
+	h.sees("nothing to interrupt")
+}
+
 // TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
 // `weave`, select `shop`, `t`, `echo hi`, Enter, `y`.
 //
