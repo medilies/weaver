@@ -3,6 +3,8 @@ package infra
 import (
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -65,4 +67,13 @@ func listed(labels []string, selected, width int) (string, []hotspot) {
 		from = to + 1
 	}
 	return cut(line, spots, width)
+}
+
+// mouseMode is the mouse mode of a screen taking clicks when on: the
+// terminal selects text with the mouse otherwise.
+func mouseMode(on bool) tea.MouseMode {
+	if on {
+		return tea.MouseModeCellMotion
+	}
+	return tea.MouseModeNone
 }

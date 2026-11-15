@@ -13,8 +13,9 @@ and pane the cursor is in, and ● unsaved when there are changes.
 The selected window's panes are drawn as they open, heavy when the
 cursor is on the drawing; below them are the pane list, then the
 selected pane's card, starting with where the pane is placed. Click a
-window, a pane, or a `starts`, `clear` or `focus` option to pick it;
-what is selected shows in the [selected colour](settings.md).
+window, a pane, or a `starts`, `clear` or `focus` option to pick it,
+unless the [settings](settings.md#mouse) turn the mouse off; what is
+selected shows in the [selected colour](settings.md).
 
 Each field is checked as you type it, and a root or dir is marked ✓
 when it exists; a command that leaves a quote open is marked ⚠, as it

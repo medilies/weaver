@@ -90,7 +90,7 @@ func (f TeaConfigForm) form(draft app.ProjectDraft) (configForm, error) {
 	}
 	model := configForm{
 		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
-		workspace: f.workspace, documents: f.documents, theme: f.settings.theme(), drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
+		workspace: f.workspace, documents: f.documents, theme: f.settings.theme(), mouse: f.settings.mouse, drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
 	}
 	if !draft.NameStays {
 		model.focus.field = fieldName
@@ -155,6 +155,7 @@ type spot struct {
 // valid: a field being typed changes it only once enter keeps it.
 type configForm struct {
 	theme         theme
+	mouse         bool // whether it takes clicks
 	drawingKeys   DrawingKeys
 	project       domain.Project
 	original      []byte // the project as its config writes it, to tell changes; none when unsaved
@@ -2210,7 +2211,7 @@ func (m configForm) bodyHeight() int {
 func (m configForm) View() tea.View {
 	view := tea.NewView(m.render())
 	view.AltScreen = true
-	view.MouseMode = tea.MouseModeCellMotion
+	view.MouseMode = mouseMode(m.mouse)
 	return view
 }
 

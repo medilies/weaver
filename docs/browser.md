@@ -129,7 +129,7 @@ or that leaves a quote open, marks its pane.
 | p | switch between the preview of the selected window and its drawing, for as long as the browser stays open; it starts on the preview unless the [settings](settings.md#preview) say otherwise. Only in a session weaver started |
 | y | show the selected project's config, as stored, instead of its drawing, and back; it stays shown as you select other projects, and esc hides it too |
 | t | move the cursor into the task list: ↑ ↓ or k j select a task, its window and pane selected in the drawing; enter, r or w run it, enter going to a ● task instead, and i interrupts a ● task (see [Tasks](#tasks)); esc goes back |
-| click | select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list, as r does; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
+| click | unless the [settings](settings.md#mouse) turn the mouse off: select the project clicked in the list, the window clicked in the window list, or the pane clicked in the pane list; run the task clicked in the task list, as r does; on a key shown at the bottom, or on ← or → beside it, do what the key does; on the kept filter, edit it again as / does |
 | / | filter the list by name as you type, ignoring case; while typing, ↑ ↓ select a project, ← → a window and the Tab key a pane, enter keeps the filter for the keys below and esc clears it |
 | enter | open it: start it, then attach or switch, like `weave <project>` |
 | s | start it, like `weave -d <project>`: the browser stays, saying what was started |

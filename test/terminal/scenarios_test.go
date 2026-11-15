@@ -41,6 +41,24 @@ func TestClickPicksProject(t *testing.T) {
 	h.sees("─ notes.yml ")
 }
 
+// TestMouseSettingOff: settings `mouse: false`: `weave`, click `notes`,
+// then `y`.
+//
+// The click selects nothing: `y` shows `blog.yml`, the first project's
+// config.
+func TestMouseSettingOff(t *testing.T) {
+	h := start(t)
+	h.settings("mouse: false")
+	h.browse("")
+	h.sees("─ blog.yml ")
+
+	h.clicks("notes")
+	h.keys("y")
+
+	h.sees("root: ")
+	h.sees("─ blog.yml ")
+}
+
 // TestClickPicksPane: `weave`, select `blog`, click `shell` in the pane
 // list.
 //

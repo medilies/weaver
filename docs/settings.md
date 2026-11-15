@@ -48,6 +48,12 @@ Whether the browser's window list draws each window small under its
 name, when the project has several windows and there are lines to spare.
 `true` unless set.
 
+## `mouse`
+
+Whether the browser, the config form and the questions weave asks take
+clicks. With `false`, your terminal selects text with the mouse again.
+`true` unless set.
+
 ## `keys`
 
 The config form's keys on the drawing, tmux's unless set. Write a key

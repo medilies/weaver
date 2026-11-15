@@ -15,19 +15,20 @@ import (
 // TeaConfirmer asks the user yes-or-no questions in a dialog.
 type TeaConfirmer struct {
 	theme theme
+	mouse bool // whether it takes clicks
 }
 
 // NewTeaConfirmer constructs a TeaConfirmer styled by the settings'
 // theme.
 func NewTeaConfirmer(settings Settings) TeaConfirmer {
-	return TeaConfirmer{theme: settings.theme()}
+	return TeaConfirmer{theme: settings.theme(), mouse: settings.mouse}
 }
 
 // Confirm implements app.Confirmer, as a dialog in the middle of the
 // screen, No chosen until the user picks Yes. Esc answers No: for every
 // question asked this way, No leaves things as they are. Ctrl+C aborts.
 func (c TeaConfirmer) Confirm(question string) (bool, error) {
-	final, err := tea.NewProgram(confirmation{question: question, theme: c.theme}, tea.WithOutput(os.Stderr)).Run()
+	final, err := tea.NewProgram(confirmation{question: question, theme: c.theme, mouse: c.mouse}, tea.WithOutput(os.Stderr)).Run()
 	if errors.Is(err, tea.ErrInterrupted) {
 		return false, app.ErrAborted
 	}
@@ -41,6 +42,7 @@ func (c TeaConfirmer) Confirm(question string) (bool, error) {
 // terminal's size.
 type confirmation struct {
 	theme      theme
+	mouse      bool
 	question   string
 	yes        bool
 	cols, rows int
@@ -151,6 +153,6 @@ func (c confirmation) View() tea.View {
 		view.SetContent(strings.Repeat("\n", top) + strings.Join(lines, "\n"))
 	}
 	view.AltScreen = true
-	view.MouseMode = tea.MouseModeCellMotion
+	view.MouseMode = mouseMode(c.mouse)
 	return view
 }
