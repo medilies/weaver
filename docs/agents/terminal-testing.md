@@ -2,6 +2,8 @@
 
 How weave is checked end to end: the browser, the config form and the confirmation dialog, and how they behave together in a real terminal. The tests in [`test/terminal`](../../test/terminal) run weave in a terminal emulator attached to a tmux server of their own, type and click as a user does, and read the screen cell by cell, with its colours. CI runs them on every push and before every release.
 
+The config form's own logic, which needs neither tmux nor a real terminal (undo and redo, the diff, a grid turned into splits, fields checked as typed, scrolling), is unit-tested instead, in [`tea_config_form_test.go`](../../internal/session/infra/tea_config_form_test.go): keys sent to its model's `Update`, its `View` read as text. A scenario here checks what that can't: attaching and switching, real sessions, settings files, clicks, colours, and a whole screen.
+
 `test/terminal` is a Go module of its own, behind the `terminal` build tag, so weave's `go.mod`, `go test ./...` and the root lint know nothing of it. Run it from its directory:
 
 ```sh
@@ -90,11 +92,11 @@ Each is a test, in [`scenarios_test.go`](../../test/terminal/scenarios_test.go),
 
 - `shop`: window `env`, `focus`, setup and teardown commands (one of them failing), tasks, and a command that exits.
 - `blog`: a grid window whose focused pane isn't the first.
-- `notes`: a grid with a column in cells, beside a second window, to check cell sizes, miniatures, settings, editing a grid in the config form, and tasks of two panes in one window.
+- `notes`: a grid with a column in cells, beside a second window, to check cell sizes, miniatures, settings, the config form's snapshot, and tasks of two panes in one window.
 
 ## Adding scenarios
 
-The list grows. Add a scenario whenever a case it misses turns up: a new feature or a changed behaviour, a bug found by hand, by a review or by a user, or anything a run shows that no test checks. Add a test, in `form_test.go` for the config form and `scenarios_test.go` otherwise, named for what it checks, with a comment above it saying what it does, then what it expects, in the shorthand above; and add what its sample needs to `testdata/projects`. In the test:
+The list grows. Add a scenario whenever a case it misses turns up: a new feature or a changed behaviour, a bug found by hand, by a review or by a user, or anything a run shows that no test checks. A case of the config form's logic alone goes in `tea_config_form_test.go` instead. Add a test, in `form_test.go` for the config form and `scenarios_test.go` otherwise, named for what it checks, with a comment above it saying what it does, then what it expects, in the shorthand above; and add what its sample needs to `testdata/projects`. In the test:
 
 - Start with `h := start(t)`, and set up the rest: `h.started("shop")`, `h.logsIdle()`, `h.settings(…)`.
 - Act as a user: `h.keys`, `h.types`, `h.typed`, `h.clicks`. Act from outside with `h.tmux`.

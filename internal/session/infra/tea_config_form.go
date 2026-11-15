@@ -47,27 +47,45 @@ func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments
 // before replacing it; declining opens the form typing the name, so another
 // can be given. A name to type that isn't valid opens the form typing it.
 func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
+	model, err := f.form(draft)
+	if err != nil {
+		return domain.Project{}, err
+	}
+	final, err := tea.NewProgram(model).Run()
+	if err != nil {
+		return domain.Project{}, err
+	}
+	form := final.(configForm)
+	if !form.saved {
+		return domain.Project{}, app.ErrAborted
+	}
+	return form.project, nil
+}
+
+// form is the model of the config form filling draft, before the
+// terminal's size is known.
+func (f TeaConfigForm) form(draft app.ProjectDraft) (configForm, error) {
 	name, nameErr := domain.NewProjectName(draft.Name)
 	if nameErr != nil && draft.NameStays {
-		return domain.Project{}, nameErr
+		return configForm{}, nameErr
 	}
 	if nameErr != nil {
 		name = standInName
 	}
 	root, err := parseRoot(draft.Root)
 	if err != nil {
-		return domain.Project{}, err
+		return configForm{}, err
 	}
 	project, err := domain.NewProject(name, root).WithEnv(draft.Env).RunningFirst(draft.Before...).
 		WithClearing(draft.Clearing).SettingUp(draft.Setup...).TearingDown(draft.Teardown...).
 		WithWindows(draft.Windows...)
 	if err != nil {
-		return domain.Project{}, err
+		return configForm{}, err
 	}
 	var original []byte
 	if len(draft.Config) > 0 {
 		if original, err = encodeProject(project); err != nil {
-			return domain.Project{}, err
+			return configForm{}, err
 		}
 	}
 	model := configForm{
@@ -82,15 +100,7 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 		model, model.start = model.typeInto(model.focus, draft.Name, true)
 		model.edit.err = nameErr
 	}
-	final, err := tea.NewProgram(model).Run()
-	if err != nil {
-		return domain.Project{}, err
-	}
-	form := final.(configForm)
-	if !form.saved {
-		return domain.Project{}, app.ErrAborted
-	}
-	return form.project, nil
+	return model, nil
 }
 
 // field is what a row of a card shows.

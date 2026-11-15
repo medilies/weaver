@@ -72,30 +72,6 @@ which does each ([ADR 0003](adr/0003-edit-list-and-show-leave-the-cli.md)).
 - Their names are still reserved, so adding one back breaks no config.
   Bring back only the one asked for, and its terminal scenario.
 
-### Unit tests for the config form and the browser (M)
-
-**Use**: the config form's logic (undo and redo, the diff, a grid
-turned into splits, fields checked as typed) is only checked by the
-scenarios in `docs/agents/terminal-testing.md`, which take a tmux
-server and about 50 seconds. Most of it needs no tmux at all.
-
-- Two ways. Plain Go: build the model, call `Update` with
-  `tea.KeyPressMsg`s, check `View()` holds the text expected, as
-  `tea_drawing_test.go` already does for drawings. No dependency.
-  Or Charm's `teatest` (`github.com/charmbracelet/x/exp/teatest`): the
-  program runs in the test, with `Type`, `Send`, `WaitFor` and golden
-  files of the final output (`-update` rewrites them). It adds waiting
-  on output that arrives later, such as the preview's.
-- `teatest` is in `x/exp`: experimental, no stable version. Check it
-  supports Bubble Tea v2 before choosing it. Golden files of styled
-  output break on every change of look; force a plain colour profile in
-  tests.
-- Neither replaces the scenarios: attaching, switching, real sessions,
-  the preview of real panes and a real terminal's drawing need tmux.
-  The scenarios that are form logic only (10, 11, 15 to 18) could move.
-- Changes a rule: `CLAUDE.md` says the dialog, the config form and the
-  browser aren't unit-tested.
-
 ### A time limit on tmux calls (S)
 
 **Use**: a tmux server that stops answering, under load or stuck,
@@ -391,6 +367,18 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
 
 **Left**:
 
+- **Unit tests of the browser's model.** Its projects come as
+  `app.ProjectOverview`s, which only `app.BrowseProjects` builds, from a
+  session inspector: an `infra` test would wire the whole use case to
+  show one screen. Its choices are tested in `app`, through a scripted
+  browser, and its screens by the terminal tests. The config form's
+  logic is unit-tested since 2026-11-15.
+- **Charm's `teatest`** (`github.com/charmbracelet/x/exp/teatest/v2`),
+  dropped on 2026-11-15. Its golden files repeat the `LooksAsBefore`
+  snapshots, which also check a real terminal's drawing; its `WaitFor`
+  only helps with late output, and the config form has none, while the
+  preview needs tmux anyway. Experimental, with no tagged version, and
+  built against a Bubble Tea v2 release candidate.
 - **A tmux version check when weave runs.** Follows from the above.
 - **Schema stricter than the code.** `ParseSize` uses `strconv.Atoi`, so
   it accepts `+5`, `040` and ` 40% `, which the schema rejects;
