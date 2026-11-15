@@ -96,7 +96,7 @@ func TestDemo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	h.settings(`selected-colour: "#cba6f7"`)
+	h.settings(`theme: { selected: "#cba6f7" }`)
 	h.write("cfg/weaver/projects/nimbus.yml", demoNimbus(t))
 	h.write("cfg/weaver/projects/site.yml", demoSite)
 	for _, d := range []string{"home/dev/nimbus/api", "home/dev/nimbus/app", "home/dev/site"} {

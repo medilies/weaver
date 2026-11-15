@@ -31,9 +31,9 @@ const (
 var settingsSchema []byte
 
 // Settings are weaver-wide preferences, the same for every project: the
-// selected colour, the keys, and how the browser behaves.
+// theme, the keys, and how the browser behaves.
 type Settings struct {
-	colour       color.Color
+	palette      palette
 	keys         DrawingKeys
 	preview      bool
 	previewEvery time.Duration
@@ -70,11 +70,11 @@ func (s Settings) TmuxTimeout() time.Duration {
 	return s.tmuxTimeout
 }
 
-// DefaultSettings are the settings without a settings file: cyan, and
-// tmux's keys.
+// DefaultSettings are the settings without a settings file: the default
+// theme, cyan, and tmux's keys.
 func DefaultSettings() Settings {
 	return Settings{
-		colour:       lipgloss.Color("6"),
+		palette:      defaultPalette(),
 		keys:         DrawingKeys{splitRight: "%", splitBelow: "\"", remove: "x", shrink: "H", grow: "L"},
 		preview:      true,
 		previewEvery: time.Second,
@@ -126,6 +126,7 @@ func writeSettingsSchema(dir string) error {
 // settingsFile is the settings file's format.
 type settingsFile struct {
 	SelectedColour yaml.Node `yaml:"selected-colour"`
+	Theme          themeFile `yaml:"theme"`
 	Keys           keysFile  `yaml:"keys"`
 	Preview        *bool     `yaml:"preview"`
 	PreviewEvery   *string   `yaml:"preview-every"`
@@ -134,6 +135,16 @@ type settingsFile struct {
 	Editor         *string   `yaml:"editor"`
 	TmuxTimeout    *string   `yaml:"tmux-timeout"`
 	Popup          *bool     `yaml:"popup"`
+}
+
+// themeFile is the format of the settings' theme.
+type themeFile struct {
+	Selected yaml.Node `yaml:"selected"`
+	Ok       yaml.Node `yaml:"ok"`
+	Warning  yaml.Node `yaml:"warning"`
+	Failure  yaml.Node `yaml:"failure"`
+	Bright   yaml.Node `yaml:"bright"`
+	Muted    yaml.Node `yaml:"muted"`
 }
 
 // keysFile is the format of the settings' keys.
@@ -191,7 +202,7 @@ type writtenKey struct {
 
 // settingsTypes names the file's shapes in YAML's errors as the file
 // does.
-var settingsTypes = strings.NewReplacer("infra.settingsFile", "settings", "infra.keysFile", "keys")
+var settingsTypes = strings.NewReplacer("infra.settingsFile", "settings", "infra.keysFile", "keys", "infra.themeFile", "theme")
 
 var (
 	hexColour = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
@@ -204,9 +215,15 @@ var (
 )
 
 var (
-	// ErrInvalidColour is returned for a selected colour that is neither
-	// an ANSI colour number nor "#rrggbb".
+	// ErrInvalidColour is returned for a colour that is neither an ANSI
+	// colour number nor "#rrggbb".
 	ErrInvalidColour = errors.New("invalid colour")
+	// ErrInvalidShade is returned for a shade that is neither a colour nor
+	// a map of colour, bold and faint.
+	ErrInvalidShade = errors.New("invalid shade")
+	// ErrSelectedColourTwice is returned when selected-colour and
+	// theme.selected are both set.
+	ErrSelectedColourTwice = errors.New("selected-colour and theme.selected are the same setting: keep one")
 	// ErrEmptyKey is returned for a key set to nothing.
 	ErrEmptyKey = errors.New("a key can't be empty")
 	// ErrInvalidKey is returned for a key no terminal sends as written,
@@ -238,12 +255,11 @@ func decodeSettings(raw []byte) (Settings, error) {
 		return Settings{}, ErrTrailingSettings
 	}
 	settings := DefaultSettings()
-	if node := &file.SelectedColour; node.Kind != 0 {
-		colour, err := parseColour(node)
-		if err != nil {
-			return Settings{}, err
-		}
-		settings.colour = colour
+	if file.SelectedColour.Kind != 0 && file.Theme.Selected.Kind != 0 {
+		return Settings{}, ErrSelectedColourTwice
+	}
+	if err := file.Theme.into(&settings.palette, file.SelectedColour); err != nil {
+		return Settings{}, err
 	}
 	if file.Preview != nil {
 		settings.preview = *file.Preview
@@ -327,8 +343,89 @@ func parseDuration(field, value string, lowest, highest time.Duration) (time.Dur
 	return d, nil
 }
 
-// parseColour reads an ANSI colour number, 0-255, or "#rrggbb".
-func parseColour(node *yaml.Node) (color.Color, error) {
+// into sets on p the colours and shades the theme sets, selected-colour
+// standing for theme.selected.
+func (f themeFile) into(p *palette, selectedColour yaml.Node) error {
+	colours := []struct {
+		field string
+		node  *yaml.Node
+		into  *color.Color
+	}{
+		{"selected-colour", &selectedColour, &p.selected},
+		{"theme.selected", &f.Selected, &p.selected},
+		{"theme.ok", &f.Ok, &p.ok},
+		{"theme.warning", &f.Warning, &p.warning},
+		{"theme.failure", &f.Failure, &p.failure},
+	}
+	for _, c := range colours {
+		if c.node.Kind == 0 {
+			continue
+		}
+		colour, err := parseColour(c.field, c.node)
+		if err != nil {
+			return err
+		}
+		*c.into = colour
+	}
+	for _, s := range []struct {
+		field string
+		node  *yaml.Node
+		into  *shade
+	}{{"theme.bright", &f.Bright, &p.bright}, {"theme.muted", &f.Muted, &p.muted}} {
+		if s.node.Kind == 0 {
+			continue
+		}
+		parsed, err := parseShade(s.field, s.node)
+		if err != nil {
+			return err
+		}
+		*s.into = parsed
+	}
+	return nil
+}
+
+// parseShade reads a shade: a colour, or a map of colour, bold and faint,
+// those it leaves out unset.
+func parseShade(field string, node *yaml.Node) (shade, error) {
+	if node.Kind == yaml.ScalarNode {
+		colour, err := parseColour(field, node)
+		return shade{colour: colour}, err
+	}
+	if node.Kind != yaml.MappingNode {
+		return shade{}, fmt.Errorf("%s: %w (want a colour, or a map of colour, bold and faint)", field, ErrInvalidShade)
+	}
+	var parsed shade
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key, value := node.Content[i].Value, node.Content[i+1]
+		var err error
+		switch key {
+		case "colour":
+			parsed.colour, err = parseColour(field+".colour", value)
+		case "bold":
+			parsed.bold, err = parseFlag(field+".bold", value)
+		case "faint":
+			parsed.faint, err = parseFlag(field+".faint", value)
+		default:
+			err = fmt.Errorf("%s: %w: unknown field %q (want colour, bold or faint)", field, ErrInvalidShade, key)
+		}
+		if err != nil {
+			return shade{}, err
+		}
+	}
+	return parsed, nil
+}
+
+// parseFlag reads true or false.
+func parseFlag(field string, node *yaml.Node) (bool, error) {
+	var flag bool
+	if node.Kind != yaml.ScalarNode || node.Tag != "!!bool" || node.Decode(&flag) != nil {
+		return false, fmt.Errorf("%s: %w: %q (want true or false)", field, ErrInvalidShade, node.Value)
+	}
+	return flag, nil
+}
+
+// parseColour reads field's ANSI colour number, 0-255, or "#rrggbb".
+func parseColour(field string, node *yaml.Node) (color.Color, error) {
 	value := node.Value
 	if node.Kind == yaml.ScalarNode {
 		// Base 0 reads YAML's 0x10 and 0o20 as the schema's integers.
@@ -339,5 +436,5 @@ func parseColour(node *yaml.Node) (color.Color, error) {
 			return lipgloss.Color(value), nil
 		}
 	}
-	return nil, fmt.Errorf("selected-colour: %w: %q (want an ANSI colour number, 0-255, or \"#rrggbb\")", ErrInvalidColour, value)
+	return nil, fmt.Errorf("%s: %w: %q (want an ANSI colour number, 0-255, or \"#rrggbb\")", field, ErrInvalidColour, value)
 }

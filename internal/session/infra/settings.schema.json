@@ -6,11 +6,40 @@
   "additionalProperties": false,
   "properties": {
     "selected-colour": {
-      "description": "The colour marking what is selected in the browser, the config form and the questions weave asks: an ANSI colour number, 0-255, or \"#rrggbb\". Cyan (6) unless set.",
-      "oneOf": [
-        { "type": "integer", "minimum": 0, "maximum": 255 },
-        { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
-      ]
+      "description": "Deprecated: the same as theme.selected, which to set instead. Setting both is refused.",
+      "deprecated": true,
+      "$ref": "#/definitions/colour"
+    },
+    "theme": {
+      "description": "How weave's screens are styled. Each colour is an ANSI colour number, 0-255, or \"#rrggbb\".",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selected": {
+          "description": "The colour marking what is selected in the browser, the config form and the questions weave asks. Cyan (6) unless set.",
+          "$ref": "#/definitions/colour"
+        },
+        "ok": {
+          "description": "The colour of what runs or is fine. The terminal's green (2) unless set.",
+          "$ref": "#/definitions/colour"
+        },
+        "warning": {
+          "description": "The colour of a warning: what opening would likely fail on, or an exited command. The terminal's yellow (3) unless set.",
+          "$ref": "#/definitions/colour"
+        },
+        "failure": {
+          "description": "The colour of what fails. The terminal's red (1) unless set.",
+          "$ref": "#/definitions/colour"
+        },
+        "bright": {
+          "description": "The shade of what the cursor is on and of headings: a colour, or a map of colour, bold and faint, those left out unset. Bold unless set.",
+          "$ref": "#/definitions/shade"
+        },
+        "muted": {
+          "description": "The shade of what is told about the rest, such as hints: a colour, for terminals that ignore faint, or a map of colour, bold and faint, those left out unset. Faint unless set.",
+          "$ref": "#/definitions/shade"
+        }
+      }
     },
     "preview": {
       "description": "Whether the browser shows the preview of a running session's window, rather than its drawing, until p switches. true unless set.",
@@ -78,6 +107,27 @@
     }
   },
   "definitions": {
+    "colour": {
+      "description": "An ANSI colour number, 0-255, or \"#rrggbb\".",
+      "oneOf": [
+        { "type": "integer", "minimum": 0, "maximum": 255 },
+        { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
+      ]
+    },
+    "shade": {
+      "oneOf": [
+        { "$ref": "#/definitions/colour" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "colour": { "$ref": "#/definitions/colour" },
+            "bold": { "type": "boolean" },
+            "faint": { "type": "boolean" }
+          }
+        }
+      ]
+    },
     "key": {
       "description": "A key as the terminal sends it: a character such as | or -, or a name such as space, f5, ctrl+x or alt+s.",
       "type": "string",

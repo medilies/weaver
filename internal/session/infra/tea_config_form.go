@@ -1740,7 +1740,7 @@ func (m configForm) put(s *section, label, value, after string, at spot) {
 			if i > 0 {
 				line = "  " + line // under the text, past the ✗
 			}
-			s.text(indent + m.theme.problem.Render(line))
+			s.text(indent + m.theme.failure.Render(line))
 		}
 	}
 }
@@ -1803,7 +1803,7 @@ func (m configForm) mark(dir string) string {
 	case exists:
 		return m.theme.ok.Render("✓")
 	}
-	return m.theme.problem.Render("✗ missing")
+	return m.theme.failure.Render("✗ missing")
 }
 
 // selection is the window shown, the entry after the last when there is
@@ -2241,7 +2241,7 @@ func (r review) styled(theme theme, width int) []string {
 		style := theme.muted
 		switch line[0] {
 		case '-':
-			style = theme.problem
+			style = theme.failure
 		case '+':
 			style = theme.ok
 		}
@@ -2287,7 +2287,7 @@ func (m configForm) status() string {
 	case m.asking != nil:
 		return " " + m.asking.text + keysGap + m.toldKeys(answerKeys)
 	case m.problem != "":
-		return " " + m.theme.problem.Render("✗ "+m.problem)
+		return " " + m.theme.failure.Render("✗ "+m.problem)
 	}
 	return ""
 }

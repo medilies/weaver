@@ -7,7 +7,8 @@ config. Without the file, every setting has its default.
 
 ```yaml
 # yaml-language-server: $schema=./settings.schema.json
-selected-colour: "#5fafd7"
+theme:
+  selected: "#5fafd7"
 keys:
   split-right: "|"
   split-below: "-"
@@ -20,14 +21,42 @@ run either way, with every setting at its default. Each saves `settings.schema.j
 that folder exists, so an editor with a YAML language server completes
 and checks it; failing to save it only warns.
 
+## `theme`
+
+How the [browser](browser.md) and the [config form](config-form.md)
+look. Each colour is an ANSI colour number, `0` to `255`, or
+`"#rrggbb"` in quotes.
+
+```yaml
+theme:
+  selected: "#5fafd7"
+  ok: 2
+  warning: "#d7af5f"
+  failure: 1
+  bright: { bold: true }
+  muted: "#6c7086"
+```
+
+- `selected`: the colour marking what is selected, and the cursor: the
+  selected pane, window, option or answer, the › mark, the border of the
+  card holding the cursor, and the keys at the bottom. Cyan (`6`) unless
+  set. Warnings keep their own colours.
+- `ok`: what runs or is fine, such as ● and a running project's name.
+  Your terminal's green (`2`) unless set.
+- `warning`: what opening would likely fail on, and exited commands.
+  Your terminal's yellow (`3`) unless set.
+- `failure`: what fails, such as ✗ and a missing directory. Your
+  terminal's red (`1`) unless set.
+- `bright`: what the cursor is on, and headings. Bold unless set.
+- `muted`: hints and what is told about the rest. Faint unless set.
+
+A shade, `bright` or `muted`, is a colour, or a map of `colour`, `bold`
+and `faint`; what it leaves out is off. A colour alone suits a terminal
+that ignores faint.
+
 ## `selected-colour`
 
-The colour marking what is selected, and the cursor, in the
-[browser](browser.md) and the [config form](config-form.md): the
-selected pane, window, option or answer, the › mark, the border of the
-card holding the cursor, and the keys at the bottom. An ANSI colour
-number, `0` to `255`, or `"#rrggbb"` in quotes. Cyan (`6`) unless set.
-Warnings keep their own colours.
+The same as `theme.selected`, still read. Setting both is refused.
 
 ## `preview`
 

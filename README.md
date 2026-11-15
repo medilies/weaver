@@ -164,6 +164,6 @@ weave kill            # same, for the session you're in, if weave started it
 - [Opening, killing and binding](docs/sessions.md): `setup` and `teardown`, restoring closed windows, capturing a session
 - [The browser](docs/browser.md): summary and warnings, the drawing, tasks, keys
 - [The config form](docs/config-form.md): cards, editing on the drawing, keys
-- [Settings](docs/settings.md): the selected colour and the drawing's keys
+- [Settings](docs/settings.md): the theme and the keys
 - [tmux for weaver](docs/tmux.md): a starting config, the keys you need, the demo's theme
 - [Development](docs/development.md): building, testing, architecture

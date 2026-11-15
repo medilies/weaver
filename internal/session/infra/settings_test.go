@@ -36,22 +36,88 @@ func TestLoadSettings(t *testing.T) {
 
 	t.Run("read an ANSI colour number", func(t *testing.T) {
 		got, err := settingsIn(t, "selected-colour: 214\n")
-		if err != nil || got.colour != lipgloss.Color("214") {
-			t.Fatalf("got %v (%v), want colour 214", got.colour, err)
+		if err != nil || got.palette.selected != lipgloss.Color("214") {
+			t.Fatalf("got %v (%v), want colour 214", got.palette.selected, err)
 		}
 	})
 
 	t.Run("read an ANSI colour number written in hex", func(t *testing.T) {
 		got, err := settingsIn(t, "selected-colour: 0x10\n")
-		if err != nil || got.colour != lipgloss.Color("16") {
-			t.Fatalf("got %v (%v), want colour 16", got.colour, err)
+		if err != nil || got.palette.selected != lipgloss.Color("16") {
+			t.Fatalf("got %v (%v), want colour 16", got.palette.selected, err)
 		}
 	})
 
 	t.Run("read a hex colour", func(t *testing.T) {
 		got, err := settingsIn(t, "selected-colour: \"#5fafd7\"\n")
-		if err != nil || got.colour != lipgloss.Color("#5fafd7") {
-			t.Fatalf("got %v (%v), want #5fafd7", got.colour, err)
+		if err != nil || got.palette.selected != lipgloss.Color("#5fafd7") {
+			t.Fatalf("got %v (%v), want #5fafd7", got.palette.selected, err)
+		}
+	})
+
+	t.Run("read the selected colour from the theme", func(t *testing.T) {
+		got, err := settingsIn(t, "theme:\n  selected: 214\n")
+		if err != nil || got.palette.selected != lipgloss.Color("214") {
+			t.Fatalf("got %v (%v), want colour 214", got.palette.selected, err)
+		}
+	})
+
+	t.Run("refuse the selected colour set twice", func(t *testing.T) {
+		if _, err := settingsIn(t, "selected-colour: 214\ntheme:\n  selected: 33\n"); !errors.Is(err, ErrSelectedColourTwice) {
+			t.Fatalf("got %v, want ErrSelectedColourTwice", err)
+		}
+	})
+
+	t.Run("read the state colours", func(t *testing.T) {
+		got, err := settingsIn(t, "theme:\n  ok: 10\n  warning: \"#d7af5f\"\n  failure: 9\n")
+		want := []any{lipgloss.Color("10"), lipgloss.Color("#d7af5f"), lipgloss.Color("9")}
+		if gotColours := []any{got.palette.ok, got.palette.warning, got.palette.failure}; err != nil || !reflect.DeepEqual(gotColours, want) {
+			t.Fatalf("got %v (%v), want %v", gotColours, err, want)
+		}
+	})
+
+	t.Run("keep the state colours left unset", func(t *testing.T) {
+		got, err := settingsIn(t, "theme:\n  ok: 10\n")
+		if err != nil || got.palette.failure != lipgloss.Color("1") {
+			t.Fatalf("got failure %v (%v), want red, 1", got.palette.failure, err)
+		}
+	})
+
+	t.Run("refuse a theme colour that isn't one, naming it", func(t *testing.T) {
+		if _, err := settingsIn(t, "theme:\n  warning: yellow\n"); !errors.Is(err, ErrInvalidColour) || !strings.Contains(err.Error(), "theme.warning: ") {
+			t.Fatalf("got %v, want ErrInvalidColour naming theme.warning", err)
+		}
+	})
+
+	t.Run("read a shade set as a colour alone", func(t *testing.T) {
+		got, err := settingsIn(t, "theme:\n  muted: 244\n")
+		if want := (shade{colour: lipgloss.Color("244")}); err != nil || got.palette.muted != want {
+			t.Fatalf("got %+v (%v), want %+v", got.palette.muted, err, want)
+		}
+	})
+
+	t.Run("read a shade set as a map", func(t *testing.T) {
+		got, err := settingsIn(t, "theme:\n  bright: { colour: 15, bold: true }\n")
+		if want := (shade{colour: lipgloss.Color("15"), bold: true}); err != nil || got.palette.bright != want {
+			t.Fatalf("got %+v (%v), want %+v", got.palette.bright, err, want)
+		}
+	})
+
+	t.Run("refuse a shade's unknown field", func(t *testing.T) {
+		if _, err := settingsIn(t, "theme:\n  muted: { dim: true }\n"); !errors.Is(err, ErrInvalidShade) {
+			t.Fatalf("got %v, want ErrInvalidShade", err)
+		}
+	})
+
+	t.Run("refuse a shade's flag that isn't true or false", func(t *testing.T) {
+		if _, err := settingsIn(t, "theme:\n  muted: { faint: yes please }\n"); !errors.Is(err, ErrInvalidShade) || !strings.Contains(err.Error(), "theme.muted.faint: ") {
+			t.Fatalf("got %v, want ErrInvalidShade naming theme.muted.faint", err)
+		}
+	})
+
+	t.Run("refuse an unknown theme field", func(t *testing.T) {
+		if _, err := settingsIn(t, "theme:\n  border: rounded\n"); err == nil || !strings.Contains(err.Error(), "border") {
+			t.Fatalf("got %v, want border refused", err)
 		}
 	})
 
@@ -320,6 +386,10 @@ func TestSettingsSchemaDeclaresEveryField(t *testing.T) {
 	file := reflect.TypeFor[settingsFile]()
 	if got, want := keys(top), fields(file); !slices.Equal(got, want) {
 		t.Errorf("schema has %q, the file %q", got, want)
+	}
+	themeField, _ := file.FieldByName("Theme")
+	if got, want := keys(schema.Properties["theme"].Properties), fields(themeField.Type); !slices.Equal(got, want) {
+		t.Errorf("schema's theme has %q, the file %q", got, want)
 	}
 	keysField, _ := file.FieldByName("Keys")
 	if got, want := keys(schema.Properties["keys"].Properties), fields(keysField.Type); !slices.Equal(got, want) {

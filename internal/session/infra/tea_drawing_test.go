@@ -226,7 +226,7 @@ func TestDrawingAlerts(t *testing.T) {
 
 	t.Run("colours the border of a pane with an alert", func(t *testing.T) {
 		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
-		if want := defaultTheme.problem.Render("│"); !strings.HasSuffix(row, want) {
+		if want := defaultTheme.failure.Render("│"); !strings.HasSuffix(row, want) {
 			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
@@ -240,28 +240,28 @@ func TestDrawingAlerts(t *testing.T) {
 
 	t.Run("leaves plain what a pane with an alert shows inside", func(t *testing.T) {
 		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, -1, false, 81, 20, 21, 4)[1]
-		if !strings.Contains(row, "│ $ █     "+defaultTheme.problem.Render("│")) {
+		if !strings.Contains(row, "│ $ █     "+defaultTheme.failure.Render("│")) {
 			t.Fatalf("got %q, want the right pane's prompt plain", row)
 		}
 	})
 
 	t.Run("leaves plain a neighbour's name on a shared border", func(t *testing.T) {
 		row := drawing(defaultTheme, firstWindow(t, stacked), "/srv/shop", []alert{dirAlert, noAlert}, -1, false, 81, 20, 21, 7)[3]
-		if want := defaultTheme.problem.Render("─") + " bottom "; !strings.Contains(row, want) {
+		if want := defaultTheme.failure.Render("─") + " bottom "; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the border red and the name bottom plain: %q", row, want)
 		}
 	})
 
 	t.Run("colours a selected pane with an alert in the alert's colour", func(t *testing.T) {
 		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{noAlert, dirAlert}, 1, false, 81, 20, 21, 4)[1]
-		if want := defaultTheme.problem.Render("│"); !strings.HasSuffix(row, want) {
+		if want := defaultTheme.failure.Render("│"); !strings.HasSuffix(row, want) {
 			t.Fatalf("got %q, want it to end with %q", row, want)
 		}
 	})
 
 	t.Run("colours a shared border with the worse alert", func(t *testing.T) {
 		row := drawing(defaultTheme, firstWindow(t, sideBySide), "/srv/shop", []alert{dirAlert, programAlert}, -1, false, 81, 20, 21, 4)[1]
-		if want := " $ █     " + defaultTheme.problem.Render("│") + " $ █"; !strings.Contains(row, want) {
+		if want := " $ █     " + defaultTheme.failure.Render("│") + " $ █"; !strings.Contains(row, want) {
 			t.Fatalf("got %q, want the shared border red: %q", row, want)
 		}
 	})

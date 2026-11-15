@@ -12,33 +12,67 @@ import (
 // selected, and where the cursor is; the shades rank the rest, bright for
 // what the cursor is on or a heading, plain for what is read, muted for
 // what is told about it; the state colours only ever tell a state, and
-// stay the terminal's own basic colours, as its theme sets them.
+// are the terminal's own basic colours unless the settings say otherwise.
 type theme struct {
 	colour color.Color
 	// picked is text in the selected colour.
 	picked lipgloss.Style
 	// bright and muted are the shades above and below plain text.
 	bright, muted lipgloss.Style
-	// ok, warning and problem are the state colours: green for what runs
+	// ok, warning and failure are the state colours: green for what runs
 	// or is fine, yellow for what would likely fail or has exited, red for
 	// what fails.
-	ok, warning, problem lipgloss.Style
+	ok, warning, failure lipgloss.Style
 }
 
-func newTheme(colour color.Color) theme {
-	return theme{
-		colour:  colour,
-		picked:  lipgloss.NewStyle().Foreground(colour),
-		bright:  lipgloss.NewStyle().Bold(true),
-		muted:   lipgloss.NewStyle().Faint(true),
-		ok:      lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
-		warning: lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
-		problem: lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
+// palette is what the settings choose of the theme: its colours, and its
+// shades.
+type palette struct {
+	selected, ok, warning, failure color.Color
+	bright, muted                  shade
+}
+
+// shade is a shade's look: a colour, if set, and bold or faint.
+type shade struct {
+	colour      color.Color
+	bold, faint bool
+}
+
+// defaultPalette is the theme without settings: cyan, the terminal's own
+// green, yellow and red, bold for bright and faint for muted.
+func defaultPalette() palette {
+	return palette{
+		selected: lipgloss.Color("6"),
+		ok:       lipgloss.Color("2"),
+		warning:  lipgloss.Color("3"),
+		failure:  lipgloss.Color("1"),
+		bright:   shade{bold: true},
+		muted:    shade{faint: true},
 	}
 }
 
+func (p palette) theme() theme {
+	return theme{
+		colour:  p.selected,
+		picked:  lipgloss.NewStyle().Foreground(p.selected),
+		bright:  p.bright.style(),
+		muted:   p.muted.style(),
+		ok:      lipgloss.NewStyle().Foreground(p.ok),
+		warning: lipgloss.NewStyle().Foreground(p.warning),
+		failure: lipgloss.NewStyle().Foreground(p.failure),
+	}
+}
+
+func (s shade) style() lipgloss.Style {
+	style := lipgloss.NewStyle().Bold(s.bold).Faint(s.faint)
+	if s.colour != nil {
+		style = style.Foreground(s.colour)
+	}
+	return style
+}
+
 func (s Settings) theme() theme {
-	return newTheme(s.colour)
+	return s.palette.theme()
 }
 
 // runningMark is the ● before a project, or a task, still running.
@@ -128,7 +162,7 @@ func alertGlyph(a alert) string {
 func (t theme) alertStyle(a alert) (lipgloss.Style, bool) {
 	switch a {
 	case dirAlert:
-		return t.problem, true
+		return t.failure, true
 	case exitedAlert, programAlert:
 		return t.warning, true
 	}

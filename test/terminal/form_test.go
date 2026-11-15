@@ -53,7 +53,7 @@ func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
 }
 
 // TestSettingsChangeColourAndDrawingKeys: `settings.yml` with
-// `selected-colour: 214` and
+// `theme: { selected: 214 }` and
 // `keys: { split-right: "|", split-below: "-" }`: edit `notes`, `shell` in
 // the window list, down to its drawing, `|`, `u`, Esc.
 //
@@ -63,7 +63,7 @@ func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
 // leave with `Nothing done.`
 func TestSettingsChangeColourAndDrawingKeys(t *testing.T) {
 	h := start(t)
-	h.settings("selected-colour: 214", `keys: { split-right: "|", split-below: "-" }`)
+	h.settings("theme: { selected: 214 }", `keys: { split-right: "|", split-below: "-" }`)
 	h.edit("notes")
 	if _, err := os.Stat(filepath.Join(h.dir, "cfg/weaver/settings.schema.json")); err != nil {
 		t.Fatal("no settings.schema.json beside settings.yml")

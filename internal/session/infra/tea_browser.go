@@ -797,7 +797,7 @@ func (m browser) noticeLine() string {
 		}
 		style = style.Inherit(m.theme.picked)
 	case m.notice.Failure():
-		style, text = style.Inherit(m.theme.problem), "✗ "+text
+		style, text = style.Inherit(m.theme.failure), "✗ "+text
 	}
 	return style.Render(strings.Join(strings.Fields(text), " "))
 }
@@ -1060,7 +1060,7 @@ func (m browser) list(height int) string {
 			mark, style = m.theme.runningMark(), m.theme.ok
 		}
 		if at {
-			style = style.Bold(true)
+			style = style.Inherit(m.theme.bright)
 		}
 		lines = append(lines, m.theme.gutter(at, !m.tasking)+mark+" "+style.Render(fmt.Sprintf("%-*s", nameWidth, project.Name())))
 	}
@@ -1353,7 +1353,7 @@ func (m browser) detailsTitle() string {
 func (m browser) detailsTop(project app.ProjectOverview, width int) string {
 	header := m.summary(project)
 	if err := project.Problem(); err != nil {
-		header = m.theme.problem.Render(err.Error())
+		header = m.theme.failure.Render(err.Error())
 	}
 	return lipgloss.NewStyle().Width(width).Render(header)
 }
@@ -1424,7 +1424,7 @@ func (m browser) summary(project app.ProjectOverview) string {
 	}
 	rootLine := root(project)
 	if !project.RootExists() {
-		rootLine += " " + m.theme.problem.Render("✗ missing")
+		rootLine += " " + m.theme.failure.Render("✗ missing")
 	}
 	lines = append(lines, rootLine)
 

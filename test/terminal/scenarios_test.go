@@ -421,6 +421,22 @@ func TestBrowserDropsProjectDeletedOnDisk(t *testing.T) {
 	h.gone("notes")
 }
 
+// TestThemeSetting: settings `theme: { ok: 5, failure: 9 }`, `shop`
+// started: `weave`.
+//
+// `● shop` is drawn in the ok colour, 5, not green.
+func TestThemeSetting(t *testing.T) {
+	h := start(t)
+	h.settings("theme: { ok: 5, failure: 9 }")
+	h.started("shop")
+	h.browse("")
+
+	h.sees("● shop")
+	if colour := h.colourOf("● shop"); colour != "5" {
+		h.fatal("● shop is drawn in %q, not the theme's ok colour (5)", colour)
+	}
+}
+
 // TestPreviewSettingOff: settings `preview: false`, `notes` started:
 // `weave`, select `notes`, then `p`.
 //
