@@ -2,6 +2,7 @@ package infra
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -37,7 +39,16 @@ type TmuxOptions struct {
 	// size instead, the pane weaver runs in being smaller. Without either,
 	// tmux's default size applies.
 	Size func() (cols, rows int, ok bool)
+	// Limit is how long one tmux command may take before weaver gives up
+	// on it, so a server that stops answering can't freeze weaver; zero
+	// means callLimit.
+	Limit time.Duration
 }
+
+// callLimit is how long a tmux command may take unless TmuxOptions says
+// otherwise: enough for the slow calls that are fine, such as capturing a
+// busy pane or starting a large project.
+const callLimit = 5 * time.Second
 
 // Tmux drives a tmux server through the tmux command. Sessions are named
 // after projects and targeted with "=name", which matches exactly; panes
@@ -1167,11 +1178,20 @@ func directionFlag(direction domain.Direction) string {
 // run runs one tmux command and returns its output without the final
 // newline.
 func (t Tmux) run(args ...string) (string, error) {
-	cmd := exec.Command("tmux", append(slices.Clone(t.opts.Global), args...)...)
+	limit := t.opts.Limit
+	if limit == 0 {
+		limit = callLimit
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "tmux", append(slices.Clone(t.opts.Global), args...)...)
 	cmd.Env = t.opts.Env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return "", fmt.Errorf("tmux %s: no answer within %s", args[0], limit)
+	}
 	if err != nil {
 		return "", &tmuxError{command: args[0], err: err, stderr: strings.TrimSpace(stderr.String())}
 	}

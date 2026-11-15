@@ -209,7 +209,7 @@ func TestRunTaskStaying(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		said, err := app.NewRunTask(configs, tasks, confirm).HandleStaying(name, at)
+		said, err := app.NewRunTask(configs, tasks, confirm).HandleStaying(name, at, func(string) {})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -252,6 +252,47 @@ func TestRunTaskStaying(t *testing.T) {
 	})
 }
 
+func TestRunTaskTellsWhatItIsDoing(t *testing.T) {
+	// told runs the task at of the tasked shop project as HandleStaying
+	// does, its session in tasks, answering confirm, and returns what it
+	// told it was doing.
+	told := func(t *testing.T, tasks *fakeTasks, confirm app.Confirmer) []string {
+		t.Helper()
+		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
+		name, err := domain.NewProjectName("shop")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		var working []string
+		_, _ = app.NewRunTask(configs, tasks, confirm).HandleStaying(name, app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}, func(text string) {
+			working = append(working, text)
+		})
+		return working
+	}
+
+	t.Run("tells it runs the task in its idle pane", func(t *testing.T) {
+		if got, want := told(t, runningShop(t), answer(false)), []string{"Running migrate…"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("tells it runs the task apart once agreed", func(t *testing.T) {
+		tasks := runningShop(t)
+		tasks.busy = map[string]bool{"shop/1": true}
+		if got, want := told(t, tasks, answer(true)), []string{"Running migrate in a throwaway window…"}; !slices.Equal(got, want) {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("tells nothing when running apart is declined", func(t *testing.T) {
+		tasks := runningShop(t)
+		tasks.busy = map[string]bool{"shop/1": true}
+		if got := told(t, tasks, answer(false)); len(got) != 0 {
+			t.Fatalf("got %q, want nothing told", got)
+		}
+	})
+}
+
 func TestRunTaskApart(t *testing.T) {
 	// apart runs the task at of the tasked shop project in a throwaway
 	// window, its session in tasks, asking confirm.
@@ -262,7 +303,7 @@ func TestRunTaskApart(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		return app.NewRunTask(configs, tasks, confirm).HandleApart(name, at)
+		return app.NewRunTask(configs, tasks, confirm).HandleApart(name, at, func(string) {})
 	}
 	migrate := func(t *testing.T) app.TaskAt {
 		return app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}

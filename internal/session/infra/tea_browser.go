@@ -9,6 +9,7 @@ import (
 	"sync"
 	"unicode"
 
+	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -61,6 +62,9 @@ type asked struct {
 	question string
 	answer   chan<- bool
 }
+
+// doing is what the action the browser on screen waits for is doing.
+type doing struct{ text string }
 
 // browserPlace is what the browser had selected when it last ended.
 type browserPlace struct {
@@ -167,6 +171,13 @@ func (b TeaBrowser) Confirm(question string) (bool, error) {
 	}
 }
 
+// Working implements app.ProjectBrowser.
+func (b TeaBrowser) Working(text string) {
+	if b.screen.program != nil {
+		b.screen.program.Send(doing{text: text})
+	}
+}
+
 // Leave implements app.ProjectBrowser.
 func (b TeaBrowser) Leave() error {
 	if b.screen.program == nil {
@@ -182,7 +193,7 @@ func (b TeaBrowser) Leave() error {
 // show puts the browser on screen.
 func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
 	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
-	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings, chosen: chosen}
+	model := browser{projects: projects, notice: notice, theme: b.theme, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
 	model.filter, model.config = b.kept.filter, b.kept.config
 	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Name() == selected }) {
 		model.filter = ""
@@ -257,14 +268,12 @@ type browser struct {
 	// previewPane is the selected pane of the preview, by its index in
 	// it; pane follows it when the config has it.
 	previewPane     int
-	previewFailure  string       // why the last preview failed, told once
-	previewAsked    int          // the asks for a preview
-	previewAnswered int          // the last ask answered
-	running         tasksRunning // the tasks last found running, if hasRunning
-	hasRunning      bool
-	tasksStarted    bool // asked, or found there is nothing to ask
-	tasksAsked      int  // the asks for the running tasks
-	tasksAnswered   int  // the last ask answered
+	previewFailure  string // why the last preview failed, told once
+	previewAsked    int    // the asks for a preview
+	previewAnswered int    // the last ask answered
+	refreshStarted  bool   // asked, or found there is nothing to ask
+	refreshAsked    int    // the asks for the selected project as its session is now
+	refreshAnswered int    // the last ask answered
 	notice          app.Notice
 	width, height   int
 	// choice is the one just made, sent on chosen; the browser then waits
@@ -273,12 +282,15 @@ type browser struct {
 	choice   app.Choice
 	chosen   chan<- app.Choice
 	waiting  bool
+	spin     spinner.Model // turning while waiting
+	doing    string        // what the action waited for is doing, once told
 	question string
 	answer   chan<- bool
-	// working tells the user, who pressed ctrl+c while waiting, that the
-	// action still runs; a second ctrl+c abandons it, ending the browser.
-	working   bool
-	abandoned bool
+	// interrupted tells the user, who pressed ctrl+c while waiting, that
+	// the action still runs; a second ctrl+c abandons it, ending the
+	// browser.
+	interrupted bool
+	abandoned   bool
 }
 
 // shown are the projects whose names contain the filter, ignoring case.
@@ -374,8 +386,8 @@ func (m browser) windowsShown() []domain.WindowPlan {
 	return shown[m.cursor].Project().Plan().Windows()
 }
 
-// Init starts the ticks asking for the preview and the running tasks
-// again; the first asks follow the terminal's size, read again once
+// Init starts the ticks asking for the preview and the selected project
+// as its session is now; the first asks follow the terminal's size, read again once
 // resizes are listened for.
 func (m browser) Init() tea.Cmd {
 	return tea.Batch(tick(), sizeRecheck())
@@ -390,6 +402,16 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.reshown(msg)
 	case asked:
 		m.question, m.answer = msg.question, msg.answer
+	case doing:
+		m.doing = msg.text
+		return m, nil
+	case spinner.TickMsg:
+		if !m.waiting {
+			return m, nil // stops turning
+		}
+		var cmd tea.Cmd
+		m.spin, cmd = m.spin.Update(msg)
+		return m, cmd
 	case tea.KeyPressMsg:
 		if m.question != "" {
 			return m.answered(msg.String())
@@ -407,7 +429,7 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if next.choice.Action != 0 {
 		choice, chosen := next.choice, next.chosen
 		next.choice, next.waiting = app.Choice{}, true
-		cmd = tea.Batch(cmd, func() tea.Msg {
+		cmd = tea.Batch(cmd, next.spin.Tick, func() tea.Msg {
 			chosen <- choice
 			return nil
 		})
@@ -423,10 +445,10 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next, fetch = next.fetch()
 		cmd = tea.Batch(cmd, fetch)
 	}
-	if !next.tasksStarted || next.selectedName() != m.selectedName() {
-		next.tasksStarted = true // the first ask, once the browser shows
+	if !next.refreshStarted || next.selectedName() != m.selectedName() {
+		next.refreshStarted = true // the first ask, once the browser shows
 		var fetch tea.Cmd
-		next, fetch = next.fetchTasks()
+		next, fetch = next.refresh()
 		cmd = tea.Batch(cmd, fetch)
 	}
 	return next, cmd
@@ -445,18 +467,18 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case previewTick:
 		// An ask still unanswered isn't asked again, so slow answers can't
 		// pile up.
-		var preview, tasks tea.Cmd
+		var preview, refresh tea.Cmd
 		if m.previewAsked == m.previewAnswered {
 			m, preview = m.fetch()
 		}
-		if m.tasksAsked == m.tasksAnswered {
-			m, tasks = m.fetchTasks()
+		if m.refreshAsked == m.refreshAnswered {
+			m, refresh = m.refresh()
 		}
-		return m, tea.Batch(preview, tasks, tick())
-	case tasksRunning:
-		m.tasksAnswered = max(m.tasksAnswered, msg.asked)
-		if msg.asked == m.tasksAsked {
-			m.running, m.hasRunning = msg, true
+		return m, tea.Batch(preview, refresh, tick())
+	case refreshed:
+		m.refreshAnswered = max(m.refreshAnswered, msg.asked)
+		if msg.asked == m.refreshAsked {
+			m = m.withRefreshed(msg.project)
 		}
 		return m, nil
 	case previewed:
@@ -715,16 +737,21 @@ func (m browser) frame() (notice, list, tasks string, height, width int) {
 }
 
 // noticeLine is the notice as frame lays it out, on as many lines as
-// the width makes it: the question asked in the selected colour, a
-// failure in red after ✗.
+// the width makes it: the question asked in the selected colour, as is
+// the spinner while waiting with what the action is doing, and a failure
+// in red after ✗.
 func (m browser) noticeLine() string {
 	style := lipgloss.NewStyle().Width(m.width)
 	text := m.notice.Text()
 	switch {
 	case m.question != "":
 		style, text = style.Inherit(m.theme.picked), m.question+" (y/n)"
-	case m.working:
-		style, text = style.Inherit(m.theme.picked), "Working… ctrl+c again leaves the browser."
+	case m.waiting:
+		text = m.spin.View() + " " + m.doing
+		if m.interrupted {
+			text += " ctrl+c again leaves the browser."
+		}
+		style = style.Inherit(m.theme.picked)
 	case m.notice.Failure():
 		style, text = style.Inherit(m.theme.problem), "✗ "+text
 	}
@@ -737,8 +764,10 @@ func (m browser) noticeLine() string {
 // before.
 func (m browser) reshown(msg reshown) browser {
 	before := m.selectedName()
-	m.projects, m.notice, m.waiting, m.working = msg.projects, msg.notice, false, false
-	m.tasksStarted, m.hasRunning = false, false
+	m.projects, m.notice, m.waiting, m.doing, m.interrupted = msg.projects, msg.notice, false, "", false
+	// An answer still on its way is about the projects as they were.
+	m.refreshStarted, m.refreshAsked = false, m.refreshAsked+1
+	m.refreshAnswered = m.refreshAsked
 	if !slices.ContainsFunc(m.shown(), func(p app.ProjectOverview) bool { return p.Name() == msg.selected }) {
 		m.filter, m.filtering = "", false
 	}
@@ -760,13 +789,14 @@ func (m browser) reshown(msg reshown) browser {
 }
 
 // pressedWaiting is m after key, pressed while an action runs: ctrl+c
-// says it is working, and a second one ends the browser, abandoning it.
+// says the action still runs, and a second one ends the browser,
+// abandoning it.
 func (m browser) pressedWaiting(key string) (tea.Model, tea.Cmd) {
 	if key != "ctrl+c" {
 		return m, nil
 	}
-	if !m.working {
-		m.working = true
+	if !m.interrupted {
+		m.interrupted = true
 		return m, nil
 	}
 	m.abandoned = true
@@ -823,6 +853,13 @@ var (
 )
 
 // taskingKeys are told while the cursor is in the task list.
+// answeringKeys are the keys told while the browser asks a question, and
+// waitingKeys while an action runs.
+var (
+	answeringKeys = []keyTold{{"y or enter", "yes"}, {"any other key", "no"}}
+	waitingKeys   = []keyTold{{"ctrl+c twice", "leave the browser"}}
+)
+
 var taskingKeys = []keyTold{{"enter", "run, go"}, {"r", "run"}, {"w", "throwaway"}, {"esc", "back"}, {"q", "quit"}}
 
 // keys are the filter being typed and what its keys do, or the filter
@@ -834,6 +871,12 @@ func (m browser) keys() (string, []hotspot) {
 	var spots []hotspot
 	told := browsingKeys
 	switch {
+	case m.question != "":
+		line, _ := m.theme.keys(answeringKeys) // keys aren't clicked while asking
+		return cut(line, nil, m.width)
+	case m.waiting:
+		line, _ := m.theme.keys(waitingKeys) // nor while waiting
+		return cut(line, nil, m.width)
 	case m.filtering:
 		line, told = "/"+m.filter+m.theme.muted.Render("▏")+keysGap, typingKeys
 	case m.filter != "":

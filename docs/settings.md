@@ -13,24 +13,21 @@ keys:
   split-below: "-"
 ```
 
-The settings are read by what they change: the browser (`weave`), and
-the config form and the confirmation dialog (`weave bind`, `weave
-edit`). Each of those saves `settings.schema.json` beside the file once
+The browser (`weave`) and the config form (`weave bind`) read the
+settings, and refuse to start while the file is invalid, naming the file
+and the field; the other commands, the help, the version and completion
+run either way. Each saves `settings.schema.json` beside the file once
 that folder exists, so an editor with a YAML language server completes
-and checks it, and refuses to start while the file is invalid, naming
-the file and the field. The other commands, the help, the version and
-completion run either way. Failing to save the schema, in a folder
-weave can't write to, only warns.
+and checks it; failing to save it only warns.
 
 ## `selected-colour`
 
-The colour marking what is selected, and where the cursor is, in the
+The colour marking what is selected, and the cursor, in the
 [browser](browser.md) and the [config form](config-form.md): the
-selected pane in the drawing, the selected window, pane or option in a
-list, underlined, and the chosen answer of a question, while the
-cursor is on them (in the browser, on the project list); the cursor's › mark; the border of the card holding
-the cursor, the others muted; and the keys told at the bottom. An ANSI colour number, `0` to `255`, or `"#rrggbb"` in
-quotes. Cyan (`6`) unless set. Warnings keep their own colours.
+selected pane, window, option or answer, the › mark, the border of the
+card holding the cursor, and the keys at the bottom. An ANSI colour
+number, `0` to `255`, or `"#rrggbb"` in quotes. Cyan (`6`) unless set.
+Warnings keep their own colours.
 
 ## `keys`
 

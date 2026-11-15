@@ -22,6 +22,7 @@ type scriptedBrowser struct {
 	confirm  app.Confirmer
 	onScreen bool
 	events   []string // "asked on screen", "left", "ran off screen"…
+	working  []string // what it was told actions were doing
 }
 
 // note records that what happened, on screen or off it.
@@ -61,6 +62,10 @@ func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain
 func (b *scriptedBrowser) Confirm(question string) (bool, error) {
 	b.note("asked")
 	return b.confirm.Confirm(question)
+}
+
+func (b *scriptedBrowser) Working(text string) {
+	b.working = append(b.working, text)
 }
 
 func (b *scriptedBrowser) Leave() error {
@@ -565,9 +570,9 @@ func TestBrowseProjects(t *testing.T) {
 		s.sessions.commands = map[string][]domain.RunningCommand{"shop": {
 			domain.NewRunningCommand(windowName(t, "logs"), 0, command(t, "tail -f app.log")),
 		}}
-		want := []app.TaskAt{{Window: windowName(t, "logs"), Task: 0}}
-		if got := s.browser.previews.RunningTasks(shop); !slices.Equal(got, want) {
-			t.Fatalf("got %v, want tail running since the list was shown", got)
+		at := app.TaskAt{Window: windowName(t, "logs"), Task: 0}
+		if !s.browser.previews.Refreshed(shop).TaskRuns(at) {
+			t.Fatal("got tail not running, want it running since the list was shown")
 		}
 	})
 
@@ -784,6 +789,38 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("tells the browser of a command that exited since the list was shown", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		got := s.browser.previews.Refreshed(blog).Warnings()
+		if len(got) != 1 || !errors.Is(got[0], app.ErrCommandExited) || !got[0].Concerns(windowName(t, "blog"), 0) {
+			t.Fatalf("got %v, want hugo server exited in the blog pane", got)
+		}
+	})
+
+	t.Run("stops warning the browser of a command that runs again", func(t *testing.T) {
+		s := newBrowseSetup(t)
+		s.configs.projects["blog"] = serving(t, "", "hugo server")
+		s.workspace.programs = map[string]bool{"hugo": true}
+		s.sessions.running["blog"] = owned(t, "blog")
+		s.sessions.idle = map[string]map[domain.WindowName][]int{"blog": {windowName(t, "blog"): {0}}}
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		blog, _ := s.browser.last().overview("blog")
+		s.sessions.idle = nil
+		if got := s.browser.previews.Refreshed(blog).Warnings(); len(got) > 0 {
+			t.Fatalf("got %v, want no warnings", got)
+		}
+	})
+
 	t.Run("doesn't warn about an idle pane that prefills its command", func(t *testing.T) {
 		s := newBrowseSetup(t)
 		window, err := domain.NewWindow(windowName(t, "blog"), domain.NewPane().Prefilling(command(t, "hugo server")))
@@ -913,6 +950,26 @@ func TestBrowseProjects(t *testing.T) {
 		shop, _ := s.browser.last().overview("shop")
 		if shop.Running() || s.browser.last().notice != "Killed shop." {
 			t.Fatalf("got running=%v and notice %q, want shop killed", shop.Running(), s.browser.last().notice)
+		}
+	})
+
+	t.Run("tells it is killing once confirmed", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"Killing shop…"}; !slices.Equal(s.browser.working, want) {
+			t.Fatalf("got %q, want %q", s.browser.working, want)
+		}
+	})
+
+	t.Run("tells nothing is being done when the kill is declined", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		if err := s.browse(answer(false)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(s.browser.working) != 0 {
+			t.Fatalf("got %q, want nothing told", s.browser.working)
 		}
 	})
 
@@ -1249,6 +1306,8 @@ func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, app.No
 func (b failingBrowser) Confirm(string) (bool, error) {
 	return false, b.err
 }
+
+func (b failingBrowser) Working(string) {}
 
 func (b failingBrowser) Leave() error {
 	return nil

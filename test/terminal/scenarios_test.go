@@ -107,6 +107,30 @@ func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	}
 }
 
+// TestKillAsksWithItsKeys: `notes` started: `weave`, select `notes`, `x`,
+// then `n`.
+//
+// The status line asks `Kill notes's session and everything running in
+// it? (y/n)`, the keys line below it saying `y or enter yes` and `any
+// other key no`. `n` brings the browser's keys back, `notes` still
+// running.
+func TestKillAsksWithItsKeys(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	h.browse("notes")
+
+	h.keys("x")
+	h.sees("Kill notes's session and everything running in it? (y/n)")
+	h.sees("y or enter yes")
+	h.sees("any other key no")
+	h.keys("n")
+	h.gone("any other key no")
+	h.sees("q quit")
+	if !h.running("notes") {
+		t.Fatal("notes ended though the kill was declined")
+	}
+}
+
 // TestMiniaturesNeedLines: `weave`, select `notes`, then the terminal down
 // to 20 lines.
 //
@@ -329,6 +353,35 @@ func TestExitedCommandWarns(t *testing.T) {
 	h.seesLoosely("APP_ENV=staging window api, over project's local")
 	h.sees("r rerun")
 	h.keys("Tab")
+	h.gone("r rerun")
+}
+
+// TestExitedCommandWarnsWhileShown: `shop` started, its `sleep 3` exited,
+// `sleep 300` typed in `logs` from outside: `weave`, select `shop`, →, then
+// Ctrl-C in `logs` from outside, then `sleep 300` typed again.
+//
+// No `⚠` while `sleep 300` runs. After Ctrl-C, `⚠` on `logs` and
+// `r rerun` in the key line, without leaving the browser. Once `sleep 300`
+// runs again, both go.
+func TestExitedCommandWarnsWhileShown(t *testing.T) {
+	h := start(t)
+	h.started("shop")
+	logs := h.logsIdle()
+	h.tmux("send-keys", "-t", logs, "sleep 300", "Enter")
+	h.waitRuns(logs, "sleep", 5*time.Second)
+	h.browse("shop")
+	h.keys("Right")
+	h.sees("logs   back")
+	h.gone("⚠")
+
+	h.tmux("send-keys", "-t", logs, "C-c")
+
+	h.sees(`⚠ window "api", pane "logs": command exited: sleep 3`)
+	h.sees("r rerun")
+
+	h.tmux("send-keys", "-t", logs, "sleep 300", "Enter")
+
+	h.gone("⚠")
 	h.gone("r rerun")
 }
 

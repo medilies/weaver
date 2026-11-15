@@ -180,35 +180,42 @@ func (m browser) runningTask(index int) (browser, bool) {
 	return m, true
 }
 
-// taskRuns reports whether the selected project's task at still runs: as
-// last found while the browser shows it, else as its overview says.
+// taskRuns reports whether the selected project's task at still runs, as
+// last found while the browser shows it.
 func (m browser) taskRuns(at app.TaskAt) bool {
-	project := m.shown()[m.cursor]
-	if m.hasRunning && m.running.project == project.Name() {
-		return slices.Contains(m.running.tasks, at)
-	}
-	return project.TaskRuns(at)
+	return m.shown()[m.cursor].TaskRuns(at)
 }
 
-// tasksRunning are a project's tasks found still running, in answer to
-// the ask numbered asked.
-type tasksRunning struct {
+// refreshed is a project as its owned session was found, in answer to the
+// ask numbered asked.
+type refreshed struct {
 	asked   int
-	project domain.ProjectName
-	tasks   []app.TaskAt
+	project app.ProjectOverview
 }
 
-// fetchTasks is m asking which of the selected project's tasks still run,
-// away from the screen's updates, when its owned session can tell; an
+// refresh is m asking for the selected project as its owned session is
+// now, away from the screen's updates, when the session can tell; an
 // answer to an earlier ask is then dropped.
-func (m browser) fetchTasks() (browser, tea.Cmd) {
+func (m browser) refresh() (browser, tea.Cmd) {
 	shown := m.shown()
-	if len(shown) == 0 || m.live == nil || !shown[m.cursor].Previewable() || len(m.tasksShown()) == 0 {
+	if len(shown) == 0 || m.live == nil || !shown[m.cursor].Previewable() {
 		return m, nil
 	}
-	m.tasksAsked++
-	asked, project, live := m.tasksAsked, shown[m.cursor], m.live
+	m.refreshAsked++
+	asked, project, live := m.refreshAsked, shown[m.cursor], m.live
 	return m, func() tea.Msg {
-		return tasksRunning{asked: asked, project: project.Name(), tasks: live.RunningTasks(project)}
+		return refreshed{asked: asked, project: live.Refreshed(project)}
 	}
+}
+
+// withRefreshed is m with project in place of the overview of the same
+// name, so that its warnings and running tasks are those found now.
+func (m browser) withRefreshed(project app.ProjectOverview) browser {
+	m.projects = slices.Clone(m.projects)
+	for i, p := range m.projects {
+		if p.Name() == project.Name() {
+			m.projects[i] = project
+		}
+	}
+	return m
 }

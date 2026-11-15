@@ -40,25 +40,25 @@ projects, drawing each window as it will open and warning about what
 would likely fail:
 
 ```text
-nimbus ~/dev/nimbus | tasks          | nimbus.yml
-weaver ~/dev/weaver | api › task dev |
-                    |   migrate      | ~/dev/nimbus
-                    |                |
-                    |                |  api    app    repo                         2/3
-                    |                | +-[ app shell ]----------+- flutter run ------+
-                    |                | | app/                   | app/               |
-                    |                | | $                      | $ nimbus app       |
-                    |                | |                        |                    |
-                    |                | |                        |                    |
-                    |                | |                        +- emulator ---------+
-                    |                | |                        | $ nimbus emulator  |
-                    |                | |                        |                    |
-                    |                | +------------------------+--------------------+
-                    |                |  app shell   flutter run   emulator
-                    |                | app shell  ~/dev/nimbus/app  window app
+╭─ projects ─╮╭─ tasks ──────────╮╭─ nimbus.yml ─────────────────────────────────────────────────────────────╮
+│ ›   nimbus ││   api › task dev ││ ~/dev/nimbus                                                             │
+│     weaver ││     migrate      ││                                                                          │
+│            ││                  ││  api    app    repo                                               ←→ 1/3 │
+│            ││                  ││ ┌─[ api shell ]───────────────────────────┬─ task dev ─────────────────┐ │
+│            ││                  ││ │ api/                                    │ api/                       │ │
+│            ││                  ││ │ $ █                                     │ $ task dev                 │ │
+│            ││                  ││ │                                         │                            │ │
+│            ││                  ││ │                                         │                            │ │
+│            ││                  ││ │                                         ├─ psql ─────────────────────┤ │
+│            ││                  ││ │                                         │ $ nimbus psql              │ │
+│            ││                  ││ │                                         │                            │ │
+│            ││                  ││ │                                         │                            │ │
+│            ││                  ││ └─────────────────────────────────────────┴────────────────────────────┘ │
+│            ││                  ││  api shell   task dev   psql                                             │
+│            ││                  ││ api shell  ~/dev/nimbus/api  window api                                  │
+╰────────────╯╰──────────────────╯╰──────────────────────────────────────────────────────────────────────────╯
 
-enter open  s start  b bind  e edit  E raw  x kill  d delete
-tab pane  t tasks  y config  / filter  q quit
+enter open  s start  b bind  e edit  E raw  x kill  d delete  tab pane  t tasks  y config  / filter  q quit
 ```
 
 ## Install
@@ -100,10 +100,11 @@ source <(weave completion bash)
 weave bind            # register the project in the current directory, through the config form
 weave bind scratch    # same, starting from the windows, panes and commands of the running session scratch
 weave bind .          # same, from the session you're in
+weave bind --root ~/dev/shop --name shop   # with another root and name
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
 weave -d nimbus       # start it, or restore its windows, without attaching: you stay where you are
-weave                 # browse the projects, to open, bind, edit, kill or delete them, or run their tasks
+weave                 # browse the projects, to open, start, bind, edit, kill or delete them, or run their tasks
 weave kill nimbus     # kill the session and everything running in it
 weave kill            # same, for the session you're in, if weave started it
 ```
