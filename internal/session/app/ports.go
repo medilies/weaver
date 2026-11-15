@@ -164,6 +164,10 @@ type ProjectBrowser interface {
 	// Confirm asks in the status line while the browser is on screen,
 	// otherwise as a Confirmer of its own.
 	Confirmer
+	// Working tells, while the browser is on screen waiting for an
+	// action, what the action is doing, as in "Killing shop…"; off screen
+	// it does nothing.
+	Working(text string)
 	// Leave takes the browser off screen, for what needs the terminal;
 	// the next Browse shows it again.
 	Leave() error

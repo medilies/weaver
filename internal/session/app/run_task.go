@@ -39,7 +39,7 @@ func NewRunTask(projects domain.ProjectRegistry, tasks domain.TaskRunner, confir
 // browser runs in with ErrPaneRunsWeaver; declining to run the task apart
 // is ErrAborted.
 func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() error) error {
-	task, _, err := uc.started(name, at, true)
+	task, _, err := uc.started(name, at, true, func(string) {})
 	if err != nil {
 		return err
 	}
@@ -55,8 +55,9 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() erro
 // HandleStaying runs the task at of project as Handle does, but leaves
 // the user where they are, the session's current window and pane
 // included, and says where it runs: "Running migrate in api › back."
-func (uc RunTask) HandleStaying(name domain.ProjectName, at TaskAt) (string, error) {
-	task, place, err := uc.started(name, at, false)
+// It calls working with what it is doing once there is no more to ask.
+func (uc RunTask) HandleStaying(name domain.ProjectName, at TaskAt, working func(string)) (string, error) {
+	task, place, err := uc.started(name, at, false, working)
 	if err != nil {
 		return "", err
 	}
@@ -66,11 +67,12 @@ func (uc RunTask) HandleStaying(name domain.ProjectName, at TaskAt) (string, err
 // HandleApart runs the task at of project in a throwaway window without
 // asking, busy pane or not, leaving the user where they are as
 // HandleStaying does, and says so.
-func (uc RunTask) HandleApart(name domain.ProjectName, at TaskAt) (string, error) {
+func (uc RunTask) HandleApart(name domain.ProjectName, at TaskAt, working func(string)) (string, error) {
 	window, _, task, err := uc.found(name, at)
 	if err != nil {
 		return "", err
 	}
+	working(apartWorking(task))
 	if err := uc.tasks.RunApart(name, window, at.Pane, task, false); err != nil {
 		return "", err
 	}
@@ -96,13 +98,13 @@ func (uc RunTask) found(name domain.ProjectName, at TaskAt) (domain.WindowPlan, 
 
 // started runs the task at of project, landing there or not, and returns
 // it and where it runs: its pane, "api › back", or the throwaway window it
-// ran apart in.
-func (uc RunTask) started(name domain.ProjectName, at TaskAt, landing bool) (domain.Task, string, error) {
+// ran apart in, calling working with what it is doing.
+func (uc RunTask) started(name domain.ProjectName, at TaskAt, landing bool, working func(string)) (domain.Task, string, error) {
 	window, pane, task, err := uc.found(name, at)
 	if err != nil {
 		return domain.Task{}, "", err
 	}
-	apart, err := uc.run(name, window, at.Pane, pane, task, landing)
+	apart, err := uc.run(name, window, at.Pane, pane, task, landing, working)
 	if err != nil {
 		return domain.Task{}, "", err
 	}
@@ -118,9 +120,10 @@ func (uc RunTask) started(name domain.ProjectName, at TaskAt, landing bool) (dom
 
 // run types task into pane, at index of window, when its shell is idle,
 // or else, if the user agrees, runs it in a throwaway window, and reports
-// whether it did so. The pane the browser runs in is refused, pointing
-// to w, which runs a task apart.
-func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task, landing bool) (bool, error) {
+// whether it did so, calling working with what it does once agreed. The
+// pane the browser runs in is refused, pointing to w, which runs a task
+// apart.
+func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task, landing bool, working func(string)) (bool, error) {
 	shown := pane.Name().String()
 	if pane.Name().IsZero() {
 		shown = window.Name().String()
@@ -133,6 +136,7 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 		return false, fmt.Errorf("%s: %w", where(window, pane), err)
 	}
 	if !busy {
+		working(fmt.Sprintf("Running %s…", task.Label()))
 		return false, uc.tasks.Type(name, window, index, task.Command(), landing)
 	}
 	yes, err := uc.confirm.Confirm(fmt.Sprintf("%s is busy: run %s in a throwaway window?", shown, task.Label()))
@@ -142,7 +146,13 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 	if !yes {
 		return false, ErrAborted
 	}
+	working(apartWorking(task))
 	return true, uc.tasks.RunApart(name, window, index, task, landing)
+}
+
+// apartWorking is what running task in a throwaway window is doing.
+func apartWorking(task domain.Task) string {
+	return fmt.Sprintf("Running %s in a throwaway window…", task.Label())
 }
 
 // taskOf finds the task at of project, with its pane and that pane's

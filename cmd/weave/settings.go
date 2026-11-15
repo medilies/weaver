@@ -64,6 +64,13 @@ func (l lazyBrowser) Confirm(question string) (bool, error) {
 	return browser.Confirm(question)
 }
 
+// Working tells nothing when the browser couldn't be built.
+func (l lazyBrowser) Working(text string) {
+	if browser, err := l(); err == nil {
+		browser.Working(text)
+	}
+}
+
 // Leave has nothing to take off screen when the browser couldn't be built.
 func (l lazyBrowser) Leave() error {
 	browser, err := l()

@@ -107,6 +107,30 @@ func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	}
 }
 
+// TestKillAsksWithItsKeys: `notes` started: `weave`, select `notes`, `x`,
+// then `n`.
+//
+// The status line asks `Kill notes's session and everything running in
+// it? (y/n)`, the keys line below it saying `y or enter yes` and `any
+// other key no`. `n` brings the browser's keys back, `notes` still
+// running.
+func TestKillAsksWithItsKeys(t *testing.T) {
+	h := start(t)
+	h.started("notes")
+	h.browse("notes")
+
+	h.keys("x")
+	h.sees("Kill notes's session and everything running in it? (y/n)")
+	h.sees("y or enter yes")
+	h.sees("any other key no")
+	h.keys("n")
+	h.gone("any other key no")
+	h.sees("q quit")
+	if !h.running("notes") {
+		t.Fatal("notes ended though the kill was declined")
+	}
+}
+
 // TestMiniaturesNeedLines: `weave`, select `notes`, then the terminal down
 // to 20 lines.
 //

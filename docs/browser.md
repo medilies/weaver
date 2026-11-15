@@ -131,12 +131,15 @@ or that leaves a quote open, marks its pane.
 After starting, binding, editing, killing, deleting or running a task, the list
 comes back with what happened in the status line, a failure in red after
 ✗, the filter kept while it shows the project acted on. The browser
-stays on screen while the action runs, asking there what it asks
-(`y` or enter answers yes, any other key no), unless the action needs
-the terminal: the config form, the editor, `setup` or `teardown`
-commands that run, or going into a session. Keys wait while an action
-runs; ctrl+c says it is still working, and a second ctrl+c leaves the
-browser, the action finishing on its own.
+stays on screen while the action runs, unless the action needs the
+terminal: the config form, the editor, `setup` or `teardown` commands
+that run, or going into a session.
+
+- A question shows in the status line. `y` or enter answers yes, any
+  other key no, as the keys line below it says.
+- While the action runs, the status line shows a spinner and what it is
+  doing, such as `Killing shop…`. Keys wait meanwhile. Pressing ctrl+c
+  twice leaves the browser, and the action finishes on its own.
 
 The browser and the config form take the mouse, so most terminals
 select text with shift held, and the wheel doesn't scroll them.

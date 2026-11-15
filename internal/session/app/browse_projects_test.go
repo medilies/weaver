@@ -22,6 +22,7 @@ type scriptedBrowser struct {
 	confirm  app.Confirmer
 	onScreen bool
 	events   []string // "asked on screen", "left", "ran off screen"…
+	working  []string // what it was told actions were doing
 }
 
 // note records that what happened, on screen or off it.
@@ -61,6 +62,10 @@ func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain
 func (b *scriptedBrowser) Confirm(question string) (bool, error) {
 	b.note("asked")
 	return b.confirm.Confirm(question)
+}
+
+func (b *scriptedBrowser) Working(text string) {
+	b.working = append(b.working, text)
 }
 
 func (b *scriptedBrowser) Leave() error {
@@ -948,6 +953,26 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
+	t.Run("tells it is killing once confirmed", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		if err := s.browse(answer(true)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if want := []string{"Killing shop…"}; !slices.Equal(s.browser.working, want) {
+			t.Fatalf("got %q, want %q", s.browser.working, want)
+		}
+	})
+
+	t.Run("tells nothing is being done when the kill is declined", func(t *testing.T) {
+		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
+		if err := s.browse(answer(false)); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(s.browser.working) != 0 {
+			t.Fatalf("got %q, want nothing told", s.browser.working)
+		}
+	})
+
 	t.Run("asks to kill on screen, staying there without teardown commands", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionKill, "shop"))
 		if err := s.browse(answer(true)); err != nil {
@@ -1281,6 +1306,8 @@ func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, app.No
 func (b failingBrowser) Confirm(string) (bool, error) {
 	return false, b.err
 }
+
+func (b failingBrowser) Working(string) {}
 
 func (b failingBrowser) Leave() error {
 	return nil

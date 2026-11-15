@@ -542,6 +542,7 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 				return name, "", err
 			}
 		}
+		uc.browser.Working(fmt.Sprintf("Starting %s…", name))
 		notice, err := uc.open.HandleStart(name.String())
 		return name, notice, err
 	case ActionBind:
@@ -575,11 +576,13 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 				return name, "", err
 			}
 		}
+		uc.browser.Working(fmt.Sprintf("Killing %s…", name))
 		return name, fmt.Sprintf("Killed %s.", name), uc.kill.Handle(name.String())
 	case ActionDelete:
 		if err := uc.ask(fmt.Sprintf("Delete %s's config? A running session keeps running.", name)); err != nil {
 			return name, "", err
 		}
+		uc.browser.Working(fmt.Sprintf("Deleting %s's config…", name))
 		if err := uc.projects.Delete(name); err != nil {
 			return name, "", err
 		}
@@ -587,10 +590,10 @@ func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []Proje
 	case ActionRunTask:
 		return name, "", uc.run.Handle(name, choice.Task, uc.browser.Leave)
 	case ActionRunTaskStaying:
-		notice, err := uc.run.HandleStaying(name, choice.Task)
+		notice, err := uc.run.HandleStaying(name, choice.Task, uc.browser.Working)
 		return name, notice, err
 	case ActionRunTaskApart:
-		notice, err := uc.run.HandleApart(name, choice.Task)
+		notice, err := uc.run.HandleApart(name, choice.Task, uc.browser.Working)
 		return name, notice, err
 	case ActionRerun:
 		return name, "", uc.rerun.Handle(name, choice.Pane)
