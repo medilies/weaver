@@ -273,13 +273,10 @@ func (h *harness) eventually(what string, done func() bool) {
 	h.fatal("%s: never happened", what)
 }
 
-// promptIn waits until the session's active pane runs its shell.
+// promptIn waits until the pane runs its shell.
 func (h *harness) promptIn(target string) {
 	h.t.Helper()
-	h.eventually(target+" runs bash", func() bool {
-		out, _ := h.tmuxErr("display", "-p", "-t", target, "#{pane_current_command}")
-		return out == "bash"
-	})
+	h.waitRuns(target, "bash", 5*time.Second)
 }
 
 // browse opens the browser in the pane the client shows, on the project the filter selects
@@ -296,6 +293,63 @@ func (h *harness) browse(project string) {
 	h.screen.Type(project)
 	h.keys("Enter")
 	h.sees(project + ".yml")
+}
+
+// gone waits until text no longer shows.
+func (h *harness) gone(text string) {
+	h.t.Helper()
+	if err := h.at(text).Expect(tuitest.LocatorExpectOptions{Not: true}); err != nil {
+		h.fatal("%q stayed", text)
+	}
+}
+
+// screenShows waits until one capture of the screen satisfies shows:
+// a redraw can match half-made when its facts are read apart.
+func (h *harness) screenShows(what string, shows func(screen string) bool) {
+	h.t.Helper()
+	h.eventually(what, func() bool {
+		screen, err := h.screen.Text(tuitest.TextOptions{})
+		return err == nil && shows(screen)
+	})
+}
+
+// --- What tmux holds --------------------------------------------------------
+
+// paneOf is the ID of the pane named label in a session's window.
+func (h *harness) paneOf(window, label string) string {
+	h.t.Helper()
+	for _, line := range strings.Split(h.tmux("list-panes", "-t", "="+window, "-F", "#{pane_id} #{@label}"), "\n") {
+		if id, name, _ := strings.Cut(line, " "); name == label {
+			return id
+		}
+	}
+	h.t.Fatalf("%s has no pane %s", window, label)
+	return ""
+}
+
+// waitRuns waits until the pane runs the program, for up to wait.
+func (h *harness) waitRuns(pane, program string, wait time.Duration) {
+	h.t.Helper()
+	var runs string
+	for deadline := time.Now().Add(wait); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if runs, _ = h.tmuxErr("display", "-p", "-t", pane, "#{pane_current_command}"); runs == program {
+			return
+		}
+	}
+	h.fatal("%s runs %q, not %q", pane, runs, program)
+}
+
+// activePane is the name of the pane a session's current window selects.
+func (h *harness) activePane(session string) string {
+	return h.tmux("display", "-p", "-t", "="+session+":", "#{@label}")
+}
+
+// logsIdle is shop's logs pane, once its sleep 3 exited.
+func (h *harness) logsIdle() string {
+	h.t.Helper()
+	logs := h.paneOf("shop:api", "logs")
+	h.waitRuns(logs, "bash", 8*time.Second)
+	return logs
 }
 
 // --- Rendering --------------------------------------------------------------
