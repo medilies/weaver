@@ -11,17 +11,18 @@ docs/quality-report.md specs.md`.
 
 ## How the order is chosen
 
-From the project rules in `CLAUDE.md`:
+Every candidate stands on the same footing: none waits for a trigger,
+none is deferred. They are ordered by complexity, the smallest first,
+and, at the same size, by necessity: what fixes a nuisance felt today
+before what adds something new. The exceptions: what waits
+[until a user asks](#until-a-user-asks), since the browser already does
+it, [Parked](#parked) ideas, which break a project rule as it
+stands, and [Plugins](#plugins), which live outside the core.
 
-- **Finish what exists before adding.** Test gaps come first; a
-  deferred finding goes with the task it waits for.
-- **Show what the config already says before adding to it.** The
-  browser can draw far more than it does, with no change to `domain` or
-  `app`.
+The project rules in `CLAUDE.md` still shape how each is built:
+
 - **Domain before forms.** Rules go into `domain` before a form or the
   browser needs them; the forms only collect answers.
-- **Config fields only when a config needs them.** Each of the
-  [Candidates](#candidates) says the use that calls for it.
 - **weaver runs only what a config says, and knows nothing of git.**
   Ideas that act on the user's behalf, or need git, are
   [Parked](#parked).
@@ -38,47 +39,24 @@ v0.5.0 is done: window `env`, focus, setup and teardown in the config
 form, the config in the browser, a failed teardown seen from inside the
 session, rerun and a mark on a running task.
 
-v0.6.0, scheduled on 2026-11-09, is done: settings (the selected
-colour and the drawing keys), grid sizes in cells, grid windows edited
-and turned into splits in the config form, and window miniatures. The
-backlog's triggers are dropped: what comes next is picked from the
-[Candidates](#candidates) by judgement, each still with a concrete use.
+v0.6.0 is done: settings (the selected colour and the drawing keys),
+grid sizes in cells, grid windows edited and turned into splits in the
+config form, and window miniatures.
 
-Since v0.6.0, ready for v0.7.0: the live preview, designed on
-2026-11-14, start, running a task while staying in the browser, the task
-list's ● marks kept up to date, running projects marked by a green name,
-`weave kill` safe with a zoomed window on tmux 3.4, and the terminal
-scenarios, run as Go tests in a real terminal emulator. Building the overviews
-concurrently, so the summary and the project list's ● marks stay as live
-as the preview, waits for a use of its own.
+v0.7.0 is done: the live preview, start, running a task while staying
+in the browser, the task list's ● marks kept up to date, running
+projects marked by a green name, and `weave kill` safe with a zoomed
+window on tmux 3.4.
+
+Since v0.7.0: the terminal tests, run in a real terminal emulator,
+configs ending in `.yaml`, the config form unit-tested through its
+model, releases as deb packages in a signed apt repository, and a tmux
+command given up on after 5s.
 
 ## Candidates
 
-Each says what it is for; picked by judgement, not by a trigger.
-
-### `weave edit`, `weave list` and `weave show` again (S)
-
-**Use**: a user asks to edit, list or show configs from the shell, or a
-script needs one of them. They left the CLI in v0.7.0 for the browser,
-which does each ([ADR 0003](adr/0003-edit-list-and-show-leave-the-cli.md)).
-
-- `weave edit [--raw] <project>`: the config form, or the config raw in
-  the editor, keeping it only if valid; `Saved <project>.`, `No
-  changes.` or `Nothing saved.`. `EditProject` still does both.
-- `weave list`: each registered project and `running` or `-`, aligned.
-  `ListProjects` still does it, for completion.
-- `weave show <project>`: the config as stored, through
-  `app.ProjectDocuments`.
-- Their names are still reserved, so adding one back breaks no config.
-  Bring back only the one asked for, and its terminal scenario.
-
-### A clean shutdown when killing (M)
-
-**Use**: a dev server leaves state behind (a lock file, a stale PID,
-an unflushed log) when its session is killed. After the teardown
-commands, the kill sends Ctrl-C to every pane and waits, with a
-timeout, until each shell is idle, then kills the session. It relies on
-the idle check meaning "the shell is idle", as `Idle` and `Busy` do.
+In the order to do them: by size, then by necessity. Each says what it
+is for.
 
 ### The browser full screen inside tmux (S to M)
 
@@ -101,6 +79,135 @@ the least code:
   project opens. Needs a glossary entry first. Not needed for the
   preview: run in a project's pane, the browser leaves its own pane out
   of it (2026-11-14), which is less code than a session of its own.
+
+### Settings: the theme, and the others they could hold (S each, M for the theme)
+
+**Use**: weaver's look and keys are fixed but for the selected colour
+and the drawing keys, so a terminal theme where yellow is unreadable,
+or keys that clash with a user's habits, can't be changed.
+
+Settings today ([Settings](settings.md)): `selected-colour`, and
+`keys:` for the drawing (`split-right`, `split-below`, `remove`,
+`shrink`, `grow`).
+
+**Editing the theme** (M). The theme (`infra/theme.go`) is the
+selected colour, the shades (bright, plain, muted) and the state
+colours (green, yellow, red). A `theme:` key would set each of them:
+
+```yaml
+theme:
+  selected: "#5fafd7"   # replaces selected-colour, which stays read
+  ok: 2                 # green: what runs or is fine
+  warning: "#d7af5f"    # yellow: what would likely fail, or has exited
+  problem: 1            # red: what fails
+  bright: { bold: true }
+  muted: { faint: true }  # or a colour, for terminals that ignore faint
+  border: rounded       # rounded, normal, thick, double: the cards' borders
+```
+
+- Each value as `selected-colour` is today: an ANSI number or
+  `"#rrggbb"`. The state colours default to the terminal's own basic
+  colours, as now, so a terminal theme still sets them.
+- `selected-colour` stays read, as released, and is the same as
+  `theme.selected`; setting both is refused.
+- The marks (●, ○, ✗, ›) stay as they are: they are words of the
+  glossary, not styling.
+- Open question: named themes, or a theme file of its own, for users
+  sharing one.
+- `theme` is already in the glossary; `theme:` as a settings key needs
+  it to say so.
+
+**Other possible settings**, S each, the default being today's
+behaviour:
+
+| Setting | Does | Default |
+| --- | --- | --- |
+| `keys:` for the browser | every browser key: open, start, edit, edit raw, bind, delete, kill, the task list, the preview, rerun, reload, filter, the window and pane lists | today's keys |
+| `keys:` for the rest of the config form | undo, redo, save, moving panes | today's keys |
+| `preview` | whether the browser starts with the preview or the drawing (`p` still switches) | on |
+| `preview-every` | how often the preview and the task list's marks are read again | `1s` |
+| `miniatures` | whether the window list draws miniatures | on |
+| `mouse` | whether the browser and the config form take clicks | on |
+| `editor` | the editor `E` opens a config in, over `$VISUAL` and `$EDITOR` | `$VISUAL`, else `$EDITOR`, else `vi` |
+| `tmux-timeout` | how long weave waits on a tmux command before giving up | `5s` |
+| `popup` | inside tmux, the browser re-runs itself full screen in a popup (see the full-screen candidate) | off |
+| `list-order` | the project list by name, or most recently opened first (see [Parked](#parked)) | by name |
+
+- Settings stay weaver-wide: nothing here changes what a project's
+  config means, so no project default (`clear`, `env`) belongs in them.
+- Each comes with its field in `settings.schema.json` and a line in
+  `docs/settings.md`.
+
+### Reload (M)
+
+**Use**: a pane got into a bad state, or its config changed, and the
+only way back today is killing the project and opening it again. Added
+on 2026-11-15.
+
+In the browser, `R` asks in the status line: "Reload pane back, or the
+whole api window? (p/w, anything else cancels)". Asking doubles as the
+confirmation, since reloading ends what runs. Only in an owned session.
+
+- A pane is restarted in place, its size and position kept, with its
+  dir, env, `before` commands, `clear`, note and `command` or
+  `prefill`, all from the config as stored now.
+- A window is replaced in place, at the same position, its panes laid
+  out again by its splits or grid, the pane `focus` sets selected.
+- Throwaway windows of its tasks are left alone.
+- A pane the session lacks is refused, pointing to reloading its window;
+  a window the session lacks is restored, as open would.
+- The pane the browser runs in, or the window holding it, is refused,
+  as for tasks.
+- You stay in the browser; the preview shows the result.
+- Not rerun, which types an exited command again and ends nothing, nor
+  restoration, which only puts back missing windows; it reuses
+  restoration's placement and the one pane listing (`projectPanes`,
+  `pick`), see [Shared groundwork](#shared-groundwork).
+
+### Open once the panes are ready (M)
+
+**Use**: opening a project lands you in panes still working through
+their `before` commands, `clear` and note, the screen scrolling under
+you. Added on 2026-11-15.
+
+Open puts you in the session once every pane it created is ready: its
+`before` commands ran, `clear` typed if set, its note printed, and its
+`command` started or its `prefill` typed. A pane with none of these is
+ready at once, so a plain project attaches as today.
+
+- Meanwhile weave lists the panes not yet ready under `window › pane`,
+  crossing each off as it gets there; enter or ctrl+c attaches at once.
+  No time limit: a slow `npm install` in `before` is normal.
+- Only open waits. Start leaves you where you are, so it doesn't.
+  Reopening an owned session waits for the panes of the windows it
+  restores, and only those.
+- Always on, no config field, until a config needs one.
+- Open question: how weave tells a pane is ready. Start types
+  everything ahead (`before`, `clear`, the note, then the startup) and
+  the shell works through it alone, so weave can't tell from what it
+  sent. The idle-shell check sees a shell at its prompt, but not
+  whether lines typed ahead are still waiting, and a `command` pane is
+  never idle once ready. Whatever the answer, it must not run anything
+  the config doesn't say, nor leave traces in the pane's history.
+- `wait`, below, could later add its own conditions to what ready
+  means; the two stay separate until then.
+
+### Live overviews (M)
+
+**Use**: while the browser is open, the summary and the project list's
+● marks and green names show where things stood when it last built the
+overviews, while the preview and the task list's marks beside them are
+kept up to date. Building the overviews concurrently, on the browser's
+tick (`previewTick`, with its numbered asks), keeps them as live as the
+preview.
+
+### A clean shutdown when killing (M)
+
+**Use**: a dev server leaves state behind (a lock file, a stale PID,
+an unflushed log) when its session is killed. After the teardown
+commands, the kill sends Ctrl-C to every pane and waits, with a
+timeout, until each shell is idle, then kills the session. It relies on
+the idle check meaning "the shell is idle", as `Idle` and `Busy` do.
 
 ### Secrets read at start (M)
 
@@ -173,68 +280,13 @@ open; `wait` orders the panes among themselves.
 - A new subcommand reserves its name (`reservedNames` in
   `domain/project.go`), which breaks a registered project already named
   `wait`: see the reserved-name rule in
-  [Shared groundwork](#shared-groundwork). Deferred on 2026-11-09: its
-  need isn't clear yet.
-
-### Open once the panes are ready (M)
-
-**Use**: opening a project lands you in panes still working through
-their `before` commands, `clear` and note, the screen scrolling under
-you. Added on 2026-11-15.
-
-Open puts you in the session once every pane it created is ready: its
-`before` commands ran, `clear` typed if set, its note printed, and its
-`command` started or its `prefill` typed. A pane with none of these is
-ready at once, so a plain project attaches as today.
-
-- Meanwhile weave lists the panes not yet ready under `window › pane`,
-  crossing each off as it gets there; enter or ctrl+c attaches at once.
-  No time limit: a slow `npm install` in `before` is normal.
-- Only open waits. Start leaves you where you are, so it doesn't.
-  Reopening an owned session waits for the panes of the windows it
-  restores, and only those.
-- Always on, no config field, until a config needs one.
-- Open question: how weave tells a pane is ready. Start types
-  everything ahead (`before`, `clear`, the note, then the startup) and
-  the shell works through it alone, so weave can't tell from what it
-  sent. The idle-shell check sees a shell at its prompt, but not
-  whether lines typed ahead are still waiting, and a `command` pane is
-  never idle once ready. Whatever the answer, it must not run anything
-  the config doesn't say, nor leave traces in the pane's history.
-- `wait`, below, could later add its own conditions to what ready
-  means; the two stay separate until then.
-
-### Reload (M)
-
-**Use**: a pane got into a bad state, or its config changed, and the
-only way back today is killing the project and opening it again. Added
-on 2026-11-15.
-
-In the browser, `R` asks in the status line: "Reload pane back, or the
-whole api window? (p/w, anything else cancels)". Asking doubles as the
-confirmation, since reloading ends what runs. Only in an owned session.
-
-- A pane is restarted in place, its size and position kept, with its
-  dir, env, `before` commands, `clear`, note and `command` or
-  `prefill`, all from the config as stored now.
-- A window is replaced in place, at the same position, its panes laid
-  out again by its splits or grid, the pane `focus` sets selected.
-- Throwaway windows of its tasks are left alone.
-- A pane the session lacks is refused, pointing to reloading its window;
-  a window the session lacks is restored, as open would.
-- The pane the browser runs in, or the window holding it, is refused,
-  as for tasks.
-- You stay in the browser; the preview shows the result.
-- Not rerun, which types an exited command again and ends nothing, nor
-  restoration, which only puts back missing windows; it reuses
-  restoration's placement and the one pane listing (`projectPanes`,
-  `pick`), see [Shared groundwork](#shared-groundwork).
+  [Shared groundwork](#shared-groundwork).
 
 ### Lazy windows (L)
 
 **Use**: a project has heavy windows you don't always want (an
 emulator, a log tail). It wants a second argument to `weave`, which
-takes at most one today (`cmd/weave/root.go`). Deferred on 2026-11-09.
+takes at most one today (`cmd/weave/root.go`).
 
 ```yaml
 windows:
@@ -264,18 +316,72 @@ browser, does.
   config it writes: warn, or carry lazy windows over from the existing
   config.
 
+## Until a user asks
+
+Done only when a user asks for them, since the browser already does
+what they would.
+
+### `weave edit`, `weave list` and `weave show` again (S)
+
+**Use**: a user asks to edit, list or show configs from the shell, or a
+script needs one of them. They left the CLI in v0.7.0 for the browser,
+which does each ([ADR 0003](adr/0003-edit-list-and-show-leave-the-cli.md)).
+
+- `weave edit [--raw] <project>`: the config form, or the config raw in
+  the editor, keeping it only if valid; `Saved <project>.`, `No
+  changes.` or `Nothing saved.`. `EditProject` still does both.
+- `weave list`: each registered project and `running` or `-`, aligned.
+  `ListProjects` still does it, for completion.
+- `weave show <project>`: the config as stored, through
+  `app.ProjectDocuments`.
+- Their names are still reserved, so adding one back breaks no config.
+  Bring back only the one asked for, and its terminal scenario.
+
 ## Parked
 
 Against the project's rules as they stand. Each says what would have to
 change to bring it back.
 
+- **Most recently opened first, in the list.** The browser's list
+  sorted by when each project was last opened, instead of by name, so
+  the few projects in use are at the top without typing a filter.
+  - It breaks the rule that weaver keeps nothing but the settings and
+    the configs: it needs a record of when each project was opened,
+    such as `$XDG_STATE_HOME/weaver/opened.yml` (`~/.local/state`
+    unless set), written by every open. Bringing it back means allowing
+    that record, and giving it a glossary entry.
+  - Half of it needs no record: tmux knows when a session was last
+    attached (`#{session_last_attached}`), so running projects could
+    be sorted by that alone. Not-running ones, and those whose session
+    was killed, would still fall back to their names.
+  - Open questions: whether start counts as opening, and running a
+    task; whether a config edited recently counts (its file's
+    modification time would do without a record, but tells editing,
+    not use); whether the order is a setting (`list-order: name |
+    recent`, see the settings candidate); and that the list then
+    reorders under the cursor after each open, so the browser keeps
+    the cursor on the project it was on.
+
+## Plugins
+
+Outside the core. The plugin system and hooks come first, as the
+foundation; each plugin after them needs both, and so glossary entries
+for *plugin* and *hook*.
+
 - **Plugins, the long-term goal.** Extraordinary features through
   plugins, maintained by external maintainers and interested teams,
   without loading the core with code. That needs a solid pluggable
-  system first; variables and hooks are steps towards it, and the git
-  plugin and worktree variants below wait on it. Deferred on 2026-11-09:
-  tasks come first. *plugin*, *hook* and *variable* need glossary
-  entries before any design.
+  system first; variables and hooks are steps towards it, and the other
+  plugins here wait on it. *plugin*, *hook* and *variable* need
+  glossary entries before any design.
+- **Hooks, foundational.** What plugins plug into: points in what
+  weave does where it runs a command the config names. Setup and
+  teardown commands are the first two; others would come where a plugin
+  needs one, such as a line of the browser's summary for the git
+  plugin. Designing them means the general shape: one `hooks:` key or
+  top-level keys, and what weaver hands a hook as environment variables,
+  such as `WEAVER_PROJECT` and `WEAVER_ROOT`. *hook* needs a glossary
+  entry first.
 - **A Silksong plugin.** Added on 2026-11-09. weaver is named after the
   Weavers of Hollow Knight: Silksong; this plugin would swap the words
   weaver shows (browser, config form, CLI messages) for weaving and
@@ -287,27 +393,10 @@ change to bring it back.
   the task list, *threading* for setup commands, *unravel* for
   teardown, *cut* for kill, *pattern* for a project, *warp* and *weft*
   for a grid's columns and rows. Generic words only, never the game's
-  proper names (Hornet, Pharloom, Needolin). Waits on the plugin system
-  above, and on the shown words being gathered in one place a plugin
-  can replace; today they are spread over `infra/tea_*.go` and `cmd/weave`.
-
-- **Most recently opened first, in the list.** weaver would keep a
-  record of when each project was opened, besides the configs. Back if
-  the list grows long enough that the filter isn't enough.
-- **`history`**: put a pane's usual commands in its shell history, so ↑
-  brings them back. weaver would type into the shell's history and leave
-  lines piling up in `$HISTFILE` (bash and zsh save it on exit), which
-  the user never wrote as commands to run, and each shell needs its own
-  syntax (bash `history -s`, zsh `print -s`, fish neither). `note`
-  already shows them, and tasks run them. Back if `note` and tasks prove
-  not enough; the shell details (`ignorespace`, `HIST_IGNORE_SPACE`,
-  `erasedups`, ordering) are in `docs/config-ideas.md` in the history.
-- **Hooks beyond setup and teardown.** A general hook mechanism is an
-  abstraction with one user so far. Setup and teardown commands are the
-  first two hooks; a third need is when to design the general shape
-  (one `hooks:` key or top-level keys, what weaver hands a hook as
-  environment variables, such as `WEAVER_PROJECT` and `WEAVER_ROOT`).
-  *hook* needs a glossary entry first.
+  proper names (Hornet, Pharloom, Needolin). Waits on the plugin
+  system, and on the shown words being gathered in one place a plugin
+  can replace; today they are spread over `infra/tea_*.go` and
+  `cmd/weave`.
 - **A git plugin.** weaver knows nothing of git (`5e8f663`, `0355ed1`,
   then `repositories:` removed). Cloning missing repositories can come
   back only as a separate program, such as `weaver-git`, named in a
