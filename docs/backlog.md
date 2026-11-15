@@ -47,6 +47,40 @@ command given up on after 5s.
 
 Each says what it is for.
 
+### Go to a running task (S)
+
+**Use**: a task waits for input, such as `composer install` asking for
+a username, and the browser has no way to reach it: enter on a ● task
+finds its pane busy and offers a throwaway window.
+
+Enter on a ● task puts you where it runs, its pane or its throwaway
+window, as enter on a task that isn't running does once it runs.
+
+- `w` still runs another copy in a throwaway window.
+- Nothing tells a task wants input: tmux can't, and guessing is left
+  out. The ● and the preview showing the prompt are enough.
+- Leaves the browser, like enter on any task.
+
+### Interrupt (S to M)
+
+**Use**: a task or a pane's command has to end, and the only ways today
+are going into the pane to press ctrl+c, or killing the whole session.
+
+`i` in the browser types ctrl+c into a pane, as if you had pressed it
+there. No question asked: it is what you would press yourself.
+
+- In the task list, on a ● task: its pane, or its throwaway window,
+  which stays open until you close it.
+- On the pane selected with Tab, in the drawing or the preview: what
+  runs there, its `command` included, which then shows as an exited
+  command that `r` reruns.
+- Only in an owned session; never the pane the browser runs in, as for
+  tasks; an idle pane says there is nothing to interrupt.
+- What ignores ctrl+c is left to [reload](#reload-m), which ends what
+  runs.
+- Sends ctrl+c as the [clean shutdown](#a-clean-shutdown-when-killing-m)
+  does (see [Shared groundwork](#shared-groundwork)).
+
 ### The browser full screen inside tmux (S to M)
 
 **Use**: running `weave` in a small pane keeps getting in the way.
@@ -501,6 +535,8 @@ Not worth the code, or out of scope. Kept so they aren't reported again.
   commands, and any later hook.
 - The idle-shell check serves tasks (`Busy`), the exited-command
   warning (`Idle`) and the clean shutdown after teardown.
+- Typing ctrl+c into a pane serves interrupt and the clean shutdown
+  after teardown.
 - One tmux pane listing (`projectPanes`) and its matching rule (`pick`)
   serve the exited-command warning, tasks and the preview; `Capture`
   could use it too, but still asks tmux four or five times per pane:
