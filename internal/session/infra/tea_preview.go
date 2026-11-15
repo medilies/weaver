@@ -152,6 +152,25 @@ func (m browser) withPreview(msg previewed) browser {
 	return m.previewFollowing()
 }
 
+// endingPreview is m telling that the session of the project whose
+// preview before showed has ended, as the projects found now say, rather
+// than the preview's own answer, which then comes too late to tell it.
+func (m browser) endingPreview(before browser) browser {
+	was, _, wanted := before.previewKey()
+	if !wanted || !before.hasPreview || m.selectedName() != was.Name() {
+		return m
+	}
+	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Running() {
+		return m
+	}
+	failure := fmt.Sprintf("preview: %s's session ended", was.Name())
+	m.hasPreview = false
+	if failure != m.previewFailure {
+		m.notice, m.previewFailure = app.Telling(failure), failure
+	}
+	return m
+}
+
 // previewFollowing is m with the preview's pane selected that is the
 // drawing's selected pane or, when the preview lacks it, as a zoomed
 // window does, the preview's first, which the drawing then selects too.

@@ -499,7 +499,7 @@ func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case refreshed:
 		m.refreshAnswered = max(m.refreshAnswered, msg.asked)
 		if msg.asked == m.refreshAsked {
-			m = m.withRefreshed(msg.projects)
+			m = m.withRefreshed(msg.projects).endingPreview(m)
 		}
 		return m, nil
 	case previewed:
