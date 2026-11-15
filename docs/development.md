@@ -48,6 +48,25 @@ graph TD
     A -.implements.-> AP
 ```
 
+## Issues
+
+What is left to do or decide is in
+[GitHub Issues](https://github.com/medilies/weaver/issues); what weaver
+leaves out, and why, in [left-out.md](left-out.md). The
+[weaver project](https://github.com/users/medilies/projects/3) lists
+them by size, then priority; a new issue is added to it, with both set.
+
+- Size, the smallest first: XS (a line or two), S (up to about 30 lines
+  plus a test, in one or two layers), M (up to a few hundred lines, or
+  several layers), L (all layers), XL (mostly open questions). Also a
+  `size:` label, to filter the issue list by.
+- Priority, at the same size: P1 fixes a nuisance felt today, P2 adds
+  something new, P3 waits until a user asks, is parked, or is a plugin.
+- Labels for the rest: `until a user asks` (the browser already does
+  it), `parked` (against a project rule as it stands), `plugin`
+  (outside the core) and `macOS` (its own list of work).
+- A commit finishing an issue closes it with `Closes #<n>`.
+
 ## Releasing
 
 Pushing a `vX.Y.Z` tag runs the tests, then GoReleaser builds the
