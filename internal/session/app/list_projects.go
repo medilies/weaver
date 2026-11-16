@@ -1,15 +1,31 @@
 package app
 
-import "github.com/medilies/weaver/internal/session/domain"
+import (
+	"slices"
+	"time"
+
+	"github.com/medilies/weaver/internal/session/domain"
+)
 
 // ProjectStatus is a registered project and whether its session runs.
 type ProjectStatus struct {
-	name    domain.ProjectName
+	project domain.ProjectRef
 	running bool
+	active  time.Time
 }
 
 func (s ProjectStatus) Name() domain.ProjectName {
-	return s.name
+	return s.project.Name()
+}
+
+// Root is the project's root, which identifies it.
+func (s ProjectStatus) Root() domain.ProjectRoot {
+	return s.project.Root()
+}
+
+// Ref is how the session ports tell the project apart.
+func (s ProjectStatus) Ref() domain.ProjectRef {
+	return s.project
 }
 
 // Running reports whether the project's session runs.
@@ -29,23 +45,32 @@ func NewListProjects(projects domain.ProjectRegistry, sessions domain.SessionLis
 	return ListProjects{projects: projects, sessions: sessions}
 }
 
-// Handle lists the projects sorted by name.
+// Handle lists the projects: those running first, the one last attached
+// or started at the top, then the others in the settings' order.
 func (uc ListProjects) Handle() ([]ProjectStatus, error) {
-	names, err := uc.projects.Names()
+	refs, err := uc.projects.Registered()
 	if err != nil {
 		return nil, err
 	}
-	running, err := uc.sessions.Running()
+	sessions, err := uc.sessions.Running()
 	if err != nil {
 		return nil, err
 	}
-	sessions := make(map[string]bool, len(running))
-	for _, session := range running {
-		sessions[session] = true
+	statuses := make([]ProjectStatus, 0, len(refs))
+	for _, ref := range refs {
+		session, running := ref.SessionAmong(sessions)
+		statuses = append(statuses, ProjectStatus{project: ref, running: running, active: session.Active()})
 	}
-	statuses := make([]ProjectStatus, 0, len(names))
-	for _, name := range names {
-		statuses = append(statuses, ProjectStatus{name: name, running: sessions[name.String()]})
-	}
+	slices.SortStableFunc(statuses, func(a, b ProjectStatus) int {
+		switch {
+		case a.running != b.running && a.running:
+			return -1
+		case a.running != b.running:
+			return 1
+		case a.running:
+			return b.active.Compare(a.active)
+		}
+		return 0
+	})
 	return statuses, nil
 }

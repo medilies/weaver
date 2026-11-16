@@ -16,13 +16,13 @@ import (
 
 // TestBrowserDraws: `weave`.
 //
-// The project list, task list, details (`blog.yml`) and key line drawn.
+// The project list, task list, details (`blog · weaver.yml`) and key line drawn.
 func TestBrowserDraws(t *testing.T) {
 	h := start(t)
 
 	h.browse("")
 
-	for _, want := range []string{"─ projects ", "─ tasks ", "─ blog.yml ", "  notes", "  shop", "q quit"} {
+	for _, want := range []string{"─ projects ", "─ tasks ", "─ blog · weaver.yml ", "  notes", "  shop", "q quit"} {
 		h.sees(want)
 	}
 	h.laidOut()
@@ -33,39 +33,39 @@ func TestBrowserDraws(t *testing.T) {
 
 // TestClickPicksProject: `weave`, click `notes`.
 //
-// The details are `notes.yml`'s.
+// The details are `notes`'s.
 func TestClickPicksProject(t *testing.T) {
 	h := start(t)
 	h.browse("")
 
 	h.clicks("notes")
 
-	h.sees("─ notes.yml ")
+	h.sees("─ notes · weaver.yml ")
 }
 
 // TestMouseSettingOff: settings `mouse: false`: `weave`, click `notes`,
 // then `y`.
 //
-// The click selects nothing: `y` shows `blog.yml`, the first project's
-// config.
+// The click selects nothing: `y` shows the config of `blog`, the first
+// project.
 func TestMouseSettingOff(t *testing.T) {
 	h := start(t)
 	h.settings("mouse: false")
 	h.browse("")
-	h.sees("─ blog.yml ")
+	h.sees("─ blog · weaver.yml ")
 
 	h.clicks("notes")
 	h.keys("y")
 
-	h.sees("root: ")
-	h.sees("─ blog.yml ")
+	h.sees("windows:")
+	h.sees("─ blog · weaver.yml ")
 }
 
 // TestEditorSetting: settings `editor: sed -i s/info/debug/`: `weave`,
 // select `shop`, `E`.
 //
-// The settings' editor edits the config: `Saved shop.`, and `shop.yml`
-// sets `LOG: debug`.
+// The settings' editor edits the config: `Saved shop.`, and shop's
+// `weaver.yml` sets `LOG: debug`.
 func TestEditorSetting(t *testing.T) {
 	h := start(t)
 	h.settings("editor: sed -i s/info/debug/")
@@ -75,7 +75,7 @@ func TestEditorSetting(t *testing.T) {
 
 	h.sees("Saved shop.")
 	if config := h.config("shop"); !strings.Contains(config, "LOG: debug") {
-		h.fatal("shop.yml is %q, want LOG: debug", config)
+		h.fatal("shop's config is %q, want LOG: debug", config)
 	}
 }
 
@@ -91,7 +91,7 @@ func TestBrowserKeySetting(t *testing.T) {
 
 	h.keys("y", "Y")
 
-	h.sees("root: ")
+	h.sees("setup: ")
 	h.sees("Y drawing")
 }
 
@@ -111,7 +111,7 @@ func TestPopupSetting(t *testing.T) {
 	}
 	h.keys("Enter")
 
-	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "notes" })
+	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "w/notes" })
 	h.gone("enter open")
 }
 
@@ -142,13 +142,13 @@ func TestOpenGrid(t *testing.T) {
 
 	h.keys("Enter")
 
-	h.eventually("the client switches to blog", func() bool { return h.clientOn() == "blog" })
-	if active := h.tmux("display", "-p", "-t", "=blog:", "#{@label}"); active != "preview" {
+	h.eventually("the client switches to blog", func() bool { return h.clientOn() == "w/blog" })
+	if active := h.tmux("display", "-p", "-t", "=w/blog:", "#{@label}"); active != "preview" {
 		h.fatal("the active pane is %q, not preview", active)
 	}
 	// 160x44, less a column of borders and the pane names' top borders:
 	// 60/40 of the columns, 70/30 of the rows.
-	sizes := strings.ReplaceAll(h.tmux("list-panes", "-t", "=blog:write", "-F", "#{@label}=#{pane_width}x#{pane_height}"), "\n", " ")
+	sizes := strings.ReplaceAll(h.tmux("list-panes", "-t", "=w/blog:write", "-F", "#{@label}=#{pane_width}x#{pane_height}"), "\n", " ")
 	if want := "editor=95x43 preview=64x29 shell=64x13"; sizes != want {
 		h.fatal("the grid is %s, not %s", sizes, want)
 	}
@@ -163,7 +163,7 @@ func TestOpenGrid(t *testing.T) {
 func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	h := start(t)
 	h.started("shop")
-	h.switchTo("shop", "shell")
+	h.switchTo("w/shop", "shell")
 	h.browse("shop")
 
 	h.keys("x")
@@ -175,7 +175,7 @@ func TestKillFromInsideTearsDownFirst(t *testing.T) {
 	h.sees("shop's session will be killed anyway, with this pane.")
 	h.sees("Press Enter to go on.")
 	h.keys("Enter")
-	h.eventually("shop ends", func() bool { return !h.running("shop") })
+	h.eventually("shop ends", func() bool { return !h.running("w/shop") })
 	if !h.running("term") {
 		t.Fatal("term ended with shop")
 	}
@@ -189,7 +189,7 @@ func TestKillFromInsideTearsDownFirst(t *testing.T) {
 // ran; killed anyway.`
 func TestKillInterruptsFirst(t *testing.T) {
 	h := start(t)
-	h.write("cfg/weaver/projects/zine.yml", "root: "+h.dir+"/notes\n"+`teardown: ["test -e cleaned"]
+	h.register("zine", `teardown: ["test -e cleaned"]
 windows:
   - name: srv
     panes:
@@ -200,13 +200,13 @@ windows:
         command: sh -c 'trap "" INT; sleep 301'
 `)
 	h.started("zine")
-	h.waitRuns(h.paneOf("zine:srv", "server"), "sh", 5*time.Second)
-	h.waitRuns(h.paneOf("zine:srv", "stubborn"), "sh", 5*time.Second)
+	h.waitRuns(h.paneOf("w/zine:srv", "server"), "sh", 5*time.Second)
+	h.waitRuns(h.paneOf("w/zine:srv", "stubborn"), "sh", 5*time.Second)
 
 	h.typed("clear; weave kill zine")
 
 	h.seesWithin("srv › stubborn still ran; killed anyway.", 10*time.Second)
-	if h.running("zine") {
+	if h.running("w/zine") {
 		t.Fatal("zine still runs")
 	}
 	h.gone("teardown")
@@ -231,7 +231,7 @@ func TestKillAsksWithItsKeys(t *testing.T) {
 	h.keys("n")
 	h.gone("any other key no")
 	h.sees("q quit")
-	if !h.running("notes") {
+	if !h.running("w/notes") {
 		t.Fatal("notes ended though the kill was declined")
 	}
 }
@@ -288,8 +288,8 @@ func TestTaskRunsInItsPane(t *testing.T) {
 
 	h.keys("t", "Enter")
 
-	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
-	if active := h.activePane("shop"); active != "logs" {
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "w/shop" })
+	if active := h.activePane("w/shop"); active != "logs" {
 		h.fatal("the active pane is %q, not logs", active)
 	}
 	h.waitRuns(logs, "sleep", 5*time.Second)
@@ -314,11 +314,11 @@ func TestEnterGoesToRunningTask(t *testing.T) {
 	h.sees("enter go")
 	h.keys("Enter")
 
-	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
-	if window := h.tmux("display", "-p", "-t", "=shop:", "#{window_name}"); window != "wait" {
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "w/shop" })
+	if window := h.tmux("display", "-p", "-t", "=w/shop:", "#{window_name}"); window != "wait" {
 		h.fatal("the current window is %q, not the throwaway window wait", window)
 	}
-	if windows := h.tmux("list-windows", "-t", "=shop", "-F", "#{window_name}"); strings.Count(windows, "wait") != 1 {
+	if windows := h.tmux("list-windows", "-t", "=w/shop", "-F", "#{window_name}"); strings.Count(windows, "wait") != 1 {
 		h.fatal("shop's windows are %q, want one wait", windows)
 	}
 }
@@ -379,7 +379,7 @@ func TestReload(t *testing.T) {
 	h.started("shop")
 	logs := h.logsIdle()
 	pid := h.tmux("display", "-p", "-t", logs, "#{pane_pid}")
-	index := h.tmux("display", "-p", "-t", "=shop:api", "#{window_index}")
+	index := h.tmux("display", "-p", "-t", "=w/shop:api", "#{window_index}")
 	h.browse("shop")
 	h.keys("Right")
 	h.sees("R reload")
@@ -395,7 +395,7 @@ func TestReload(t *testing.T) {
 
 	h.keys("R", "w")
 	h.sees("Reloaded api.")
-	if now := h.tmux("display", "-p", "-t", "=shop:api", "#{window_index}"); now != index {
+	if now := h.tmux("display", "-p", "-t", "=w/shop:api", "#{window_index}"); now != index {
 		h.fatal("api is at index %s, was %s", now, index)
 	}
 
@@ -403,8 +403,8 @@ func TestReload(t *testing.T) {
 	h.sees("Nothing done.")
 }
 
-// TestBrowserStaysLive: `shop` started: `weave`, then start a `blog`
-// session and kill `shop` from outside.
+// TestBrowserStaysLive: `shop` started: `weave`, then start a `w/blog`
+// session in blog's root and kill `shop` from outside.
 //
 // `● blog` shows without a key pressed, and `● shop` goes.
 func TestBrowserStaysLive(t *testing.T) {
@@ -413,14 +413,14 @@ func TestBrowserStaysLive(t *testing.T) {
 	h.browse("")
 	h.sees("● shop")
 
-	h.tmux("new-session", "-d", "-s", "blog")
+	h.tmux("new-session", "-d", "-s", "w/blog", "-c", filepath.Join(h.dir, "blog"))
 	h.sees("● blog")
-	h.tmux("kill-session", "-t", "=shop")
+	h.tmux("kill-session", "-t", "=w/shop")
 	h.gone("● shop")
 }
 
-// TestBrowserShowsProjectAddedOnDisk: `weave`, then a `zine.yml` written
-// beside the configs.
+// TestBrowserShowsProjectAddedOnDisk: `weave`, then `zine` added to the
+// settings' projects by hand.
 //
 // `zine` joins the list without a key pressed.
 func TestBrowserShowsProjectAddedOnDisk(t *testing.T) {
@@ -428,28 +428,46 @@ func TestBrowserShowsProjectAddedOnDisk(t *testing.T) {
 	h.browse("")
 	h.sees("  shop")
 
-	h.write("cfg/weaver/projects/zine.yml", "root: "+h.dir+"/notes\nwindows:\n  - name: edit\n")
+	h.register("zine", "windows:\n  - name: edit\n")
 
 	h.sees("  zine")
 }
 
-// TestBrowserDropsProjectDeletedOnDisk: `weave`, select `notes`, then
-// `notes.yml` removed.
+// TestBrowserDropsProjectUnlistedOnDisk: `weave`, select `notes`, then
+// `notes` taken off the settings' projects by hand.
 //
 // `notes` leaves the list, and the cursor moves to the next project:
-// the details are `shop.yml`'s.
-func TestBrowserDropsProjectDeletedOnDisk(t *testing.T) {
+// the details are `shop`'s.
+func TestBrowserDropsProjectUnlistedOnDisk(t *testing.T) {
 	h := start(t)
 	h.browse("")
 	h.clicks("notes")
-	h.sees("─ notes.yml ")
+	h.sees("─ notes · weaver.yml ")
 
-	if err := os.Remove(filepath.Join(h.dir, "cfg/weaver/projects/notes.yml")); err != nil {
+	h.unregister("notes")
+
+	h.sees("─ shop · weaver.yml ")
+	h.gone("notes")
+}
+
+// TestBrowserMarksAProjectWhoseConfigIsGone: `weave`, then shop's
+// `weaver.yml` removed.
+//
+// `shop` stays, after a red ✗, and its details say its config is not
+// found.
+func TestBrowserMarksAProjectWhoseConfigIsGone(t *testing.T) {
+	h := start(t)
+	h.browse("shop")
+
+	if err := os.Remove(filepath.Join(h.dir, "shop", "weaver.yml")); err != nil {
 		t.Fatal(err)
 	}
 
-	h.sees("─ shop.yml ")
-	h.gone("notes")
+	h.sees("✗ shop")
+	h.sees("config not found")
+	if colour := h.colourOf("✗ shop"); colour != "1" {
+		h.fatal("the ✗ is drawn in %q, not red (1)", colour)
+	}
 }
 
 // TestThemeSetting: settings `theme: { ok: 5, failure: 9 }`, `shop`
@@ -472,7 +490,7 @@ func TestThemeSetting(t *testing.T) {
 // `weave`, select `notes`, then `p`.
 //
 // The drawing shows, `p preview` in the key line, and `p` brings the
-// preview: `notes.yml · preview`.
+// preview: `notes · weaver.yml · preview`.
 func TestPreviewSettingOff(t *testing.T) {
 	h := start(t)
 	h.settings("preview: false")
@@ -482,7 +500,7 @@ func TestPreviewSettingOff(t *testing.T) {
 	h.sees("p preview")
 	h.gone("· preview")
 	h.keys("p")
-	h.sees("notes.yml · preview")
+	h.sees("notes · weaver.yml · preview")
 }
 
 // TestTaskOfBusyPaneRunsInThrowawayWindow: `shop` started, `logs` busy:
@@ -503,16 +521,16 @@ func TestTaskOfBusyPaneRunsInThrowawayWindow(t *testing.T) {
 	h.sees("logs is busy")
 	h.keys("y")
 
-	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "w/shop" })
 	h.eventually("a window echo opens", func() bool {
-		_, err := h.tmuxErr("display", "-p", "-t", "=shop:echo", "")
+		_, err := h.tmuxErr("display", "-p", "-t", "=w/shop:echo", "")
 		return err == nil
 	})
-	if options := h.tmux("display", "-p", "-t", "=shop:echo", "#{@weaver_throwaway} #{@weaver_task_of}"); options != "1 "+logs {
+	if options := h.tmux("display", "-p", "-t", "=w/shop:echo", "#{@weaver_throwaway} #{@weaver_task_of}"); options != "1 "+logs {
 		h.fatal("echo's options are %q, not %q", options, "1 "+logs)
 	}
 	h.eventually("echo prints hi", func() bool {
-		out, _ := h.tmuxErr("capture-pane", "-p", "-t", "=shop:echo")
+		out, _ := h.tmuxErr("capture-pane", "-p", "-t", "=w/shop:echo")
 		return slices.Contains(strings.Split(out, "\n"), "hi")
 	})
 }
@@ -531,8 +549,8 @@ func TestRerunTypesExitedCommandAgain(t *testing.T) {
 
 	h.keys("r")
 
-	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
-	if active := h.activePane("shop"); active != "logs" {
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "w/shop" })
+	if active := h.activePane("w/shop"); active != "logs" {
 		h.fatal("the active pane is %q, not logs", active)
 	}
 	h.waitRuns(logs, "sleep", 5*time.Second)
@@ -543,7 +561,7 @@ func TestRerunTypesExitedCommandAgain(t *testing.T) {
 // outside, Tab twice to the new pane, `p`, `p`, then kill `notes` from
 // outside.
 //
-// The title reads `notes.yml · preview`. `green` shows, drawn in green,
+// The title reads `notes · weaver.yml · preview`. `green` shows, drawn in green,
 // and the new pane's levels read `not in the config`. After `p`, the
 // drawing has neither. `p` brings the preview back, and the kill the
 // drawing with `preview: notes's session ended`.
@@ -551,10 +569,10 @@ func TestPreviewShowsSessionAsItIs(t *testing.T) {
 	h := start(t)
 	h.started("notes")
 	h.browse("notes")
-	h.sees("notes.yml · preview")
+	h.sees("notes · weaver.yml · preview")
 
-	h.tmux("send-keys", "-t", "=notes:code.0", `printf '\033[32mgreen\033[0m\n'`, "Enter")
-	h.tmux("split-window", "-d", "-t", "=notes:code")
+	h.tmux("send-keys", "-t", "=w/notes:code.0", `printf '\033[32mgreen\033[0m\n'`, "Enter")
+	h.tmux("split-window", "-d", "-t", "=w/notes:code")
 
 	h.sees("green")
 	if colour := h.colourOf("green"); colour != "2" && colour != "green" {
@@ -567,7 +585,7 @@ func TestPreviewShowsSessionAsItIs(t *testing.T) {
 	h.gone("not in the config")
 	h.keys("p")
 	h.sees("· preview")
-	h.tmux("kill-session", "-t", "=notes")
+	h.tmux("kill-session", "-t", "=w/notes")
 	h.sees("preview: notes's session ended")
 }
 
@@ -580,8 +598,8 @@ func TestPreviewOfOwnPaneShowsNoBrowserInside(t *testing.T) {
 	h := start(t)
 	h.promptIn("term")
 	h.typed("clear; weave notes")
-	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "notes" })
-	h.tmux("resize-pane", "-Z", "-t", "=notes:code")
+	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "w/notes" })
+	h.tmux("resize-pane", "-Z", "-t", "=w/notes:code")
 
 	h.browse("notes")
 
@@ -598,9 +616,9 @@ func TestPreviewOfZoomedWindowShowsZoomedPane(t *testing.T) {
 	h := start(t)
 	h.started("notes")
 	h.browse("notes")
-	h.sees("notes.yml · preview")
+	h.sees("notes · weaver.yml · preview")
 
-	h.tmux("resize-pane", "-Z", "-t", h.paneOf("notes:code", "edit"))
+	h.tmux("resize-pane", "-Z", "-t", h.paneOf("w/notes:code", "edit"))
 
 	h.gone("[ files ]")
 	h.sees("edit  " + h.dir + "/notes")
@@ -611,10 +629,10 @@ func TestPreviewOfZoomedWindowShowsZoomedPane(t *testing.T) {
 	h.sees("[ edit ]")
 	h.keys("p")
 	h.sees("· preview")
-	h.tmux("resize-pane", "-Z", "-t", "=notes:code")
+	h.tmux("resize-pane", "-Z", "-t", "=w/notes:code")
 	both := regexp.MustCompile(`(?m)│  files +edit +│$`)
 	h.screenShows("the preview of both panes, edit selected", func(screen string) bool {
-		return strings.Contains(screen, "notes.yml · preview") && strings.Contains(screen, "[ edit ]") && both.MatchString(screen)
+		return strings.Contains(screen, "notes · weaver.yml · preview") && strings.Contains(screen, "[ edit ]") && both.MatchString(screen)
 	})
 }
 
@@ -629,11 +647,11 @@ func TestOpenRunsSetupAndLandsOnFocus(t *testing.T) {
 
 	h.typed("clear; weave shop")
 
-	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "shop" })
-	if landed := h.tmux("display", "-p", "-t", "=shop:", "#{window_name} #{@label}"); landed != "api back" {
+	h.eventually("the client moves to shop", func() bool { return h.clientOn() == "w/shop" })
+	if landed := h.tmux("display", "-p", "-t", "=w/shop:", "#{window_name} #{@label}"); landed != "api back" {
 		h.fatal("the client lands in %q, not api back", landed)
 	}
-	logs, back := h.logsIdle(), h.paneOf("shop:api", "back")
+	logs, back := h.logsIdle(), h.paneOf("w/shop:api", "back")
 	for _, pane := range []string{logs, back} {
 		h.tmux("send-keys", "-t", pane, `echo "env=$APP_ENV $LOG"`, "Enter")
 	}
@@ -729,7 +747,7 @@ func TestConfigShowsAsStored(t *testing.T) {
 
 	h.sees("setup: [echo setting up shop]")
 	h.keys("y")
-	h.sees("shop.yml · preview")
+	h.sees("shop · weaver.yml · preview")
 	h.gone("setup: [echo setting up shop]")
 }
 
@@ -744,14 +762,14 @@ func TestGridColumnInCells(t *testing.T) {
 
 	h.typed("clear; weave notes")
 
-	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "notes" })
-	if window := h.tmux("display", "-p", "-t", "=notes:", "#{window_name}"); window != "code" {
+	h.eventually("the client moves to notes", func() bool { return h.clientOn() == "w/notes" })
+	if window := h.tmux("display", "-p", "-t", "=w/notes:", "#{window_name}"); window != "code" {
 		h.fatal("the window is %q, not code", window)
 	}
-	if size := h.tmux("display", "-p", "-t", "=notes:code", "#{window_width}x#{window_height}"); size != "160x44" {
+	if size := h.tmux("display", "-p", "-t", "=w/notes:code", "#{window_width}x#{window_height}"); size != "160x44" {
 		h.fatal("the window is %s, not 160x44", size)
 	}
-	widths := strings.ReplaceAll(h.tmux("list-panes", "-t", "=notes:code", "-F", "#{@label}=#{pane_width}"), "\n", " ")
+	widths := strings.ReplaceAll(h.tmux("list-panes", "-t", "=w/notes:code", "-F", "#{@label}=#{pane_width}"), "\n", " ")
 	if widths != "files=30 edit=129" {
 		h.fatal("the widths are %s, not files=30 edit=129", widths)
 	}
@@ -797,7 +815,7 @@ func TestPreviewAndDrawingShareSelectedPane(t *testing.T) {
 	h := start(t)
 	h.started("notes")
 	h.browse("notes")
-	h.sees("notes.yml · preview")
+	h.sees("notes · weaver.yml · preview")
 	h.sees("[ files ]")
 
 	h.keys("Tab")
@@ -828,11 +846,11 @@ func TestPreviewAndDrawingShareSelectedPane(t *testing.T) {
 func TestKillUnzoomsFirst(t *testing.T) {
 	h := start(t)
 	h.started("notes")
-	h.zoom("notes:code", "edit")
+	h.zoom("w/notes:code", "edit")
 
 	h.typed("clear; weave kill notes")
 
-	h.eventually("notes ends", func() bool { return !h.running("notes") })
+	h.eventually("notes ends", func() bool { return !h.running("w/notes") })
 	if !h.running("term") {
 		t.Fatal("term went with notes: the server crashed")
 	}
@@ -849,8 +867,8 @@ func TestKillUnzoomsFirst(t *testing.T) {
 func TestTaskOfBrowsersOwnPaneRunsApart(t *testing.T) {
 	h := start(t)
 	h.started("notes")
-	h.switchTo("notes", "code")
-	h.zoom("notes:code", "files")
+	h.switchTo("w/notes", "code")
+	h.zoom("w/notes:code", "files")
 	h.browse("notes")
 	h.keys("t")
 	h.sees("enter run, go")
@@ -861,15 +879,15 @@ func TestTaskOfBrowsersOwnPaneRunsApart(t *testing.T) {
 
 	h.sees("Running ls in a throwaway window.")
 	h.eventually("a window ls opens", func() bool {
-		_, err := h.tmuxErr("display", "-p", "-t", "=notes:ls", "")
+		_, err := h.tmuxErr("display", "-p", "-t", "=w/notes:ls", "")
 		return err == nil
 	})
-	if window := h.tmux("display", "-p", "-t", "=notes:", "#{window_name}"); window != "code" {
+	if window := h.tmux("display", "-p", "-t", "=w/notes:", "#{window_name}"); window != "code" {
 		h.fatal("the current window is %q, not code", window)
 	}
 	h.keys("Down", "r")
 	h.sees("Running echo saved in code › edit.")
-	if pane := h.activePane("notes"); pane != "files" {
+	if pane := h.activePane("w/notes"); pane != "files" {
 		h.fatal("the current pane is %q, not files", pane)
 	}
 }
@@ -884,7 +902,7 @@ func TestTaskOfBrowsersOwnPaneRunsApart(t *testing.T) {
 func TestBrowserAsksAboutBusyPaneInPlace(t *testing.T) {
 	h := start(t)
 	h.started("notes")
-	edit := h.paneOf("notes:code", "edit")
+	edit := h.paneOf("w/notes:code", "edit")
 	h.tmux("send-keys", "-t", edit, "sleep 300", "Enter")
 	h.waitRuns(edit, "sleep", 5*time.Second)
 	h.browse("notes")
@@ -892,7 +910,7 @@ func TestBrowserAsksAboutBusyPaneInPlace(t *testing.T) {
 	h.keys("t", "Down", "r")
 
 	h.sees("edit is busy: run echo saved in a throwaway window? (y/n)")
-	h.sees("notes.yml")
+	h.sees("notes · weaver.yml")
 	h.keys("y")
 	h.sees("Running echo saved in a throwaway window.")
 	if on := h.clientOn(); on != "term" {
@@ -922,7 +940,7 @@ func TestClickPicksWindow(t *testing.T) {
 func TestClickRunsTaskStaying(t *testing.T) {
 	h := start(t)
 	h.started("notes")
-	files := h.paneOf("notes:code", "files")
+	files := h.paneOf("w/notes:code", "files")
 	h.browse("notes")
 
 	h.clicks("ls")

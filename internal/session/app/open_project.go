@@ -8,17 +8,8 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-var (
-	// ErrMissingDirectory is returned when a pane's directory doesn't
-	// exist.
-	ErrMissingDirectory = errors.New("directory not found")
-	// ErrNoProjectAt is returned when no registered project's root
-	// contains a directory.
-	ErrNoProjectAt = errors.New("no registered project contains this directory")
-	// ErrAmbiguousProject is returned when two registered projects share
-	// the root containing a directory.
-	ErrAmbiguousProject = errors.New("several projects share this directory's root")
-)
+// ErrMissingDirectory is returned when a pane's directory doesn't exist.
+var ErrMissingDirectory = errors.New("directory not found")
 
 // OpenProject puts the user in a project's tmux session, creating it
 // first, after its setup commands, when it isn't running, or re-creating
@@ -41,144 +32,38 @@ func NewOpenProject(
 	return OpenProject{projects: projects, sessions: sessions, workspace: workspace, commands: commands}
 }
 
-// Handle opens the project named rawName.
-func (uc OpenProject) Handle(rawName string) error {
-	name, err := domain.NewProjectName(rawName)
-	if err != nil {
-		return err
-	}
-	project, err := uc.projects.FindByName(name)
+// Handle opens the project registered at root.
+func (uc OpenProject) Handle(root domain.ProjectRoot) error {
+	project, err := uc.projects.Find(root)
 	if err != nil {
 		return err
 	}
 	return uc.open(project)
 }
 
-// HandleStart starts the project named rawName, and says what it did:
-// "Started shop.", "Restored "logs" in shop." or "shop is already
+// HandleStart starts the project registered at root, and says what it
+// did: "Started shop.", "Restored "logs" in shop." or "shop is already
 // running."
-func (uc OpenProject) HandleStart(rawName string) (string, error) {
-	name, err := domain.NewProjectName(rawName)
-	if err != nil {
-		return "", err
-	}
-	project, err := uc.projects.FindByName(name)
+func (uc OpenProject) HandleStart(root domain.ProjectRoot) (string, error) {
+	project, err := uc.projects.Find(root)
 	if err != nil {
 		return "", err
 	}
 	return uc.ready(project)
-}
-
-// HandleDirStart starts the project HandleDir opens, and says what it
-// did, as HandleStart does.
-func (uc OpenProject) HandleDirStart(dir string) (string, error) {
-	project, err := uc.containing(dir)
-	if err != nil {
-		return "", err
-	}
-	return uc.ready(project)
-}
-
-// HandleDir opens the project whose root contains dir; when roots nest,
-// the innermost one. Roots and dir are compared with their symlinks
-// resolved, as they are on disk, and as written only when no root
-// contains dir that way, as when dir is reached through a link inside a
-// root that leads out of every root. So a link inside one root that leads
-// into another opens the other. Invalid configs are skipped, so one
-// broken project doesn't block the others, and named only when no
-// project matches.
-func (uc OpenProject) HandleDir(dir string) error {
-	project, err := uc.containing(dir)
-	if err != nil {
-		return err
-	}
-	return uc.open(project)
-}
-
-// containing is the project whose root contains dir, as HandleDir finds
-// it.
-func (uc OpenProject) containing(dir string) (domain.Project, error) {
-	names, err := uc.projects.Names()
-	if err != nil {
-		return domain.Project{}, err
-	}
-	realDir := uc.workspace.RealPath(dir)
-	var resolved, written []rootMatch
-	var invalid []error
-	for _, name := range names {
-		project, err := uc.projects.FindByName(name)
-		if errors.Is(err, domain.ErrInvalidConfig) {
-			invalid = append(invalid, err)
-			continue
-		}
-		if err != nil {
-			return domain.Project{}, err
-		}
-		root := project.Root()
-		resolvedRoot, err := domain.NewProjectRoot(uc.workspace.RealPath(root.String()))
-		switch {
-		case err == nil && resolvedRoot.Contains(realDir):
-			resolved = append(resolved, rootMatch{project: project, root: resolvedRoot.String()})
-		case root.Contains(dir):
-			written = append(written, rootMatch{project: project, root: root.String()})
-		}
-	}
-	if len(resolved) == 0 {
-		resolved = written
-	}
-	found := innermost(resolved)
-	switch len(found) {
-	case 0:
-		err := fmt.Errorf("%w: %s (run weave to see the registered projects)", ErrNoProjectAt, dir)
-		if len(invalid) > 0 {
-			err = fmt.Errorf("%w; skipped invalid configs:\n%w", err, errors.Join(invalid...))
-		}
-		return domain.Project{}, err
-	case 1:
-		return found[0].project, nil
-	}
-	first, second := found[0].project, found[1].project
-	if first.Root().String() != second.Root().String() {
-		return domain.Project{}, fmt.Errorf("%w: %s, rooted at %s, and %s, rooted at %s, share a root", ErrAmbiguousProject,
-			first.Name(), first.Root(), second.Name(), second.Root())
-	}
-	return domain.Project{}, fmt.Errorf("%w: %s and %s are both rooted at %s", ErrAmbiguousProject, first.Name(), second.Name(), first.Root())
-}
-
-// rootMatch is a project whose root, in one form, contains a directory.
-type rootMatch struct {
-	project domain.Project
-	root    string
-}
-
-// innermost are the matches with the longest root. Roots that contain the
-// same directory, in the same form, nest, so the longest is the innermost,
-// and roots as long are the same directory.
-func innermost(matches []rootMatch) []rootMatch {
-	var found []rootMatch
-	for _, m := range matches {
-		switch {
-		case len(found) == 0 || len(m.root) > len(found[0].root):
-			found = []rootMatch{m}
-		case len(m.root) == len(found[0].root):
-			found = append(found, m)
-		}
-	}
-	return found
 }
 
 func (uc OpenProject) open(project domain.Project) error {
 	if _, err := uc.ready(project); err != nil {
 		return err
 	}
-	return uc.sessions.Attach(project.Name())
+	return uc.sessions.Attach(project.Ref())
 }
 
 // ready starts the project's session, or restores the windows its owned
 // session lacks, and says what it did.
 func (uc OpenProject) ready(project domain.Project) (string, error) {
 	name := project.Name()
-	session, running, err := uc.sessions.Find(name)
+	session, running, err := uc.sessions.Find(project.Ref())
 	switch {
 	case err != nil:
 		return "", err
@@ -250,7 +135,7 @@ func (uc OpenProject) restore(project domain.Project, session domain.RunningSess
 		}
 		names = append(names, fmt.Sprintf("%q", placement.Window().Name().String()))
 	}
-	return names, uc.sessions.Restore(project.Name(), placements)
+	return names, uc.sessions.Restore(project.Ref(), placements)
 }
 
 func (uc OpenProject) checkDirs(project domain.ProjectName, plan domain.SessionPlan) error {

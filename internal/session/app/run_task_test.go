@@ -28,7 +28,7 @@ type fakeTasks struct {
 	gone     map[string]bool // "window/index", panes the session lacks
 }
 
-func (f *fakeTasks) ReloadPane(_ domain.ProjectName, window domain.WindowPlan, index int) error {
+func (f *fakeTasks) ReloadPane(_ domain.ProjectRef, window domain.WindowPlan, index int) error {
 	if paneKey(window, index) == f.weaver {
 		return domain.ErrPaneRunsWeaver
 	}
@@ -39,7 +39,7 @@ func (f *fakeTasks) ReloadPane(_ domain.ProjectName, window domain.WindowPlan, i
 	return nil
 }
 
-func (f *fakeTasks) ReloadWindow(_ domain.ProjectName, window domain.WindowPlan) error {
+func (f *fakeTasks) ReloadWindow(_ domain.ProjectRef, window domain.WindowPlan) error {
 	if strings.HasPrefix(f.weaver, window.Name().String()+"/") {
 		return domain.ErrPaneRunsWeaver
 	}
@@ -47,35 +47,35 @@ func (f *fakeTasks) ReloadWindow(_ domain.ProjectName, window domain.WindowPlan)
 	return nil
 }
 
-func (f *fakeTasks) Interrupt(_ domain.ProjectName, window domain.WindowPlan, index int) error {
+func (f *fakeTasks) Interrupt(_ domain.ProjectRef, window domain.WindowPlan, index int) error {
 	f.stopped = append(f.stopped, paneKey(window, index))
 	return nil
 }
 
-func (f *fakeTasks) InterruptRun(_ domain.ProjectName, run domain.RunningCommand) error {
+func (f *fakeTasks) InterruptRun(_ domain.ProjectRef, run domain.RunningCommand) error {
 	f.stopped = append(f.stopped, run.Place())
 	return nil
 }
 
-func (f *fakeTasks) Reach(_ domain.ProjectName, run domain.RunningCommand) error {
+func (f *fakeTasks) Reach(_ domain.ProjectRef, run domain.RunningCommand) error {
 	f.reached = append(f.reached, run.Place())
 	return nil
 }
 
-func (f *fakeTasks) Busy(_ domain.ProjectName, window domain.WindowPlan, index int) (bool, error) {
+func (f *fakeTasks) Busy(_ domain.ProjectRef, window domain.WindowPlan, index int) (bool, error) {
 	if paneKey(window, index) == f.weaver {
 		return true, domain.ErrPaneRunsWeaver
 	}
 	return f.busy[paneKey(window, index)], nil
 }
 
-func (f *fakeTasks) Type(_ domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command, landing bool) error {
+func (f *fakeTasks) Type(_ domain.ProjectRef, window domain.WindowPlan, index int, cmd domain.Command, landing bool) error {
 	f.typed = append(f.typed, paneKey(window, index)+": "+cmd.String())
 	f.landing = append(f.landing, landing)
 	return nil
 }
 
-func (f *fakeTasks) RunApart(_ domain.ProjectName, window domain.WindowPlan, index int, task domain.Task, landing bool) error {
+func (f *fakeTasks) RunApart(_ domain.ProjectRef, window domain.WindowPlan, index int, task domain.Task, landing bool) error {
 	f.apart = append(f.apart, task.ThrowawayWindow().String()+" in "+window.Panes()[index].Dir()+": "+task.Command().String())
 	f.landing = append(f.landing, landing)
 	return nil
@@ -124,10 +124,7 @@ func tasked(t *testing.T) domain.Project {
 func runTask(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) error {
 	t.Helper()
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
-	name, err := domain.NewProjectName("shop")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	name := tasked(t).Ref()
 	return app.NewRunTask(configs, tasks, confirm).Handle(name, at, func() error { return nil })
 }
 
@@ -290,10 +287,7 @@ func TestRunTaskStaying(t *testing.T) {
 	staying := func(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) string {
 		t.Helper()
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
-		name, err := domain.NewProjectName("shop")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		name := tasked(t).Ref()
 		said, err := app.NewRunTask(configs, tasks, confirm).HandleStaying(name, at, func(string) {})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -344,10 +338,7 @@ func TestRunTaskTellsWhatItIsDoing(t *testing.T) {
 	told := func(t *testing.T, tasks *fakeTasks, confirm app.Confirmer) []string {
 		t.Helper()
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
-		name, err := domain.NewProjectName("shop")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		name := tasked(t).Ref()
 		var working []string
 		_, _ = app.NewRunTask(configs, tasks, confirm).HandleStaying(name, app.TaskAt{Window: windowName(t, "shop"), Pane: 1, Task: 0}, func(text string) {
 			working = append(working, text)
@@ -384,10 +375,7 @@ func TestRunTaskApart(t *testing.T) {
 	apart := func(t *testing.T, tasks *fakeTasks, confirm app.Confirmer, at app.TaskAt) (string, error) {
 		t.Helper()
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
-		name, err := domain.NewProjectName("shop")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		name := tasked(t).Ref()
 		return app.NewRunTask(configs, tasks, confirm).HandleApart(name, at, func(string) {})
 	}
 	migrate := func(t *testing.T) app.TaskAt {

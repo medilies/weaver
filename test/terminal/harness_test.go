@@ -106,6 +106,9 @@ type harness struct {
 	sock   string
 	env    []string
 	screen *tuitest.Client
+	// roots are the projects' roots the settings list, in order, and
+	// preferences the rest of the settings' lines.
+	roots, preferences []string
 }
 
 // world is what a test's terminal and tmux server start with, when it is
@@ -227,10 +230,11 @@ func testDir(t *testing.T) string {
 	return ""
 }
 
-// files writes the home, the sample projects and tmux's config.
+// files writes the home, the sample projects, each its config in its
+// root, the settings listing them, and tmux's config.
 func (h *harness) files() {
 	h.t.Helper()
-	for _, d := range []string{"home", "tmux", "cfg/weaver/projects", "shop/back", "blog", "notes"} {
+	for _, d := range []string{"home", "tmux", "cfg/weaver", "shop/back", "blog", "notes"} {
 		if err := os.MkdirAll(filepath.Join(h.dir, d), 0o700); err != nil {
 			h.t.Fatal(err)
 		}
@@ -245,7 +249,7 @@ func (h *harness) files() {
 			h.t.Fatal(err)
 		}
 		config = bytes.ReplaceAll(config, []byte("ROOT"), []byte(h.dir))
-		h.write(filepath.Join("cfg/weaver/projects", filepath.Base(sample)), string(config))
+		h.register(strings.TrimSuffix(filepath.Base(sample), ".yml"), string(config))
 	}
 	// The panes weave creates run bash whatever the login shell is, with
 	// a plain prompt and no login banner.
@@ -422,7 +426,7 @@ func (h *harness) browse(project string) {
 	h.keys("Enter")
 	// The filter kept, not still typed: the key line is the browser's.
 	h.sees("/" + project + "  enter open")
-	h.sees(project + ".yml")
+	h.sees(project + " · weaver.yml")
 }
 
 // gone waits until text no longer shows.
@@ -477,7 +481,7 @@ func (h *harness) activePane(session string) string {
 // logsIdle is shop's logs pane, once its sleep 3 exited.
 func (h *harness) logsIdle() string {
 	h.t.Helper()
-	logs := h.paneOf("shop:api", "logs")
+	logs := h.paneOf("w/shop:api", "logs")
 	h.waitRuns(logs, "bash", 8*time.Second)
 	return logs
 }
@@ -571,7 +575,7 @@ func (h *harness) started(project string) {
 	h.t.Helper()
 	h.promptIn("term")
 	h.typed("clear; weave " + project + " --detached")
-	h.eventually(project+" starts", func() bool { return h.running(project) })
+	h.eventually(project+" starts", func() bool { return h.running("w/" + project) })
 	h.promptIn("term")
 }
 
@@ -632,16 +636,52 @@ func (h *harness) edit(project string) {
 	h.sees("↑↓ move")
 }
 
-// settings writes settings.yml.
+// settings writes settings.yml: lines, then the projects' roots.
 func (h *harness) settings(lines ...string) {
 	h.t.Helper()
+	h.preferences = lines
+	h.writeSettings()
+}
+
+// register writes config as weaver.yml in the root project, in the test's
+// directory, and lists the root last in the settings.
+func (h *harness) register(project, config string) {
+	h.t.Helper()
+	h.registerIn(project, config)
+}
+
+// registerIn is register for the root dir, in the test's directory.
+func (h *harness) registerIn(dir, config string) {
+	h.t.Helper()
+	h.mkdir(dir)
+	h.write(filepath.Join(dir, "weaver.yml"), config)
+	h.roots = append(h.roots, filepath.Join(h.dir, dir))
+	h.writeSettings()
+}
+
+// unregister takes the root project off the settings' list.
+func (h *harness) unregister(project string) {
+	h.t.Helper()
+	h.roots = slices.DeleteFunc(h.roots, func(root string) bool { return root == filepath.Join(h.dir, project) })
+	h.writeSettings()
+}
+
+func (h *harness) writeSettings() {
+	h.t.Helper()
+	lines := slices.Clone(h.preferences)
+	if len(h.roots) > 0 {
+		lines = append(lines, "projects:")
+		for _, root := range h.roots {
+			lines = append(lines, "  - "+root)
+		}
+	}
 	h.write("cfg/weaver/settings.yml", strings.Join(lines, "\n")+"\n")
 }
 
-// config is the project's config as stored.
+// config is the project's config as stored, in its root.
 func (h *harness) config(project string) string {
 	h.t.Helper()
-	config, err := os.ReadFile(filepath.Join(h.dir, "cfg/weaver/projects", project+".yml"))
+	config, err := os.ReadFile(filepath.Join(h.dir, project, "weaver.yml"))
 	if err != nil {
 		h.t.Fatal(err)
 	}

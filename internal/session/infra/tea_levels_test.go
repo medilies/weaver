@@ -14,12 +14,12 @@ import (
 // after its root.
 func shop(t *testing.T, config string) domain.Project {
 	t.Helper()
-	name, err := domain.NewProjectName("shop")
+	root, err := domain.NewProjectRoot("/srv/shop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := "root: /srv/shop\n" + config
-	project, err := decodeProject(name, []byte(doc))
+	doc := config
+	project, err := decodeProject([]byte(doc), root, "")
 	if err != nil {
 		t.Fatalf("decoding %q: %v", doc, err)
 	}

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -13,43 +12,19 @@ import (
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
+// finding is the use case finding projects among r.
+func finding(r registered) app.FindProject {
+	return app.NewFindProject(r, infra.NewLocalWorkspace())
+}
+
 // `weave .` opens the project holding the current directory: "." is no
 // project's name.
 func TestDotOpensTheProjectHoldingTheCurrentDirectory(t *testing.T) {
-	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, infra.NewLocalWorkspace(), nil)})
+	root := newRootCommand(application{findProject: finding(registered{})})
 	root.SetArgs([]string{"."})
 	root.SetErr(io.Discard)
 	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {
 		t.Fatalf("got %v, want ErrNoProjectAt from looking up the current directory", err)
-	}
-}
-
-// `weave bind --root=~bob/x` would otherwise bind <cwd>/~bob/x: only
-// ~/ is expanded, as in a config.
-func TestBindRejectsARootUnderAnotherUsersHome(t *testing.T) {
-	root := newRootCommand(application{})
-	root.SetArgs([]string{"bind", "--root=~bob/x"})
-	root.SetErr(io.Discard)
-	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "only a leading ~/") {
-		t.Fatalf("got %v, want the ~bob root rejected", err)
-	}
-}
-
-// `weave <name>` runs the command called name, if there is one, so no
-// project may take a command's name.
-func TestEveryCommandNameIsAReservedProjectName(t *testing.T) {
-	root := newRootCommand(application{})
-	root.InitDefaultHelpCmd()
-	root.InitDefaultCompletionCmd()
-
-	for _, cmd := range root.Commands() {
-		for _, name := range append([]string{cmd.Name()}, cmd.Aliases...) {
-			t.Run(name, func(t *testing.T) {
-				if _, err := domain.NewProjectName(name); !errors.Is(err, domain.ErrReservedProjectName) {
-					t.Fatalf("got %v, want %q reserved in domain.NewProjectName", err, name)
-				}
-			})
-		}
 	}
 }
 
@@ -64,27 +39,15 @@ func TestStartNeedsAProject(t *testing.T) {
 	}
 }
 
-// shopRegistered is a fake domain.ProjectRegistry holding a project shop
-// rooted at /srv/shop.
-type shopRegistered struct{ registered }
-
-func (shopRegistered) FindByName(name domain.ProjectName) (domain.Project, error) {
-	root, err := domain.NewProjectRoot("/srv/shop")
-	if err != nil || name.String() != "shop" {
-		return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
-	}
-	return domain.NewProject(name, root), nil
-}
-
 // foreignSession is a fake domain.SessionLauncher finding every project's
 // session running, started otherwise, and failing to do anything else.
 type foreignSession struct{}
 
-func (foreignSession) Find(domain.ProjectName) (domain.RunningSession, bool, error) {
+func (foreignSession) Find(domain.ProjectRef) (domain.RunningSession, bool, error) {
 	return domain.NewRunningSession(false), true, nil
 }
 
-func (foreignSession) Attach(domain.ProjectName) error {
+func (foreignSession) Attach(domain.ProjectRef) error {
 	return errors.New("attached")
 }
 
@@ -92,30 +55,45 @@ func (foreignSession) Start(domain.SessionPlan) error {
 	return errors.New("started")
 }
 
-func (foreignSession) Restore(domain.ProjectName, []domain.WindowPlacement) error {
+func (foreignSession) Restore(domain.ProjectRef, []domain.WindowPlacement) error {
 	return errors.New("restored")
+}
+
+// started runs weave with args against the projects names, every one
+// running, and returns what it printed.
+func started(t *testing.T, names registered, args ...string) string {
+	t.Helper()
+	root := newRootCommand(application{
+		findProject: finding(names),
+		openProject: app.NewOpenProject(names, foreignSession{}, nil, nil),
+	})
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return out.String()
 }
 
 // `weave -d shop` prints what it did, and doesn't attach.
 func TestStartPrintsWhatItDid(t *testing.T) {
-	root := newRootCommand(application{openProject: app.NewOpenProject(shopRegistered{}, foreignSession{}, nil, nil)})
-	var out bytes.Buffer
-	root.SetOut(&out)
-	root.SetArgs([]string{"-d", "shop"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := out.String(); got != "shop is already running.\n" {
+	if got := started(t, registered{"shop"}, "-d", "shop"); got != "shop is already running.\n" {
 		t.Fatalf("got %q, want shop already running", got)
 	}
 }
 
-// `weave -d .` starts the project holding the current directory.
-func TestStartDotLooksUpTheCurrentDirectory(t *testing.T) {
-	root := newRootCommand(application{openProject: app.NewOpenProject(registered{}, nil, infra.NewLocalWorkspace(), nil)})
-	root.SetArgs([]string{"-d", "."})
-	root.SetErr(io.Discard)
-	if err := root.Execute(); !errors.Is(err, app.ErrNoProjectAt) {
-		t.Fatalf("got %v, want ErrNoProjectAt from looking up the current directory", err)
+// `weave open kill` reaches the project kill, which `weave kill` doesn't.
+func TestOpenReachesAProjectNamedAfterACommand(t *testing.T) {
+	if got := started(t, registered{"kill"}, "open", "-d", "kill"); got != "kill is already running.\n" {
+		t.Fatalf("got %q, want kill already running", got)
+	}
+}
+
+// `weave -d /srv/shop/api` starts the project whose root holds the
+// directory.
+func TestStartFindsTheProjectHoldingADirectory(t *testing.T) {
+	if got := started(t, registered{"shop"}, "-d", "/srv/shop/api"); got != "shop is already running.\n" {
+		t.Fatalf("got %q, want shop already running", got)
 	}
 }

@@ -57,16 +57,15 @@ func demoNimbus(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, config, found := strings.Cut(string(readme), "```yaml\n# nimbus.yml in weaver's projects folder (see docs/config.md)\n")
+	_, config, found := strings.Cut(string(readme), "```yaml\n# ~/dev/nimbus/weaver.yml (see docs/config.md)\n")
 	config, _, closed := strings.Cut(config, "```")
 	if !found || !closed {
-		t.Fatal("the README shows no nimbus.yml")
+		t.Fatal("the README shows no nimbus config")
 	}
 	return config
 }
 
-const demoSite = `root: ~/dev/site
-windows:
+const demoSite = `windows:
   - name: edit
   - name: serve
 `
@@ -90,16 +89,11 @@ func TestDemo(t *testing.T) {
 	}
 	bold, regular := demoFont(t, "Noto Sans:bold"), demoFont(t, "Noto Sans")
 	h := startIn(t, world{cols: 112, rows: 30, tmuxConf: demoTmux, tools: demoTools})
-	samples, _ := filepath.Glob(filepath.Join(h.dir, "cfg/weaver/projects/*.yml"))
-	for _, sample := range samples {
-		if err := os.Remove(sample); err != nil {
-			t.Fatal(err)
-		}
-	}
+	h.roots = nil
 	h.settings(`theme: { selected: "#cba6f7" }`)
-	h.write("cfg/weaver/projects/nimbus.yml", demoNimbus(t))
-	h.write("cfg/weaver/projects/site.yml", demoSite)
-	for _, d := range []string{"home/dev/nimbus/api", "home/dev/nimbus/app", "home/dev/site"} {
+	h.registerIn("home/dev/nimbus", demoNimbus(t))
+	h.registerIn("home/dev/site", demoSite)
+	for _, d := range []string{"home/dev/nimbus/api", "home/dev/nimbus/app"} {
 		h.mkdir(d)
 	}
 
@@ -144,7 +138,7 @@ func TestDemo(t *testing.T) {
 
 	captioned("start", "the session runs, its preview kept live")
 	h.keys("s")
-	h.eventually("nimbus starts", func() bool { return h.running("nimbus") })
+	h.eventually("nimbus starts", func() bool { return h.running("w/nimbus") })
 	h.sees("· preview")
 	beat(3.5)
 
@@ -166,7 +160,7 @@ func TestDemo(t *testing.T) {
 	captioned("open", "enter puts you in the session")
 	beat(1)
 	h.keys("Enter")
-	h.eventually("the client moves to nimbus", func() bool { return h.clientOn() == "nimbus" })
+	h.eventually("the client moves to nimbus", func() bool { return h.clientOn() == "w/nimbus" })
 	beat(4)
 
 	if _, err := h.screen.StopRecording(); err != nil {

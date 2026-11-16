@@ -5,9 +5,12 @@ the config form, which changes a project in
 place.
 
 It shows a project as cards: the project's, then the window list and
-the selected window's card. Binding starts it on a name, the root, and
-the session's windows if you named one; the name is typed there, and
-stays when editing. The top line, the trail, shows the project, window
+the selected window's card. Binding starts it on the config already in
+the directory, or a new project named after it, with the session's
+windows if you named one. The project's card shows its root, which the
+form doesn't change: it is the directory `weave bind` ran in. Renaming
+the project writes `name:` in its config, unless the name is its root's
+directory's. The top line, the trail, shows the project, window
 and pane the cursor is in, and ● unsaved when there are changes.
 
 The selected window's panes are drawn as they open, heavy when the
@@ -17,7 +20,7 @@ window, a pane, or a `starts`, `clear` or `focus` option to pick it,
 unless the [settings](settings.md#mouse) turn the mouse off; what is
 selected shows in the [selected colour](settings.md).
 
-Each field is checked as you type it, and a root or dir is marked ✓
+Each field is checked as you type it, and the root or a dir is marked ✓
 when it exists; a command that leaves a quote open is marked ⚠, as it
 would leave the shell waiting, but kept. The project's card lists its
 setup and teardown commands, edited like its before commands. A window
@@ -51,9 +54,9 @@ saved in the order the config lists them, new ones last.
 ctrl+s shows what saving changes in the config before it saves. Saving
 rewrites the config, so its comments go: `e` asks first when the config
 has some, and the diff shows them removed. To keep them, edit it raw
-with `E` instead. Binding under a registered name, the diff shows what
-saving replaces in that project's config, whose `setup` and `teardown`
-are kept; going back lets you type another name.
+with `E` instead. Binding a directory with a config, the diff shows what
+saving changes in it. Binding a directory not registered yet, ctrl+s
+saves even what you didn't change, so the directory is registered.
 
 ## Keys
 

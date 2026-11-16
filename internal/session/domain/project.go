@@ -5,40 +5,30 @@ package domain
 import (
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 )
 
-// projectNamePattern keeps names usable as a filename, a tmux session
-// name and a command-line argument: tmux rewrites "." and ":" in session
-// names and expands "#", and a leading "-" reads as a flag.
-var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
-
-// reservedNames are weave's own commands: `weave <name>` runs the
-// command, so a project named after one could never be opened. edit,
-// list and show left the CLI in v0.7.0 but stay reserved, so bringing
-// one back breaks no config. They are compared ignoring case, since
-// names differing only in case are one project (ProjectName.SameAs).
-var reservedNames = []string{"bind", "completion", "edit", "help", "kill", "list", "show"}
-
-// ProjectName is a registered project's identifier: non-empty, trimmed,
-// and used both as a lookup key and as the tmux session name.
+// ProjectName is what a registered project is called: its root's
+// directory name unless named otherwise. Two projects may share a name;
+// their roots tell them apart.
 type ProjectName struct {
 	value string
 }
 
-// NewProjectName validates and constructs a ProjectName.
+// NewProjectName validates and constructs a ProjectName: one line,
+// trimmed, and a directory's name, so neither "." nor ".." nor holding
+// "/", which tells a name from a directory on the command line.
 func NewProjectName(value string) (ProjectName, error) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
+	trimmed, err := oneLine(value)
+	if err != nil {
+		return ProjectName{}, err
+	}
+	switch {
+	case trimmed == "":
 		return ProjectName{}, ErrEmptyProjectName
-	}
-	if !projectNamePattern.MatchString(trimmed) {
-		return ProjectName{}, ErrInvalidProjectName
-	}
-	if slices.ContainsFunc(reservedNames, func(reserved string) bool { return strings.EqualFold(reserved, trimmed) }) {
-		return ProjectName{}, fmt.Errorf("%w: %q", ErrReservedProjectName, trimmed)
+	case trimmed == "." || trimmed == ".." || strings.Contains(trimmed, "/"):
+		return ProjectName{}, fmt.Errorf("%w: %q", ErrInvalidProjectName, trimmed)
 	}
 	return ProjectName{value: trimmed}, nil
 }
@@ -47,11 +37,9 @@ func (n ProjectName) String() string {
 	return n.value
 }
 
-// SameAs reports whether n and other name one project: names differing
-// only in case do, since a case-insensitive filesystem, as macOS has,
-// keeps their configs in one file.
-func (n ProjectName) SameAs(other ProjectName) bool {
-	return strings.EqualFold(n.value, other.value)
+// IsZero reports whether n is the zero ProjectName, naming nothing.
+func (n ProjectName) IsZero() bool {
+	return n.value == ""
 }
 
 // ProjectRoot is the absolute directory a project's panes and windows are
@@ -125,7 +113,7 @@ func (r ProjectRoot) Resolve(dir PaneDir) string {
 }
 
 // Project is a registered dev project: a name, the directory its session
-// is rooted at, the commands run in it before its session starts and
+// is rooted at, which identifies it, the commands run in it before its session starts and
 // before it is killed, and the windows its session opens.
 type Project struct {
 	name     ProjectName
@@ -233,6 +221,11 @@ func (p Project) Name() ProjectName {
 
 func (p Project) Root() ProjectRoot {
 	return p.root
+}
+
+// Ref is how the session ports tell the project apart.
+func (p Project) Ref() ProjectRef {
+	return NewProjectRef(p.root, p.name)
 }
 
 // Env is the variables every pane gets, unless the pane overrides them.

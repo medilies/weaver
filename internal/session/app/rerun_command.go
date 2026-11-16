@@ -36,8 +36,8 @@ func NewRerunCommand(projects domain.ProjectRegistry, tasks domain.TaskRunner) R
 // wrapping ErrSessionNotRunning, and one whose session weaver didn't
 // start with ErrSessionNotOwned; a pane without a command run, or whose
 // command is running, with ErrNothingToRerun.
-func (uc RerunCommand) Handle(name domain.ProjectName, at PaneAt) error {
-	project, err := uc.projects.FindByName(name)
+func (uc RerunCommand) Handle(name domain.ProjectRef, at PaneAt) error {
+	project, err := uc.projects.Find(name.Root())
 	if err != nil {
 		return err
 	}
@@ -87,14 +87,14 @@ func paneOf(project domain.Project, at PaneAt) (domain.WindowPlan, domain.PanePl
 // requireOwned returns an error wrapping ErrSessionNotRunning unless the
 // project's session runs, and ErrSessionNotOwned unless weaver started
 // it, as only then can its panes be told apart.
-func requireOwned(sessions domain.SessionFinder, name domain.ProjectName) error {
+func requireOwned(sessions domain.SessionFinder, name domain.ProjectRef) error {
 	_, err := ownedSession(sessions, name)
 	return err
 }
 
 // ownedSession is the project's running session, as requireOwned
 // requires it.
-func ownedSession(sessions domain.SessionFinder, name domain.ProjectName) (domain.RunningSession, error) {
+func ownedSession(sessions domain.SessionFinder, name domain.ProjectRef) (domain.RunningSession, error) {
 	session, running, err := sessions.Find(name)
 	switch {
 	case err != nil:

@@ -1,35 +1,56 @@
 # Project config
 
-A project is one config file, `<name>.yml`, in weaver's projects folder:
+A project is a directory, its root, and its config, a YAML file. The
+root is what the panes' directories are relative to. Keep the config
+in the root, to version it with the code it opens and share it with a
+team, or anywhere else.
 
-- Linux: `~/.config/weaver/projects`, or
-  `$XDG_CONFIG_HOME/weaver/projects` when that is set.
-- macOS: `~/Library/Application Support/weaver/projects`.
+## Registering
 
-The file name is the project's name and its tmux session's name:
-
-- letters, digits, `-` and `_`, starting with a letter or a digit;
-- not `bind`, `completion`, `edit`, `help`, `kill`, `list` or `show`, in
-  any case.
-
-Names differing only in case are one project: binding `Shop` while
-`shop` is registered asks for another name, and `weave Shop` doesn't
-open `shop`.
-
-A config may end in `.yaml` instead; weave saves a new one as `.yml` and
-keeps an existing one's extension. A project with two configs, a `.yml` and
-a `.yaml`, or `shop.yml` and `Shop.yml`, isn't registered: weave warns
-about it until one is removed.
-
-A config may be a symbolic link, as dotfiles managers make. Saving
-replaces the file it points to and keeps the link; deleting, with `d` in
-the browser, removes only the link.
-
-The smallest config opens one window with one shell in the root:
+[`settings.yml`](settings.md) lists the projects under `projects:`, each
+by its root, absolute or starting with `~/`:
 
 ```yaml
-root: ~/dev/weaver
+projects:
+  - ~/dev/shop                            # its config is ~/dev/shop/weaver.yml
+  - root: ~/work/client-api
+    config: ~/.config/weaver/client-api.yml  # relative to the root, or absolute
+    name: client                          # instead of the config's, or client-api
 ```
+
+- `weave bind` adds the directory it runs in, first; `d` in the
+  [browser](browser.md) takes a project off the list. Editing the list
+  by hand does the same.
+- The config is the one the entry names, else the first of
+  `weaver.yml`, `weaver.yaml`, `.weaver.yml` and `.weaver.yaml` in the
+  root. `weave bind` writes a new one as `weaver.yml`.
+- One project per root: a root listed twice shows in the browser as a
+  problem until one entry goes. Several roots may share a config.
+- A project whose root or config is missing, or whose config isn't
+  valid, stays in the browser, marked with a red ✗.
+- A config may be a symbolic link, as dotfiles managers make: saving
+  replaces the file it points to and keeps the link.
+
+Registering a config is when you trust it: weave runs its commands
+whenever you open the project, as written then, a teammate's later
+commits included.
+
+## Names
+
+A project is named by its entry's `name:`, else by its config's
+`name:`, else after its root's directory: `~/dev/weaver.nvim` is
+`weaver.nvim`. A name may be anything but `.`, `..` or one holding `/`.
+
+- Two projects may share a name: the browser shows their roots beside
+  it, and `weave api` asks you to name one by a directory instead.
+- A project named after a command, such as `kill`, opens with
+  `weave open kill`.
+- Its tmux session is `w/` and its name, or `w/` and its root when
+  another session has that name already, `.` and `:` written `_`. See
+  [sessions](sessions.md#sessions-and-their-projects).
+
+The smallest config is an empty file: one window with one shell in the
+root.
 
 ## Toolchains
 
@@ -39,7 +60,6 @@ as you would. An alias only changes what you type; tools that run `php`
 themselves, such as `composer`, need the right `php` first on `PATH`:
 
 ```yaml
-root: ~/dev/shop
 windows:
   - name: shop
     panes:
@@ -60,14 +80,14 @@ windows:
 
 | Field | Meaning |
 | --- | --- |
-| `root` | Directory the session is rooted at: absolute, or starting with `~/`. Required. The home directory itself is `"~"`, in quotes: YAML reads a bare `~` as null. |
+| `name` | The project's name, unless its entry in `settings.yml` names it; see [Names](#names). |
 | `env` | Variables for every pane, and for the `setup` and `teardown` commands. Values are literal. |
-| `setup` | Commands run once in `root`, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. |
-| `teardown` | Commands run in `root`, in order, before `weave kill` ends a session weaver started, once its panes were interrupted, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. |
+| `setup` | Commands run once in the root, in order, before `weave <project>` starts the session, such as `docker compose up -d --wait`. Each runs in its own `sh -c`, with `env` but not `before`, and its output in your terminal. A failing one stops the open, and no session is started. Not run when the session is already running. |
+| `teardown` | Commands run in the root, in order, before `weave kill` ends a session weaver started, once its panes were interrupted, such as `docker compose down`, run like `setup`. The session is killed even when one fails; the commands after it don't run. |
 | `before` | Commands typed and run in every pane, in order, before the pane's own command. They are typed as soon as the pane opens, so one that reads the terminal (`ssh`, a password prompt) takes the lines typed after it. |
 | `clear` | `true` hides the `before` commands once they ran: `clear` is typed after them, then the `note` printed. They are also kept out of the shell history where it leaves out commands starting with a space: fish always does, bash with `HISTCONTROL=ignorespace` or `ignoreboth`, zsh with `setopt HIST_IGNORE_SPACE`. tmux's scrollback keeps them, unless the terminal type is tmux's own, such as its default `tmux-256color`. Off unless set; a window's or a pane's `clear` replaces it. |
 | `windows` | Windows in order, with unique `name`s. None: one window named after the project. |
-| `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: `root`. |
+| `windows[].dir` | Where the window's panes start, unless they have their own `dir`, written like a pane's. Default: the root. |
 | `windows[].focus` | `true` lands `weave <project>` in this window when it starts the session, instead of the first. At most one window. |
 | `windows[].env` | Variables for every pane of the window, over the project's, per variable. |
 | `windows[].before` | Commands run in every pane of the window, after the project's `before`. |
@@ -76,7 +96,7 @@ windows:
 | `windows[].panes` | Panes in creation order (in any order with a `grid`). None: one shell in the window's `dir`. |
 | `name` (pane) | Shown in the pane's top border. Required and unique when a window has several panes or a `grid`. |
 | `focus` (pane) | `true` selects this pane in its window, instead of the first. At most one pane per window. |
-| `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to `root`, not to the window's `dir` (`.` for `root` itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
+| `dir` | Where the pane's shell starts, instead of its window's `dir`: relative to the root, not to the window's `dir` (`.` for the root itself), or absolute, or starting with `~/` (`"~"` in quotes for the home directory). |
 | `split` | How every pane but the first is made, unless the window has a `grid`: `direction` (`right` or `below`), `size` (`40%`, or `20` cells; default half of the split pane), `of` (the name of the pane it splits; default the previous one). |
 | `before` (pane) | Commands run in the pane, after its project's and window's `before`. |
 | `clear` (pane) | Whether the pane clears its `before` commands, over its window's and project's `clear`. |
@@ -143,8 +163,9 @@ Unknown fields are errors: they are usually typos. Comments are kept
 only by editing a config raw (`E` in the browser): the config form
 rewrites it, see [saving](config-form.md#saving).
 
-When the config form saves a config, it writes `weaver.schema.json` next to it
-and points the config at it with a first line of
-`# yaml-language-server: $schema=./weaver.schema.json`, so editors such
-as VS Code (with its YAML extension) complete fields and flag mistakes
-as you type.
+When the config form saves a config, it points the config at its JSON
+Schema, as published for your weave's version, with a first line of
+`# yaml-language-server: $schema=https://…/weaver.schema.json`, so
+editors such as VS Code (with its YAML extension) complete fields and
+flag mistakes as you type. A config holding `root:` is refused: the
+root is its entry's in `settings.yml`.

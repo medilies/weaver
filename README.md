@@ -33,6 +33,9 @@ takes you back to it, from anywhere.
   before saving.
 - **Keep what you built.** `weave bind` turns a session you set up by
   hand into a config.
+- **Beside the code.** A project's config lives in its repository, for
+  your team to share, or wherever you keep it; `settings.yml` lists the
+  projects.
 - **Nothing hidden.** weaver runs only what your config says: it knows
   no git, clones nothing and creates no directories.
 
@@ -53,11 +56,11 @@ Keep a hand on the mouse:
 
 ## A project
 
-One YAML file per project. The demo's:
+A project is a directory and its config, `weaver.yml` in it by
+default, to version with the code. The demo's:
 
 ```yaml
-# nimbus.yml in weaver's projects folder (see docs/config.md)
-root: ~/dev/nimbus
+# ~/dev/nimbus/weaver.yml (see docs/config.md)
 windows:
   - name: api
     dir: api
@@ -146,21 +149,23 @@ source <(weave completion bash)
 ## Usage
 
 ```sh
-weave bind            # register the project in the current directory, through the config form
+weave bind            # register the current directory, writing or updating its weaver.yml, through the config form
 weave bind scratch    # same, starting from the windows, panes and commands of the running session scratch
 weave bind .          # same, from the session you're in
-weave bind --root ~/dev/shop --name shop   # with another root and name
+weave bind --config ~/.config/weaver/api.yml   # with the config somewhere else
 weave nimbus          # open the nimbus session, from anywhere
 weave .               # same, for the project whose root holds the current directory
+weave ~/dev/b/api     # same, for the project whose root holds that directory
+weave open kill       # open a project named after a command
 weave -d nimbus       # start it, or restore its windows, without attaching: you stay where you are
-weave                 # browse the projects, to open, start, bind, edit, kill or delete them, or run their tasks
+weave                 # browse the projects, to open, start, bind, edit, kill or unregister them, or run their tasks
 weave kill nimbus     # kill the session and everything running in it
 weave kill            # same, for the session you're in, if weave started it
 ```
 
 ## Documentation
 
-- [Project config](docs/config.md): every field, `before` commands for toolchains, grids, the schema
+- [Project config](docs/config.md): registering, names, every field, `before` commands for toolchains, grids, the schema
 - [Opening, killing and binding](docs/sessions.md): `setup` and `teardown`, restoring closed windows, capturing a session
 - [The browser](docs/browser.md): summary and warnings, the drawing, tasks, keys
 - [The config form](docs/config-form.md): cards, editing on the drawing, keys

@@ -34,6 +34,15 @@ func (a answer) Confirm(string) (bool, error) {
 type capturedSessions struct {
 	windows map[string][]domain.Window
 	current string
+	adopted *[]string // the sessions renamed, each as "session › session name"
+}
+
+func (c capturedSessions) Adopt(session string, project domain.ProjectRef) error {
+	usual, _ := project.SessionNames()
+	if c.adopted != nil {
+		*c.adopted = append(*c.adopted, session+" › "+usual)
+	}
+	return nil
 }
 
 func (c capturedSessions) Capture(session string) ([]domain.Window, error) {
@@ -51,11 +60,37 @@ func (c capturedSessions) Current() (string, error) {
 	return c.current, nil
 }
 
+// configsAt is an app.ProjectDocuments over configs, whose projects'
+// configs are stored as "stored", recording the config asked for.
+type configsAt struct {
+	inMemoryRegistry
+	asked *string
+}
+
+func (c configsAt) ConfigAt(root domain.ProjectRoot, config string) (domain.Project, app.ConfigDocument, error) {
+	*c.asked = config
+	project, err := c.Find(root)
+	if err != nil {
+		return domain.Project{}, app.ConfigDocument{}, fmt.Errorf("%w: in %s", domain.ErrMissingConfig, root)
+	}
+	return project, app.ConfigDocument{File: root.String() + "/weaver.yml", Content: []byte("stored")}, nil
+}
+
+func (c configsAt) Document(domain.ProjectRoot) (app.ConfigDocument, error) {
+	return app.ConfigDocument{}, nil
+}
+
+func (c configsAt) ReplaceDocument(domain.ProjectRoot, []byte) error { return nil }
+
+func (c configsAt) Commented(domain.ProjectRoot) (bool, error) { return false, nil }
+
 type bindSetup struct {
 	configs   inMemoryRegistry
 	form      *fakeForm
 	current   string // the session weaver runs in; none outside tmux
 	workspace *fakeWorkspace
+	adopted   *[]string
+	asked     *string // the config the documents were asked for
 }
 
 func newBindSetup(t *testing.T) bindSetup {
@@ -64,18 +99,19 @@ func newBindSetup(t *testing.T) bindSetup {
 		configs:   inMemoryRegistry{projects: map[string]domain.Project{}},
 		form:      &fakeForm{project: shop(t)},
 		workspace: &fakeWorkspace{},
+		adopted:   &[]string{},
+		asked:     new(string),
 	}
 }
 
 func (s bindSetup) bind(t *testing.T, request app.BindRequest) (domain.Project, error) {
 	t.Helper()
 	sessions := capturedSessions{
-		windows: map[string][]domain.Window{
-			"store-dev": shop(t).Windows(), "my.session": shop(t).Windows(), "resolved": resolvedShop(t),
-		},
+		windows: map[string][]domain.Window{"store-dev": shop(t).Windows(), "resolved": resolvedShop(t)},
 		current: s.current,
+		adopted: s.adopted,
 	}
-	return app.NewBindProject(s.configs, sessions, s.workspace, s.form).Handle(request)
+	return app.NewBindProject(s.configs, configsAt{s.configs, s.asked}, sessions, s.workspace, s.form).Handle(request)
 }
 
 // resolvedShop is a session's windows as tmux reports them for a shop
@@ -95,23 +131,13 @@ func resolvedShop(t *testing.T) []domain.Window {
 }
 
 func TestBindProject(t *testing.T) {
-	t.Run("starts from the working directory when no root is given", func(t *testing.T) {
+	t.Run("starts from the working directory, named after it", func(t *testing.T) {
 		s := newBindSetup(t)
 		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if s.form.draft.Root != "/srv/shop" || s.form.draft.Name != "shop" {
-			t.Fatalf("got root %q and name %q, want /srv/shop and shop", s.form.draft.Root, s.form.draft.Name)
-		}
-	})
-
-	t.Run("resolves a relative root against the working directory", func(t *testing.T) {
-		s := newBindSetup(t)
-		if _, err := s.bind(t, app.BindRequest{Root: "../blog", WorkingDir: "/srv/shop"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if s.form.draft.Root != "/srv/blog" || s.form.draft.Name != "blog" {
-			t.Fatalf("got root %q and name %q, want /srv/blog and blog", s.form.draft.Root, s.form.draft.Name)
+		if s.form.draft.Root != "/srv/shop" || s.form.draft.Name != "shop" || s.form.draft.Config != nil {
+			t.Fatalf("got root %q, name %q and config %q; want /srv/shop, shop and none", s.form.draft.Root, s.form.draft.Name, s.form.draft.Config)
 		}
 	})
 
@@ -125,16 +151,6 @@ func TestBindProject(t *testing.T) {
 		}
 	})
 
-	t.Run("has the name typed in the form", func(t *testing.T) {
-		s := newBindSetup(t)
-		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if s.form.draft.NameStays {
-			t.Fatal("got the name kept, want it typed")
-		}
-	})
-
 	t.Run("saves the project the user described", func(t *testing.T) {
 		s := newBindSetup(t)
 		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil {
@@ -145,26 +161,30 @@ func TestBindProject(t *testing.T) {
 		}
 	})
 
-	t.Run("replaces a registered project with the one the form returns", func(t *testing.T) {
-		s := newBindSetup(t)
-		s.configs.projects["shop"] = rootedAt(t, "shop", "/srv/old-shop")
-		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got := s.configs.projects["shop"].Root().String(); got != "/srv/shop" {
-			t.Fatalf("got root %s, want the new project's /srv/shop", got)
-		}
-	})
-
-	t.Run("keeps the setup and teardown commands of the project registered under the name", func(t *testing.T) {
+	t.Run("starts from the config already in the directory, to show what saving changes", func(t *testing.T) {
 		s := newBindSetup(t)
 		up, down := command(t, "docker compose up -d"), command(t, "docker compose down")
 		s.configs.projects["shop"] = shop(t).SettingUp(up).TearingDown(down)
-		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil {
+		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Config: "tmux/dev.yml"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := s.form.draft; len(got.Setup) != 1 || got.Setup[0] != up || len(got.Teardown) != 1 || got.Teardown[0] != down {
-			t.Fatalf("got setup %v, teardown %v; want the registered shop's", got.Setup, got.Teardown)
+		got := s.form.draft
+		if string(got.Config) != "stored" || *s.asked != "tmux/dev.yml" || len(got.Windows) != 2 {
+			t.Fatalf("got config %q, asked for %q, %d windows; want the stored tmux/dev.yml's", got.Config, *s.asked, len(got.Windows))
+		}
+		if len(got.Setup) != 1 || got.Setup[0] != up || len(got.Teardown) != 1 || got.Teardown[0] != down {
+			t.Fatalf("got setup %v, teardown %v; want the config's", got.Setup, got.Teardown)
+		}
+	})
+
+	t.Run("tells the form whether saving registers the root", func(t *testing.T) {
+		s := newBindSetup(t)
+		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil || !s.form.draft.Unregistered {
+			t.Fatalf("got %v, unregistered=%v; want a new root unregistered", err, s.form.draft.Unregistered)
+		}
+		s.configs.projects["shop"] = shop(t)
+		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil || s.form.draft.Unregistered {
+			t.Fatalf("got %v, unregistered=%v; want a registered root", err, s.form.draft.Unregistered)
 		}
 	})
 
@@ -178,13 +198,32 @@ func TestBindProject(t *testing.T) {
 		}
 	})
 
-	t.Run("starts from a running session's windows", func(t *testing.T) {
+	t.Run("starts from a running session's windows, keeping the config's commands", func(t *testing.T) {
+		s := newBindSetup(t)
+		up := command(t, "docker compose up -d")
+		s.configs.projects["shop"] = project(t, "shop").SettingUp(up)
+		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := s.form.draft; len(got.Windows) != 2 || got.Windows[1].Name().String() != "logs" || len(got.Setup) != 1 {
+			t.Fatalf("got %d windows and setup %v, want the session's shop and logs, and the config's setup", len(got.Windows), got.Setup)
+		}
+	})
+
+	t.Run("renames the session it started from after the project", func(t *testing.T) {
 		s := newBindSetup(t)
 		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if len(s.form.draft.Windows) != 2 || s.form.draft.Windows[1].Name().String() != "logs" {
-			t.Fatalf("got %d windows, want the session's shop and logs", len(s.form.draft.Windows))
+		if got := *s.adopted; len(got) != 1 || got[0] != "store-dev › w/shop" {
+			t.Fatalf("got %q renamed, want store-dev to w/shop", got)
+		}
+	})
+
+	t.Run("renames no session when it started from none", func(t *testing.T) {
+		s := newBindSetup(t)
+		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"}); err != nil || len(*s.adopted) != 0 {
+			t.Fatalf("got %v and %q renamed, want nothing renamed", err, *s.adopted)
 		}
 	})
 
@@ -196,36 +235,6 @@ func TestBindProject(t *testing.T) {
 		}
 		if got, _ := s.form.draft.Windows[0].Panes()[0].Dir(); got.String() != "/home/me/shop/api" {
 			t.Fatalf("got dir %q, want /home/me/shop/api", got)
-		}
-	})
-
-	t.Run("suggests the session's name, keeping the working directory as root", func(t *testing.T) {
-		s := newBindSetup(t)
-		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if s.form.draft.Name != "store-dev" || s.form.draft.Root != "/srv/shop" {
-			t.Fatalf("got name %q and root %q, want store-dev and /srv/shop", s.form.draft.Name, s.form.draft.Root)
-		}
-	})
-
-	t.Run("prefers the given name to the session's", func(t *testing.T) {
-		s := newBindSetup(t)
-		if _, err := s.bind(t, app.BindRequest{Name: "store", WorkingDir: "/srv/shop", Session: "store-dev"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if s.form.draft.Name != "store" {
-			t.Fatalf("got name %q, want store", s.form.draft.Name)
-		}
-	})
-
-	t.Run("suggests the root's name when the session's isn't a valid project name", func(t *testing.T) {
-		s := newBindSetup(t)
-		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Session: "my.session"}); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if s.form.draft.Name != "shop" {
-			t.Fatalf("got name %q, want shop", s.form.draft.Name)
 		}
 	})
 
@@ -245,8 +254,8 @@ func TestBindProject(t *testing.T) {
 		if _, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Session: app.CurrentSession}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if s.form.draft.Name != "store-dev" || len(s.form.draft.Windows) != 2 {
-			t.Fatalf("got name %q and %d windows, want store-dev's name and 2 windows", s.form.draft.Name, len(s.form.draft.Windows))
+		if len(s.form.draft.Windows) != 2 || len(*s.adopted) != 1 {
+			t.Fatalf("got %d windows and %q renamed, want store-dev's 2 windows, and it renamed", len(s.form.draft.Windows), *s.adopted)
 		}
 	})
 
@@ -264,9 +273,9 @@ func TestBindProject(t *testing.T) {
 	t.Run("saves nothing when the user cancels the form", func(t *testing.T) {
 		s := newBindSetup(t)
 		s.form.err = app.ErrAborted
-		_, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop"})
-		if !errors.Is(err, app.ErrAborted) || len(s.configs.projects) != 0 {
-			t.Fatalf("got %v with %d projects saved, want ErrAborted and nothing saved", err, len(s.configs.projects))
+		_, err := s.bind(t, app.BindRequest{WorkingDir: "/srv/shop", Session: "store-dev"})
+		if !errors.Is(err, app.ErrAborted) || len(s.configs.projects) != 0 || len(*s.adopted) != 0 {
+			t.Fatalf("got %v with %d projects saved and %q renamed, want ErrAborted and nothing done", err, len(s.configs.projects), *s.adopted)
 		}
 	})
 }

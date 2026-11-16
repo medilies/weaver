@@ -27,7 +27,7 @@ func rerun(t *testing.T, tasks *fakeTasks, at app.PaneAt) error {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": project}}
-	return app.NewRerunCommand(configs, tasks).Handle(project.Name(), at)
+	return app.NewRerunCommand(configs, tasks).Handle(project.Ref(), at)
 }
 
 func TestRerunCommand(t *testing.T) {

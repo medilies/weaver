@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	// settingsFileName is the settings file, beside the projects' folder.
+	// settingsFileName is the settings file.
 	settingsFileName = "settings.yml"
 	// settingsSchemaFileName is the JSON Schema saved beside it, which it
 	// points to with "$schema" so editors complete and check it.
@@ -84,6 +84,11 @@ func DefaultSettings() Settings {
 	}
 }
 
+// SettingsFile is the settings file in dir.
+func SettingsFile(dir string) string {
+	return filepath.Join(dir, settingsFileName)
+}
+
 // LoadSettings reads the settings file in dir, the defaults when there
 // is none. An invalid file is an error naming the file and the field. It
 // saves the settings' JSON Schema in dir, when dir exists, so it is
@@ -94,7 +99,7 @@ func LoadSettings(dir string, warnings io.Writer) (Settings, error) {
 		// A warning that can't be written changes nothing worth failing for.
 		_, _ = fmt.Fprintf(warnings, "warning: %v\n", err)
 	}
-	path := filepath.Join(dir, settingsFileName)
+	path := SettingsFile(dir)
 	raw, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return DefaultSettings(), nil
@@ -111,7 +116,7 @@ func LoadSettings(dir string, warnings io.Writer) (Settings, error) {
 
 // writeSettingsSchema saves the settings' JSON Schema in dir, unless it
 // is there already or dir doesn't exist: weave makes the folder only to
-// save a config.
+// register a project.
 func writeSettingsSchema(dir string) error {
 	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -135,6 +140,9 @@ type settingsFile struct {
 	Editor         *string   `yaml:"editor"`
 	TmuxTimeout    *string   `yaml:"tmux-timeout"`
 	Popup          *bool     `yaml:"popup"`
+	// Projects lists the registered projects, which FileProjectRegistry
+	// reads.
+	Projects yaml.Node `yaml:"projects"`
 }
 
 // themeFile is the format of the settings' theme.

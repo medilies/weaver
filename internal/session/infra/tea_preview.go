@@ -22,7 +22,8 @@ type previewTick struct{}
 // in answer to the ask numbered asked.
 type previewed struct {
 	asked   int
-	project domain.ProjectName
+	project domain.ProjectRoot
+	name    domain.ProjectName
 	window  domain.WindowName
 	preview domain.WindowPreview
 	err     error
@@ -67,7 +68,7 @@ func (m browser) fetch() (browser, tea.Cmd) {
 	asked, live := m.previewAsked, m.live
 	return m, func() tea.Msg {
 		preview, err := live.Preview(project, window)
-		return previewed{asked: asked, project: project.Name(), window: window, preview: preview, err: err}
+		return previewed{asked: asked, project: project.Root(), name: project.Name(), window: window, preview: preview, err: err}
 	}
 }
 
@@ -76,7 +77,7 @@ func (m browser) fetch() (browser, tea.Cmd) {
 // out, its notice however long.
 func (m browser) shownPreview() (domain.WindowPreview, bool) {
 	project, window, ok := m.previewKey()
-	if !ok || !m.hasPreview || m.preview.project != project.Name() || m.preview.window != window ||
+	if !ok || !m.hasPreview || m.preview.project != project.Root() || m.preview.window != window ||
 		!m.roomWith(lipgloss.Height(m.noticeLine())) {
 		return domain.WindowPreview{}, false
 	}
@@ -117,7 +118,7 @@ func (m browser) roomIn(width, height int) bool {
 func (m browser) withPreview(msg previewed) browser {
 	m.previewAnswered = max(m.previewAnswered, msg.asked)
 	project, window, ok := m.previewKey()
-	if msg.asked != m.previewAsked || !ok || project.Name() != msg.project || window != msg.window {
+	if msg.asked != m.previewAsked || !ok || project.Root() != msg.project || window != msg.window {
 		return m
 	}
 	panes := msg.preview.Panes()
@@ -129,9 +130,9 @@ func (m browser) withPreview(msg previewed) browser {
 		failure := "preview: " + msg.err.Error()
 		switch {
 		case errors.Is(msg.err, domain.ErrSessionNotRunning):
-			failure = fmt.Sprintf("preview: %s's session ended", msg.project)
+			failure = fmt.Sprintf("preview: %s's session ended", msg.name)
 		case errors.Is(msg.err, domain.ErrWindowNotRunning):
-			failure = fmt.Sprintf("preview: %s's window %s closed", msg.project, msg.window)
+			failure = fmt.Sprintf("preview: %s's window %s closed", msg.name, msg.window)
 		}
 		if failure != m.previewFailure {
 			m.notice, m.previewFailure = app.Telling(failure), failure
@@ -157,7 +158,7 @@ func (m browser) withPreview(msg previewed) browser {
 // than the preview's own answer, which then comes too late to tell it.
 func (m browser) endingPreview(before browser) browser {
 	was, _, wanted := before.previewKey()
-	if !wanted || !before.hasPreview || m.selectedName() != was.Name() {
+	if !wanted || !before.hasPreview || m.selectedRoot() != was.Root() {
 		return m
 	}
 	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Running() {

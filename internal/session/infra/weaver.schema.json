@@ -1,21 +1,21 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "weaver project",
-  "description": "A project's tmux session, opened with `weave <project>`. See https://github.com/medilies/weaver/blob/main/docs/config.md",
+  "description": "A project's tmux session, opened with `weave <project>`. Its root, the directory the session is rooted at, is the one settings.yml lists it by, not written here. See https://github.com/medilies/weaver/blob/main/docs/config.md",
   "type": "object",
   "additionalProperties": false,
-  "required": ["root"],
   "properties": {
-    "root": {
-      "description": "Directory the session is rooted at: absolute, or starting with ~/.",
+    "name": {
+      "description": "The project's name, unless its entry in settings.yml names it. The root's directory's name unless set.",
       "type": "string",
-      "pattern": "^(/|~/|~$)"
+      "minLength": 1,
+      "pattern": "^[^/]+$"
     },
     "env": {
       "$ref": "#/definitions/env"
     },
     "setup": {
-      "description": "Commands run once in root, in order, before weave <project> starts the session, e.g. docker compose up -d --wait. Each runs in its own sh -c with the project's env, not its before commands; a failing one stops the open, and no session is started. Opening a running session doesn't run them.",
+      "description": "Commands run once in the root, in order, before weave <project> starts the session, e.g. docker compose up -d --wait. Each runs in its own sh -c with the project's env, not its before commands; a failing one stops the open, and no session is started. Opening a running session doesn't run them.",
       "type": "array",
       "items": {
         "type": "string",
@@ -23,7 +23,7 @@
       }
     },
     "teardown": {
-      "description": "Commands run in root, in order, before weave kill ends a session weaver started, e.g. docker compose down. Each runs in its own sh -c with the project's env, not its before commands; the session is killed even when one fails.",
+      "description": "Commands run in the root, in order, before weave kill ends a session weaver started, e.g. docker compose down. Each runs in its own sh -c with the project's env, not its before commands; the session is killed even when one fails.",
       "type": "array",
       "items": {
         "type": "string",
@@ -96,7 +96,7 @@
           "type": "boolean"
         },
         "dir": {
-          "description": "Where the window's panes start, unless they have their own dir: relative to root, absolute, or starting with ~/.",
+          "description": "Where the window's panes start, unless they have their own dir: relative to the root, absolute, or starting with ~/.",
           "type": "string"
         },
         "env": {
@@ -137,7 +137,7 @@
           "type": "boolean"
         },
         "dir": {
-          "description": "Where the pane's shell starts, instead of its window's dir: relative to root (. for root itself), absolute, or starting with ~/.",
+          "description": "Where the pane's shell starts, instead of its window's dir: relative to the root (. for the root itself), absolute, or starting with ~/.",
           "type": "string"
         },
         "split": {

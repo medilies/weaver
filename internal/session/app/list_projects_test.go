@@ -3,25 +3,30 @@ package app_test
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/medilies/weaver/internal/session/app"
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
 // runningSessions is a fake domain.SessionLister.
-type runningSessions []string
+type runningSessions []domain.ListedSession
 
-func (r runningSessions) Running() ([]string, error) {
+func (r runningSessions) Running() ([]domain.ListedSession, error) {
 	return r, nil
 }
 
 func TestListProjects(t *testing.T) {
-	configs := inMemoryRegistry{projects: map[string]domain.Project{
-		"shop":   shop(t),
-		"nimbus": project(t, "nimbus"),
-	}}
+	configs := registry(project(t, "nimbus"), shop(t), project(t, "blog"), project(t, "api"))
+	at := func(minute int) time.Time { return time.Date(2026, 11, 16, 9, minute, 0, 0, time.UTC) }
+	sessions := runningSessions{
+		domain.NewListedSession("w/shop", "/srv/shop").ActiveAt(at(1)),
+		domain.NewListedSession("w/blog", "/tmp").StartedFor("/srv/blog").ActiveAt(at(5)),
+		domain.NewListedSession("w/api", "/srv/elsewhere").ActiveAt(at(9)),
+		domain.NewListedSession("scratch", "/srv/nimbus"),
+	}
 
-	statuses, err := app.NewListProjects(configs, runningSessions{"shop", "scratch"}).Handle()
+	statuses, err := app.NewListProjects(configs, sessions).Handle()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -34,7 +39,8 @@ func TestListProjects(t *testing.T) {
 		}
 		got = append(got, s.Name().String()+" "+state)
 	}
-	if want := []string{"nimbus not running", "shop running"}; !slices.Equal(got, want) {
+	// Running first, the last attached at the top, then the settings' order.
+	if want := []string{"blog running", "shop running", "nimbus not running", "api not running"}; !slices.Equal(got, want) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }

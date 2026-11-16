@@ -28,13 +28,6 @@ func TestEditor(t *testing.T) {
 		}
 	})
 
-	t.Run("edits next to the JSON Schema the config points to", func(t *testing.T) {
-		schemaCheck := `f() { test -f "$(dirname "$1")/weaver.schema.json" && sed -i.bak s/shop/checked/ "$1"; }; f`
-		if got, err := edit(t, "", schemaCheck); err != nil || got != "root: /srv/checked" {
-			t.Fatalf("got %q (%v), want the schema found next to the document", got, err)
-		}
-	})
-
 	t.Run("names the copy like the stored config", func(t *testing.T) {
 		nameCheck := `f() { case "$1" in */shop.yml) sed -i.bak s/shop/named/ "$1";; esac; }; f`
 		if got, err := edit(t, "", nameCheck); err != nil || got != "root: /srv/named" {

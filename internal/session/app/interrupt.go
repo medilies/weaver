@@ -31,8 +31,8 @@ func NewInterrupt(projects domain.ProjectRegistry, tasks domain.TaskRunner) Inte
 // doesn't run is ErrNothingToInterrupt; a project that isn't running
 // wraps ErrSessionNotRunning, and one weaver didn't start
 // ErrSessionNotOwned.
-func (uc Interrupt) HandleTask(name domain.ProjectName, at TaskAt) (string, error) {
-	project, err := uc.projects.FindByName(name)
+func (uc Interrupt) HandleTask(name domain.ProjectRef, at TaskAt) (string, error) {
+	project, err := uc.projects.Find(name.Root())
 	if err != nil {
 		return "", err
 	}
@@ -73,8 +73,8 @@ func (uc Interrupt) HandleTask(name domain.ProjectName, at TaskAt) (string, erro
 // idles is ErrNothingToInterrupt, and the pane the browser runs in
 // ErrPaneRunsWeaver; a project that isn't running wraps
 // ErrSessionNotRunning, and one weaver didn't start ErrSessionNotOwned.
-func (uc Interrupt) HandlePane(name domain.ProjectName, at PaneAt) (string, error) {
-	project, err := uc.projects.FindByName(name)
+func (uc Interrupt) HandlePane(name domain.ProjectRef, at PaneAt) (string, error) {
+	project, err := uc.projects.Find(name.Root())
 	if err != nil {
 		return "", err
 	}

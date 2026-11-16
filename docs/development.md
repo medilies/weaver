@@ -28,10 +28,10 @@ full list.
 ```mermaid
 graph TD
     subgraph cmd["cmd/weave (Cobra CLI)"]
-        CLI["weave, bind, kill, completion"]
+        CLI["weave, open, bind, kill, completion"]
     end
     subgraph app["internal/session/app"]
-        UC["use cases, e.g. OpenProject, BindProject, RunTask"]
+        UC["use cases, e.g. FindProject, OpenProject, BindProject, RunTask"]
         AP["ports for the user, e.g. ProjectBrowser, ProjectForm"]
     end
     subgraph domain["internal/session/domain"]

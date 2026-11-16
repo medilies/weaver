@@ -10,38 +10,47 @@ import (
 )
 
 // inMemoryRegistry is a fake domain.ProjectRegistry, so these tests
-// never touch disk.
+// never touch disk. Its projects are keyed by name, and listed in that
+// order.
 type inMemoryRegistry struct {
 	projects map[string]domain.Project
 }
 
-func (r inMemoryRegistry) FindByName(name domain.ProjectName) (domain.Project, error) {
-	project, ok := r.projects[name.String()]
-	if !ok {
-		return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
+func (r inMemoryRegistry) Find(root domain.ProjectRoot) (domain.Project, error) {
+	for _, project := range r.projects {
+		if project.Root() == root {
+			return project, nil
+		}
 	}
-	return project, nil
+	return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, root)
 }
 
-func (r inMemoryRegistry) Save(project domain.Project) error {
+func (r inMemoryRegistry) Save(project domain.Project, _ string) error {
+	for key, registered := range r.projects {
+		if registered.Root() == project.Root() {
+			delete(r.projects, key)
+		}
+	}
 	r.projects[project.Name().String()] = project
 	return nil
 }
 
-func (r inMemoryRegistry) Delete(name domain.ProjectName) error {
-	if _, ok := r.projects[name.String()]; !ok {
-		return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
+func (r inMemoryRegistry) Delete(root domain.ProjectRoot) error {
+	for key, project := range r.projects {
+		if project.Root() == root {
+			delete(r.projects, key)
+			return nil
+		}
 	}
-	delete(r.projects, name.String())
-	return nil
+	return fmt.Errorf("%w: %s", domain.ErrProjectNotFound, root)
 }
 
-func (r inMemoryRegistry) Names() ([]domain.ProjectName, error) {
-	var names []domain.ProjectName
+func (r inMemoryRegistry) Registered() ([]domain.ProjectRef, error) {
+	var refs []domain.ProjectRef
 	for _, key := range slices.Sorted(maps.Keys(r.projects)) {
-		names = append(names, r.projects[key].Name())
+		refs = append(refs, r.projects[key].Ref())
 	}
-	return names, nil
+	return refs, nil
 }
 
 // fakeCommands is a fake domain.CommandRunner recording the commands run,

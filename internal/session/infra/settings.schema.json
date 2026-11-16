@@ -68,6 +68,25 @@
       "type": "string",
       "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
     },
+    "projects": {
+      "description": "The registered projects, in the browser's order after the running ones: each its root, absolute or starting with ~/, whose config is weaver.yml in it, or a map of its root, the config, relative to the root or absolute, and the name, the root's directory's unless set. weave bind adds one first, and d in the browser removes one.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["root"],
+            "properties": {
+              "root": { "type": "string", "minLength": 1, "description": "The project's root, absolute or starting with ~/." },
+              "config": { "type": "string", "minLength": 1, "description": "The project's config, relative to the root or absolute. The first of weaver.yml, weaver.yaml, .weaver.yml and .weaver.yaml in the root unless set." },
+              "name": { "type": "string", "minLength": 1, "description": "The project's name, over its config's. The root's directory's unless set." }
+            }
+          }
+        ]
+      }
+    },
     "popup": {
       "description": "Whether the browser (weave) and the config form (weave bind), started in a tmux pane, re-run themselves in a tmux popup the size of the client. false unless set.",
       "type": "boolean"

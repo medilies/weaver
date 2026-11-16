@@ -1,14 +1,18 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"os"
+
+	"github.com/spf13/cobra"
+)
 
 func newKillCommand(weaver application) *cobra.Command {
 	return &cobra.Command{
-		Use:   "kill [project]",
+		Use:   "kill [project | dir | .]",
 		Short: "Kill a project's tmux session and everything running in it",
 		Long: `weave kill ends a project's tmux session and everything running in
-it. Without a project, it kills the session weave runs in, if weave
-started it.
+it. A project is named as weave names it. Without a project, it kills
+the session weave runs in, if weave started it.
 
 Before killing a session weave started, it types ctrl+c into each of
 its busy panes and waits, up to 5 seconds, for them to be back at their
@@ -22,7 +26,15 @@ Enter first, as the pane goes with the session.`,
 			if len(args) == 0 {
 				return weaver.killProject.HandleCurrent()
 			}
-			lingering, err := weaver.killProject.Handle(args[0])
+			dir, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			project, err := weaver.findProject.Handle(args[0], dir)
+			if err != nil {
+				return err
+			}
+			lingering, err := weaver.killProject.Handle(project.Root())
 			if lingering != "" {
 				cmd.PrintErrln(lingering)
 			}

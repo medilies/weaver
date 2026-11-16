@@ -11,38 +11,51 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-// registered is a fake domain.ProjectRegistry that only knows names.
+// registered is a fake domain.ProjectRegistry: projects by name, each
+// rooted at /srv/ and its name, with their default window.
 type registered []string
 
-func (r registered) FindByName(name domain.ProjectName) (domain.Project, error) {
-	return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
-}
-
-func (r registered) Save(domain.Project) error {
-	return nil
-}
-
-func (r registered) Delete(domain.ProjectName) error {
-	return nil
-}
-
-func (r registered) Names() ([]domain.ProjectName, error) {
-	var names []domain.ProjectName
-	for _, raw := range r {
-		name, err := domain.NewProjectName(raw)
-		if err != nil {
-			return nil, err
+func (r registered) Find(root domain.ProjectRoot) (domain.Project, error) {
+	for _, ref := range r.refs() {
+		if ref.Root() == root {
+			return domain.NewProject(ref.Name(), root), nil
 		}
-		names = append(names, name)
 	}
-	return names, nil
+	return domain.Project{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, root)
 }
 
-// running is a fake domain.SessionLister.
+func (r registered) Save(domain.Project, string) error {
+	return nil
+}
+
+func (r registered) Delete(domain.ProjectRoot) error {
+	return nil
+}
+
+func (r registered) Registered() ([]domain.ProjectRef, error) {
+	return r.refs(), nil
+}
+
+func (r registered) refs() []domain.ProjectRef {
+	var refs []domain.ProjectRef
+	for _, raw := range r {
+		name, _ := domain.NewProjectName(raw)
+		root, _ := domain.NewProjectRoot("/srv/" + raw)
+		refs = append(refs, domain.NewProjectRef(root, name))
+	}
+	return refs
+}
+
+// running is a fake domain.SessionLister: the sessions of projects by
+// name, as if started by hand in their roots.
 type running []string
 
-func (r running) Running() ([]string, error) {
-	return r, nil
+func (r running) Running() ([]domain.ListedSession, error) {
+	var sessions []domain.ListedSession
+	for _, name := range r {
+		sessions = append(sessions, domain.NewListedSession("w/"+name, "/srv/"+name))
+	}
+	return sessions, nil
 }
 
 // complete runs shell completion for args, the last one being the word
@@ -77,7 +90,7 @@ func TestProjectNameCompletion(t *testing.T) {
 	})
 
 	t.Run("kill suggests projects only", func(t *testing.T) {
-		if got, want := complete(t, "kill", ""), []string{"nimbus", "shop\trunning"}; !slices.Equal(got, want) {
+		if got, want := complete(t, "kill", ""), []string{"shop\trunning", "nimbus"}; !slices.Equal(got, want) {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})

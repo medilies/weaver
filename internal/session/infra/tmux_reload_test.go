@@ -23,10 +23,10 @@ func TestTmuxReload(t *testing.T) {
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	project, api := plan.Name(), plan.Windows()[1]
+	project, api := plan.Project(), plan.Windows()[1]
 	server.waitFor(t, server.paneLabelled(t, "reload", "back"), "hello-again")
 	windows := func() string {
-		return server.query(t, "list-windows", "-t", "=reload", "-F", "#{window_index}:#{window_name}")
+		return server.query(t, "list-windows", "-t", "=w/reload", "-F", "#{window_index}:#{window_name}")
 	}
 
 	t.Run("restarts a pane in place, as opening starts it", func(t *testing.T) {
@@ -46,53 +46,53 @@ func TestTmuxReload(t *testing.T) {
 	})
 
 	t.Run("replaces a window where it is, the others staying, its task's throwaway windows tied to its new panes", func(t *testing.T) {
-		server.query(t, "select-window", "-t", "=reload:api")
+		server.query(t, "select-window", "-t", "=w/reload:api")
 		if err := server.tmux().RunApart(project, api, 0, api.Panes()[0].Tasks()[0], false); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		before := windows()
-		old := server.query(t, "display-message", "-p", "-t", "=reload:api", "#{window_id}")
+		old := server.query(t, "display-message", "-p", "-t", "=w/reload:api", "#{window_id}")
 		if err := server.tmux().ReloadWindow(project, api); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if after := windows(); after != before {
 			t.Fatalf("windows were %q, now %q", before, after)
 		}
-		now := server.query(t, "display-message", "-p", "-t", "=reload:", "#{window_id} #{window_name}")
+		now := server.query(t, "display-message", "-p", "-t", "=w/reload:", "#{window_id} #{window_name}")
 		if now == old+" api" || !strings.HasSuffix(now, " api") {
 			t.Fatalf("the current window is %q, want a new api", now)
 		}
 		server.waitFor(t, server.paneLabelled(t, "reload", "back"), "hello-again")
 		shell := server.paneLabelled(t, "reload", "shell")
-		if tie := server.query(t, "display-message", "-p", "-t", "=reload:sleep", "#{@weaver_task_of}"); tie != shell {
+		if tie := server.query(t, "display-message", "-p", "-t", "=w/reload:sleep", "#{@weaver_task_of}"); tie != shell {
 			t.Fatalf("the throwaway window is tied to %q, want the new shell %q", tie, shell)
 		}
 	})
 
 	t.Run("leaves the current window current when reloading another", func(t *testing.T) {
-		server.query(t, "select-window", "-t", "=reload:first")
+		server.query(t, "select-window", "-t", "=w/reload:first")
 		if err := server.tmux().ReloadWindow(project, api); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if current := server.query(t, "display-message", "-p", "-t", "=reload:", "#{window_name}"); current != "first" {
+		if current := server.query(t, "display-message", "-p", "-t", "=w/reload:", "#{window_name}"); current != "first" {
 			t.Fatalf("the current window is %q, want first", current)
 		}
 	})
 
 	t.Run("leaves the session's last window as it was", func(t *testing.T) {
-		server.query(t, "select-window", "-t", "=reload:last")
-		server.query(t, "select-window", "-t", "=reload:first")
+		server.query(t, "select-window", "-t", "=w/reload:last")
+		server.query(t, "select-window", "-t", "=w/reload:first")
 		if err := server.tmux().ReloadWindow(project, api); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if last := server.query(t, "display-message", "-p", "-t", "=reload:last", "#{window_last_flag}"); last != "1" {
+		if last := server.query(t, "display-message", "-p", "-t", "=w/reload:last", "#{window_last_flag}"); last != "1" {
 			t.Fatalf("last's last-window flag is %q, want it still the last window", last)
 		}
 	})
 
 	t.Run("restarts a pane without a command or env as a plain shell", func(t *testing.T) {
 		first := plan.Windows()[0]
-		pane := server.query(t, "display-message", "-p", "-t", "=reload:first", "#{pane_id}")
+		pane := server.query(t, "display-message", "-p", "-t", "=w/reload:first", "#{pane_id}")
 		if err := server.tmux().ReloadPane(project, first, 0); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -110,7 +110,7 @@ func TestTmuxReload(t *testing.T) {
 	})
 
 	t.Run("reports a window the session lacks", func(t *testing.T) {
-		server.query(t, "kill-window", "-t", "=reload:last")
+		server.query(t, "kill-window", "-t", "=w/reload:last")
 		if err := server.tmux().ReloadWindow(project, plan.Windows()[2]); !errors.Is(err, domain.ErrWindowNotRunning) {
 			t.Fatalf("got %v, want ErrWindowNotRunning", err)
 		}

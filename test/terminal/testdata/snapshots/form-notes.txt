@@ -1,7 +1,7 @@
  notes
 ╭─ project ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│   name      notes                                                                                                                                            │
-│ › root      /tmp/wvt-XXXXXXXX/notes  ✓                                                                                                                       │
+│ › name      notes                                                                                                                                            │
+│   root      /tmp/wvt-XXXXXXXX/notes ✓                                                                                                                        │
 │   setup     + add                                                                                                                                            │
 │   teardown  + add                                                                                                                                            │
 │   before    + add                                                                                                                                            │

@@ -4,29 +4,29 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/medilies/weaver/internal/session/app"
-	"github.com/medilies/weaver/internal/session/infra"
 )
 
 func newBindCommand(weaver application) *cobra.Command {
-	var name, root string
+	var name, config string
 	cmd := &cobra.Command{
 		Use:   "bind [session]",
-		Short: "Bind a directory, or a running session if given, into a project config through the config form",
-		Long: `weave bind opens the config form on a new project: its name, its
-root (the current directory unless --root says otherwise) and one
-window, to change as editing does in the browser, then saves it.
+		Short: "Register the current directory as a project's root, through the config form",
+		Long: `weave bind opens the config form on the project rooted at the current
+directory: its config, weaver.yml unless --config names another, when it
+has one, else a new project named after the directory, with one window.
+Saving writes the config and lists the directory under projects: in
+settings.yml, first.
 
 Given a running tmux session, the windows and panes start as the session
-has them, and the name as the session's: lay them out by hand, then let
-weaver record them. "." is the session weave runs in. The command in each
-pane's foreground is kept, to be typed but not run: check it, as pipes,
-quotes and variables don't survive. Set the pane to start "command" to
-run it.`,
+has them: lay them out by hand, then let weaver record them. "." is the
+session weave runs in. The command in each pane's foreground is kept, to
+be typed but not run: check it, as pipes, quotes and variables don't
+survive. Set the pane to start "command" to run it. Once saved, the
+session is renamed after the project, so it counts as the project's.`,
 		Args: cobra.MaximumNArgs(1),
 		ValidArgsFunction: func(_ *cobra.Command, args []string, _ string) ([]cobra.Completion, cobra.ShellCompDirective) {
 			if len(args) > 0 {
@@ -36,7 +36,11 @@ run it.`,
 			if err != nil {
 				return nil, cobra.ShellCompDirectiveError
 			}
-			return sessions, cobra.ShellCompDirectiveNoFileComp
+			names := make([]cobra.Completion, 0, len(sessions))
+			for _, session := range sessions {
+				names = append(names, session.Name())
+			}
+			return names, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := weaver.readSettings(); err != nil {
@@ -49,16 +53,7 @@ run it.`,
 			if err != nil {
 				return err
 			}
-			// The shell leaves the ~ of --root=~/dev/shop as typed. As in a
-			// config, ~user isn't expanded, nor taken for a relative path.
-			expanded, err := infra.ExpandHome(root)
-			if err != nil {
-				return err
-			}
-			if strings.HasPrefix(expanded, "~") {
-				return fmt.Errorf("--root %s: only a leading ~/ stands for your home directory", root)
-			}
-			request := app.BindRequest{Name: name, Root: expanded, WorkingDir: dir}
+			request := app.BindRequest{Name: name, Config: config, WorkingDir: dir}
 			if len(args) == 1 {
 				request.Session = args[0]
 			}
@@ -74,8 +69,7 @@ run it.`,
 			return err
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "the project's name (default: the session's, else the root's base name)")
-	cmd.Flags().StringVar(&root, "root", "", "the project's directory (default: the current directory)")
-	_ = cmd.MarkFlagDirname("root")
+	cmd.Flags().StringVar(&name, "name", "", "the project's name (default: its config's, else the directory's)")
+	cmd.Flags().StringVar(&config, "config", "", "the config to write, relative to the directory or absolute (default: weaver.yml)")
 	return cmd
 }

@@ -26,8 +26,8 @@ func NewReload(projects domain.ProjectRegistry, sessions domain.SessionReloader)
 // › back.". A pane the session lacks is refused, pointing to reloading its
 // window; a project that isn't running wraps ErrSessionNotRunning, and one
 // weaver didn't start ErrSessionNotOwned.
-func (uc Reload) HandlePane(name domain.ProjectName, at PaneAt) (string, error) {
-	project, err := uc.projects.FindByName(name)
+func (uc Reload) HandlePane(name domain.ProjectRef, at PaneAt) (string, error) {
+	project, err := uc.projects.Find(name.Root())
 	if err != nil {
 		return "", err
 	}
@@ -56,8 +56,8 @@ func (uc Reload) HandlePane(name domain.ProjectName, at PaneAt) (string, error) 
 // "Restored api.". A project that isn't running wraps
 // ErrSessionNotRunning, and one weaver didn't start ErrSessionNotOwned;
 // the window the browser runs in ErrPaneRunsWeaver.
-func (uc Reload) HandleWindow(name domain.ProjectName, window domain.WindowName) (string, error) {
-	project, err := uc.projects.FindByName(name)
+func (uc Reload) HandleWindow(name domain.ProjectRef, window domain.WindowName) (string, error) {
+	project, err := uc.projects.Find(name.Root())
 	if err != nil {
 		return "", err
 	}

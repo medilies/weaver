@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/medilies/weaver/internal/session/domain"
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
@@ -26,13 +25,10 @@ func stuckTmux(t *testing.T) {
 func TestTmuxGivesUpOnATmuxThatDoesNotAnswer(t *testing.T) {
 	stuckTmux(t)
 	tmux := infra.NewTmux(infra.TmuxOptions{Limit: func() time.Duration { return 100 * time.Millisecond }})
-	name, err := domain.NewProjectName("shop")
-	if err != nil {
-		t.Fatal(err)
-	}
+	name := refAt(t, "/srv/shop", "shop")
 
 	began := time.Now()
-	_, _, err = tmux.Find(name)
+	_, _, err := tmux.Find(name)
 
 	if err == nil || !strings.Contains(err.Error(), "no answer within 100ms") {
 		t.Fatalf("Find on a stuck tmux = %v, want it to say tmux gave no answer in time", err)

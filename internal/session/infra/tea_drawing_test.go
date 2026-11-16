@@ -14,12 +14,12 @@ import (
 // given panes, written as in a config.
 func firstWindow(t *testing.T, panes string) domain.WindowPlan {
 	t.Helper()
-	name, err := domain.NewProjectName("shop")
+	root, err := domain.NewProjectRoot("/srv/shop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	doc := "root: /srv/shop\nwindows:\n  - name: main\n    panes:\n" + panes
-	project, err := decodeProject(name, []byte(doc))
+	doc := "windows:\n  - name: main\n    panes:\n" + panes
+	project, err := decodeProject([]byte(doc), root, "")
 	if err != nil {
 		t.Fatalf("decoding %q: %v", doc, err)
 	}

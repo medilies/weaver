@@ -16,12 +16,22 @@ window instead:
 
 ## Summary
 
-The browser lists the projects, a ● and a green name marking those whose
-session runs, the selected one after a ›. A config added or removed
-beside the others, by hand or by another weave, joins or leaves the list
-as the browser reads again ([`preview-every`](settings.md#preview-every));
-when the selected one goes, the cursor moves to the
-next. Beside them, a summary of the selected one:
+The browser lists the projects, the selected one after a ›:
+
+- first those whose session runs, after a ● and in green, the one last
+  attached or started at the top; then the others in the order
+  [`projects`](settings.md#projects) lists them. When the list reorders,
+  the cursor stays on its project.
+- a project sharing its name with another shows its root beside it.
+- a project whose config is missing or can't be read shows after a red
+  ✗, its details saying why.
+
+A project added to or taken off the settings' list, by hand or by
+another weave, joins or leaves the list as the browser reads again
+([`preview-every`](settings.md#preview-every)); when the selected one
+goes, the cursor moves to the next. The details' title is the project's
+name and its config file. Beside the list, a summary of the selected
+one:
 
 - how many of the configured windows a running session still has, and
   which ones enter restores (a session weaver didn't start is left as it
@@ -154,7 +164,7 @@ move the browser's actions to other keys.
 | e | change its config in the [config form](config-form.md) |
 | E | edit its config raw in the [settings](settings.md#editor)' editor, else $VISUAL, else $EDITOR, else vi (with VS Code, `VISUAL="code --wait"`), keeping its comments; only a valid config is saved: on a mistake, weaver asks whether to discard your changes, and otherwise reopens the editor on what you wrote |
 | x | kill its session, after you confirm |
-| d | delete its config, after you confirm; a running session keeps running |
+| d | unregister it, after you confirm: its config, and a running session, stay |
 | q or esc | quit (esc hides the config, then clears the filter, first) |
 
 After starting, binding, editing, killing, deleting, running a task,

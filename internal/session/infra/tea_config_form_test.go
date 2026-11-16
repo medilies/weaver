@@ -64,17 +64,17 @@ func editing(t *testing.T, name, windows string) *formDriver {
 	if err := os.Mkdir(root, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	projectName, err := domain.NewProjectName(name)
+	projectRoot, err := domain.NewProjectRoot(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := []byte("root: " + root + "\n" + windows)
-	project, err := decodeProject(projectName, config)
+	config := []byte(windows)
+	project, err := decodeProject(config, projectRoot, "")
 	if err != nil {
 		t.Fatalf("decoding %q: %v", config, err)
 	}
-	form, err := NewTeaConfigForm(NewLocalWorkspace(), nil, DefaultSettings()).form(app.ProjectDraft{
-		Name: name, NameStays: true, Root: root, Env: project.Env(), Before: project.Before(),
+	form, err := NewTeaConfigForm(NewLocalWorkspace(), unregistered(t), DefaultSettings()).form(app.ProjectDraft{
+		Name: name, Root: root, Env: project.Env(), Before: project.Before(),
 		Clearing: project.Clearing(), Setup: project.Setup(), Teardown: project.Teardown(),
 		Windows: project.Windows(), Config: config,
 	})
@@ -173,7 +173,7 @@ func (d *formDriver) saved() string {
 	if !d.quit || !d.form.saved {
 		d.fatal("the form didn't save")
 	}
-	config, err := encodeProject(d.form.project)
+	config, err := d.form.encoder.Encoded(d.form.project)
 	if err != nil {
 		d.t.Fatal(err)
 	}
@@ -303,7 +303,7 @@ func TestUndoMovedByTheSettings(t *testing.T) {
 func TestSaveKeyTypingTextIsNotOfferedWhileTyping(t *testing.T) {
 	d := editing(t, "notes", notesConfig)
 	d.form.keymap = newKeymap(formActions, map[string]string{"save": "S"})
-	d.cursorTo("root")
+	d.cursorTo("name")
 	d.keys("enter")
 
 	d.keys("S")
@@ -373,36 +373,67 @@ func TestFormScrollsBackToItsTop(t *testing.T) {
 		d.keys("down")
 	}
 	d.doesntSee("╭─ project")
-	root := regexp.MustCompile(`› +root`)
+	name := regexp.MustCompile(`› +name +notes`)
 	for range 60 {
-		if root.MatchString(d.screen()) {
+		if name.MatchString(d.screen()) {
 			break
 		}
 		d.keys("up")
 	}
 
 	d.sees("╭─ project")
-	d.sees("   name      notes")
+	d.sees("root")
 }
 
-func TestSavingUnderANameDifferingInCaseTypesTheNameAgain(t *testing.T) {
-	root, configs := t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(configs, "Shop.yml"), []byte("root: "+root+"\n"), 0o600); err != nil {
+func TestTheRootCantBeTyped(t *testing.T) {
+	d := editing(t, "notes", notesConfig)
+	for range 60 {
+		if regexp.MustCompile(`› +root`).MatchString(d.screen()) {
+			d.fatal("the cursor reached the root")
+		}
+		d.keys("down")
+	}
+}
+
+// unregistered is a registry with no settings file, writing configs as
+// saving a project not registered yet does.
+func unregistered(t *testing.T) FileProjectRegistry {
+	t.Helper()
+	return NewFileProjectRegistry(filepath.Join(t.TempDir(), "settings.yml"))
+}
+
+func TestSavingAnUnchangedConfigOfARootNotRegisteredYetRegistersIt(t *testing.T) {
+	root := t.TempDir()
+	projectRoot, err := domain.NewProjectRoot(root)
+	if err != nil {
 		t.Fatal(err)
 	}
-	documents := NewFileProjectRegistry(configs)
-	form, err := NewTeaConfigForm(NewLocalWorkspace(), documents, DefaultSettings()).form(app.ProjectDraft{
-		Name: "shop", Root: root,
+	encoder := unregistered(t)
+	stored, err := encoder.Encoded(domain.NewProject(standInName, projectRoot).Named(mustProjectName(t, filepath.Base(root))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	form, err := NewTeaConfigForm(NewLocalWorkspace(), encoder, DefaultSettings()).form(app.ProjectDraft{
+		Name: filepath.Base(root), Root: root, Config: stored, Unregistered: true,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	d := &formDriver{t: t, form: form}
 	d.send(tea.WindowSizeMsg{Width: 160, Height: 45})
-	d.keys("enter", "ctrl+s")
 
-	if d.quit || d.form.reviewing != nil || d.form.focus != projectNameAt {
-		d.fatal("saving went on, rather than back to typing the name")
+	d.keys("ctrl+s")
+
+	if !d.quit || !d.form.saved {
+		d.fatal("the form didn't save the unchanged config")
 	}
-	d.sees("names differing only in case are one project")
+}
+
+func mustProjectName(t *testing.T, raw string) domain.ProjectName {
+	t.Helper()
+	name, err := domain.NewProjectName(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return name
 }

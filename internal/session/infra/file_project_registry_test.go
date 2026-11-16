@@ -1,41 +1,87 @@
 package infra_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/medilies/weaver/internal/session/domain"
 	"github.com/medilies/weaver/internal/session/infra"
 )
 
-// load writes doc as the config of project name in a fresh directory and
-// reads it back through the registry.
+// load writes doc as the config of project name in a fresh directory,
+// lists its root in the settings, naming the project name, and reads it
+// back through the registry. The root is the one doc gives, moved out of
+// the config, else /srv/<name>.
 func load(t *testing.T, name, doc string) (domain.Project, error) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, name+".yml"), []byte(doc), 0o600); err != nil {
-		t.Fatalf("writing fixture: %v", err)
+	root, doc := movedRoot(t, doc)
+	if root == "" {
+		root = "/srv/" + name
 	}
-	projectName, err := domain.NewProjectName(name)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	config := filepath.Join(dir, name+".yml")
+	write(t, config, doc)
+	settings := filepath.Join(dir, "settings.yml")
+	write(t, settings, fmt.Sprintf("projects:\n  - root: %s\n    config: %s\n    name: %s\n", root, config, name))
+	configs := infra.NewFileProjectRegistry(settings)
+	refs, err := configs.Registered()
+	if err != nil || len(refs) != 1 {
+		t.Fatalf("got %v (%v) registered, want %s", refs, err, root)
 	}
-	return infra.NewFileProjectRegistry(dir).FindByName(projectName)
+	return configs.Find(refs[0].Root())
 }
 
-// loadFixture reads testdata/<name>.yml, which must be valid.
+// rootLine is a config's root line.
+var rootLine = regexp.MustCompile(`(?m)^root: *(.*)\n?`)
+
+// movedRoot is the root doc gives, as YAML writes it, and doc without
+// it: its root line taken out, or, in a doc written on one line, as
+// JSON, its root field.
+func movedRoot(t *testing.T, doc string) (string, string) {
+	t.Helper()
+	if found := rootLine.FindStringSubmatch(doc); found != nil {
+		return found[1], strings.Replace(doc, found[0], "", 1)
+	}
+	var node yaml.Node
+	if err := yaml.Unmarshal([]byte(doc), &node); err != nil || len(node.Content) == 0 || node.Content[0].Kind != yaml.MappingNode {
+		return "", doc
+	}
+	fields := node.Content[0]
+	for i := 0; i+1 < len(fields.Content); i += 2 {
+		if fields.Content[i].Value != "root" {
+			continue
+		}
+		root := strconv.Quote(fields.Content[i+1].Value)
+		fields.Content = slices.Delete(fields.Content, i, i+2)
+		moved, err := yaml.Marshal(&node)
+		if err != nil {
+			t.Fatalf("taking the root out of %q: %v", doc, err)
+		}
+		return root, string(moved)
+	}
+	return "", doc
+}
+
+// loadFixture reads testdata/<name>.yml, which must be valid, rooted at
+// ~/dev/<name>.
 func loadFixture(t *testing.T, name string) domain.Project {
 	t.Helper()
 	doc, err := os.ReadFile(filepath.Join("testdata", name+".yml"))
 	if err != nil {
 		t.Fatalf("reading fixture: %v", err)
 	}
-	project, err := load(t, name, string(doc))
+	project, err := load(t, name, "root: ~/dev/"+name+"\n"+string(doc))
 	if err != nil {
 		t.Fatalf("loading fixture: %v", err)
 	}
@@ -85,7 +131,7 @@ func paneNamed(t *testing.T, project domain.Project, window, pane string) domain
 	return domain.Pane{}
 }
 
-func TestFileProjectRegistryFindByName(t *testing.T) {
+func TestFileProjectRegistryFind(t *testing.T) {
 	t.Run("loads a config that only sets the root", func(t *testing.T) {
 		project, err := load(t, "weaver", "root: /home/ilies/dev/weaver\n")
 		if err != nil {
@@ -122,14 +168,25 @@ func TestFileProjectRegistryFindByName(t *testing.T) {
 		}
 	})
 
-	t.Run("reports a not-found error when the file is missing", func(t *testing.T) {
-		name, err := domain.NewProjectName("missing")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+	t.Run("names the project as its config does", func(t *testing.T) {
+		configs, root := registeredShop(t, "name: store\n")
+		if project, err := configs.Find(root); err != nil || project.Name().String() != "store" {
+			t.Fatalf("got %v (%v), want store", project.Name(), err)
 		}
+	})
 
-		_, err = infra.NewFileProjectRegistry(t.TempDir()).FindByName(name)
-		if !errors.Is(err, domain.ErrProjectNotFound) {
+	t.Run("names the project after its root's directory, whatever it holds", func(t *testing.T) {
+		root := filepath.Join(t.TempDir(), "weaver.nvim")
+		write(t, filepath.Join(root, "weaver.yml"), "{}\n")
+		configs, _ := listing(t, "  - "+root+"\n")
+		if project, err := configs.Find(mustRoot(t, root)); err != nil || project.Name().String() != "weaver.nvim" {
+			t.Fatalf("got %v (%v), want weaver.nvim", project.Name(), err)
+		}
+	})
+
+	t.Run("reports a root that isn't registered", func(t *testing.T) {
+		configs := infra.NewFileProjectRegistry(filepath.Join(t.TempDir(), "settings.yml"))
+		if _, err := configs.Find(mustRoot(t, "/srv/missing")); !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
@@ -412,30 +469,22 @@ windows:
 	})
 
 	t.Run("rejects a second document", func(t *testing.T) {
-		_, err := load(t, "twice", "root: /srv/a\n---\nroot: /srv/b\n")
+		_, err := load(t, "twice", "env: {A: a}\n---\nenv: {A: b}\n")
 		if !errors.Is(err, infra.ErrTrailingData) {
 			t.Fatalf("got %v, want ErrTrailingData", err)
 		}
 	})
 
-	t.Run("reports the missing root of an empty config", func(t *testing.T) {
-		_, err := load(t, "empty", "# nothing yet\n")
-		if !errors.Is(err, domain.ErrEmptyProjectRoot) {
-			t.Fatalf("got %v, want ErrEmptyProjectRoot", err)
+	t.Run("loads an empty config", func(t *testing.T) {
+		if _, err := load(t, "empty", "# nothing yet\n"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("rejects a relative root", func(t *testing.T) {
-		_, err := load(t, "relative", "root: dev/relative\n")
-		if !errors.Is(err, domain.ErrRelativeProjectRoot) {
-			t.Fatalf("got %v, want ErrRelativeProjectRoot", err)
-		}
-	})
-
-	t.Run("rejects a bare ~ as the root, which YAML reads as null", func(t *testing.T) {
-		_, err := load(t, "home", "root: ~\n")
-		if !errors.Is(err, infra.ErrUnquotedHome) {
-			t.Fatalf("got %v, want ErrUnquotedHome", err)
+	t.Run("refuses a root written in the config, which the settings hold", func(t *testing.T) {
+		configs, root := registeredShop(t, "root: /srv/shop\n")
+		if _, err := configs.Find(root); !errors.Is(err, infra.ErrRootInConfig) || !errors.Is(err, domain.ErrInvalidConfig) {
+			t.Fatalf("got %v, want ErrRootInConfig", err)
 		}
 	})
 
@@ -547,313 +596,330 @@ windows:
 	})
 }
 
-// writeConfigs writes each file, holding a minimal config, in a fresh
-// directory and returns it.
-func writeConfigs(t *testing.T, files ...string) string {
+// listing writes the settings listing projects, a YAML list's items,
+// in a fresh directory, and returns its registry and the directory.
+func listing(t *testing.T, projects string) (infra.FileProjectRegistry, string) {
 	t.Helper()
 	dir := t.TempDir()
-	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
-			t.Fatalf("writing fixture: %v", err)
-		}
-	}
-	return dir
+	settings := filepath.Join(dir, "settings.yml")
+	write(t, settings, "projects:\n"+projects)
+	return infra.NewFileProjectRegistry(settings), dir
 }
 
-func TestFileProjectRegistryNames(t *testing.T) {
-	t.Run("lists project configs sorted, skipping other files", func(t *testing.T) {
+// described is refs as "name root".
+func described(refs []domain.ProjectRef) []string {
+	var got []string
+	for _, ref := range refs {
+		got = append(got, ref.Name().String()+" "+ref.Root().String())
+	}
+	return got
+}
+
+func TestFileProjectRegistryRegistered(t *testing.T) {
+	t.Run("lists the settings' roots in order, named after their directories", func(t *testing.T) {
+		configs, _ := listing(t, "  - /srv/shop\n  - root: /srv/blog\n  - /srv/api\n")
+		refs, err := configs.Registered()
+		if want := []string{"shop /srv/shop", "blog /srv/blog", "api /srv/api"}; err != nil || !slices.Equal(described(refs), want) {
+			t.Fatalf("got %q (%v), want %q", described(refs), err, want)
+		}
+	})
+
+	t.Run("names a project by its entry, else by its config", func(t *testing.T) {
 		dir := t.TempDir()
-		for _, file := range []string{"shop.yml", "nimbus.yml", "a-b.yml", "a.yml", "weaver.schema.json", "notes.txt", "old.json", "blog.yaml", "show.yml", "list.yaml"} {
-			if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
-				t.Fatalf("writing fixture: %v", err)
+		write(t, filepath.Join(dir, "shop", "weaver.yml"), "name: store\n")
+		write(t, filepath.Join(dir, "blog", "weaver.yml"), "name: journal\n")
+		configs, _ := listing(t, "  - "+filepath.Join(dir, "shop")+"\n  - root: "+filepath.Join(dir, "blog")+"\n    name: notes\n")
+		refs, err := configs.Registered()
+		if err != nil || len(refs) != 2 || refs[0].Name().String() != "store" || refs[1].Name().String() != "notes" {
+			t.Fatalf("got %q (%v), want store and notes", described(refs), err)
+		}
+	})
+
+	t.Run("lets two projects share a name", func(t *testing.T) {
+		configs, _ := listing(t, "  - /srv/a/api\n  - /srv/b/api\n")
+		if refs, err := configs.Registered(); err != nil || len(refs) != 2 {
+			t.Fatalf("got %q (%v), want both apis", described(refs), err)
+		}
+	})
+
+	t.Run("lists a root listed twice once, which it can't find", func(t *testing.T) {
+		configs, _ := listing(t, "  - /srv/shop\n  - root: /srv/shop/\n    config: other.yml\n")
+		refs, err := configs.Registered()
+		if err != nil || len(refs) != 1 {
+			t.Fatalf("got %q (%v), want shop once", described(refs), err)
+		}
+		if _, err := configs.Find(refs[0].Root()); !errors.Is(err, domain.ErrRootListedTwice) {
+			t.Fatalf("got %v, want ErrRootListedTwice", err)
+		}
+	})
+
+	t.Run("skips an entry it can't read, warning once", func(t *testing.T) {
+		configs, _ := listing(t, "  - dev/relative\n  - root: /srv/shop\n    colour: red\n  - /srv/blog\n")
+		var warnings bytes.Buffer
+		configs = configs.WithWarnings(&warnings, "")
+		refs, err := configs.Registered()
+		if err != nil || !slices.Equal(described(refs), []string{"blog /srv/blog"}) {
+			t.Fatalf("got %q (%v), want blog alone", described(refs), err)
+		}
+		_, _ = configs.Registered()
+		if got := warnings.String(); strings.Count(got, "warning: skipping") != 2 ||
+			!strings.Contains(got, "projects[0]") || !strings.Contains(got, "unknown field colour") {
+			t.Fatalf("got warnings %q, want each entry warned about once", got)
+		}
+	})
+
+	t.Run("has no projects without settings", func(t *testing.T) {
+		configs := infra.NewFileProjectRegistry(filepath.Join(t.TempDir(), "settings.yml"))
+		if refs, err := configs.Registered(); err != nil || len(refs) != 0 {
+			t.Fatalf("got %q (%v), want none", described(refs), err)
+		}
+	})
+
+	t.Run("warns once that the former config directory still holds configs", func(t *testing.T) {
+		configs, dir := listing(t, "  - /srv/shop\n")
+		former := filepath.Join(dir, "projects")
+		write(t, filepath.Join(former, "shop.yml"), "root: /srv/shop\n")
+		var warnings bytes.Buffer
+		configs = configs.WithWarnings(&warnings, former)
+		_, _ = configs.Registered()
+		_, _ = configs.Registered()
+		if got := warnings.String(); strings.Count(got, former) != 1 || !strings.Contains(got, "aren't read anymore") {
+			t.Fatalf("got warnings %q, want %s warned about once", got, former)
+		}
+	})
+}
+
+func TestFileProjectRegistryFindsConfigs(t *testing.T) {
+	t.Run("prefers weaver.yml to the other names", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, ".weaver.yml"), "name: hidden\n")
+		write(t, filepath.Join(root, "weaver.yml"), "name: shown\n")
+		configs, _ := listing(t, "  - "+root+"\n")
+		if project, err := configs.Find(mustRoot(t, root)); err != nil || project.Name().String() != "shown" {
+			t.Fatalf("got %v (%v), want weaver.yml's project", project.Name(), err)
+		}
+	})
+
+	t.Run("reads the config an entry names, relative to the root", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "tmux", "dev.yml"), "name: dev\n")
+		configs, _ := listing(t, "  - root: "+root+"\n    config: tmux/dev.yml\n")
+		if project, err := configs.Find(mustRoot(t, root)); err != nil || project.Name().String() != "dev" {
+			t.Fatalf("got %v (%v), want tmux/dev.yml's project", project.Name(), err)
+		}
+	})
+
+	t.Run("reads the config an entry names outside the root", func(t *testing.T) {
+		config := filepath.Join(t.TempDir(), "client-api.yml")
+		write(t, config, "env: {A: 1}\n")
+		configs, _ := listing(t, "  - root: /srv/client-api\n    config: "+config+"\n")
+		if project, err := configs.Find(mustRoot(t, "/srv/client-api")); err != nil || len(project.Env().Vars()) != 1 {
+			t.Fatalf("got %v (%v), want the outside config's project", project.Env().Vars(), err)
+		}
+	})
+
+	t.Run("reports a root without a config", func(t *testing.T) {
+		configs, _ := listing(t, "  - "+t.TempDir()+"\n")
+		refs, _ := configs.Registered()
+		if _, err := configs.Find(refs[0].Root()); !errors.Is(err, domain.ErrMissingConfig) {
+			t.Fatalf("got %v, want ErrMissingConfig", err)
+		}
+	})
+}
+
+func TestFileProjectRegistryRegisters(t *testing.T) {
+	t.Setenv("HOME", "/home/someone")
+
+	t.Run("writes weaver.yml in a new root and lists the root first", func(t *testing.T) {
+		configs, dir := listing(t, "  - /srv/old\n")
+		root := filepath.Join(dir, "shop")
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), mustRoot(t, root)), ""); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "weaver.yml")); err != nil {
+			t.Fatalf("got no weaver.yml: %v", err)
+		}
+		refs, err := configs.Registered()
+		if want := []string{"shop " + root, "old /srv/old"}; err != nil || !slices.Equal(described(refs), want) {
+			t.Fatalf("got %q (%v), want %q", described(refs), err, want)
+		}
+	})
+
+	t.Run("lists a root under the home directory with ~", func(t *testing.T) {
+		configs, dir := listing(t, "")
+		config := filepath.Join(dir, "shop.yml")
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), mustRoot(t, "/home/someone/dev/shop")), config); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := read(t, filepath.Join(dir, "settings.yml")); !strings.Contains(got, "  - root: ~/dev/shop\n    config: "+config+"\n") {
+			t.Fatalf("got settings:\n%s\nwant ~/dev/shop listed with its config", got)
+		}
+	})
+
+	t.Run("keeps the settings' comments and other settings", func(t *testing.T) {
+		configs, dir := listing(t, "  - /srv/old # the old one\n")
+		settings := filepath.Join(dir, "settings.yml")
+		write(t, settings, "# mine\npopup: true\nprojects:\n  - /srv/old # the old one\n")
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), mustRoot(t, filepath.Join(dir, "shop"))), ""); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		got := read(t, settings)
+		for _, kept := range []string{"# mine", "popup: true", "# the old one"} {
+			if !strings.Contains(got, kept) {
+				t.Fatalf("got settings:\n%s\nwant %q kept", got, kept)
 			}
 		}
-		if err := os.Mkdir(filepath.Join(dir, "folder.yml"), 0o755); err != nil {
-			t.Fatalf("creating fixture: %v", err)
-		}
+	})
 
-		names, err := infra.NewFileProjectRegistry(dir).Names()
-		if err != nil {
+	t.Run("writes a registered project to its config, listing it once", func(t *testing.T) {
+		configs, root := registeredShop(t, "env: {A: 1}\n")
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), root), ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		var got []string
-		for _, name := range names {
-			got = append(got, name.String())
+		if got := read(t, filepath.Join(root.String(), "weaver.yml")); strings.Contains(got, "env") {
+			t.Fatalf("got %q, want the config replaced", got)
 		}
-		if want := []string{"a", "a-b", "blog", "nimbus", "shop"}; !slices.Equal(got, want) {
-			t.Fatalf("got %q, want %q", got, want)
+		if refs, _ := configs.Registered(); len(refs) != 1 {
+			t.Fatalf("got %q, want shop listed once", described(refs))
 		}
 	})
 
-	t.Run("warns about a config skipped for its name", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml", "edit.yml", "my.shop.yml", ".#shop.yml")
-		var warnings strings.Builder
-
-		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
+	t.Run("points a registered root at the config given", func(t *testing.T) {
+		configs, root := registeredShop(t, "{}\n")
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), root), "tmux/dev.yml"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		want := "warning: skipping " + filepath.Join(dir, "edit.yml") +
-			": project name is reserved for a weave command: \"edit\"; rename it to register it\n" +
-			"warning: skipping " + filepath.Join(dir, "my.shop.yml") +
-			": " + domain.ErrInvalidProjectName.Error() + "; rename it to register it\n"
-		if got := warnings.String(); got != want {
-			t.Fatalf("got %q, want %q", got, want)
+		document, err := configs.Document(root)
+		if want := filepath.Join(root.String(), "tmux", "dev.yml"); err != nil || document.File != want {
+			t.Fatalf("got %s (%v), want %s", document.File, err, want)
 		}
 	})
 
-	t.Run("skips a project with both a .yml and a .yaml config, warning about both", func(t *testing.T) {
-		dir := writeConfigs(t, "nimbus.yml", "shop.yml", "shop.yaml")
-		var warnings strings.Builder
-
-		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
-		if err != nil {
+	t.Run("names a project in its config only when named otherwise than its root", func(t *testing.T) {
+		configs, root := registeredShop(t, "{}\n")
+		if err := configs.Save(domain.NewProject(mustName(t, "store"), root), ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		want := "warning: skipping " + filepath.Join(dir, "shop.yaml") + " and " + filepath.Join(dir, "shop.yml") +
-			": two configs of one project; remove one to register it\n"
-		if got := warnings.String(); got != want || len(names) != 1 || names[0].String() != "nimbus" {
-			t.Fatalf("got %v and %q, want only nimbus and %q", names, got, want)
+		if got := read(t, filepath.Join(root.String(), "weaver.yml")); !strings.Contains(got, "name: store\n") {
+			t.Fatalf("got %q, want the name written", got)
 		}
-	})
-
-	t.Run("skips a project with configs whose names differ only in case, warning about both", func(t *testing.T) {
-		dir := writeConfigs(t, "nimbus.yml", "shop.yml")
-		caseSensitive(t, dir)
-		writeConfig(t, dir, "Shop.yml")
-		var warnings strings.Builder
-
-		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
-		if err != nil {
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), root), ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		want := "warning: skipping " + filepath.Join(dir, "Shop.yml") + " and " + filepath.Join(dir, "shop.yml") +
-			": two configs of one project; remove one to register it\n"
-		if got := warnings.String(); got != want || len(names) != 1 || names[0].String() != "nimbus" {
-			t.Fatalf("got %v and %q, want only nimbus and %q", names, got, want)
+		if got := read(t, filepath.Join(root.String(), "weaver.yml")); strings.Contains(got, "name:") {
+			t.Fatalf("got %q, want no name", got)
 		}
 	})
 
-	t.Run("lists a name once when a config beside it has blank space around it", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml", "shop .yml")
-
-		names, err := infra.NewFileProjectRegistry(dir).Names()
-		if err != nil {
+	t.Run("keeps the config's name when the settings name the project", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "weaver.yml"), "name: theirs\n")
+		configs, _ := listing(t, "  - root: "+root+"\n    name: mine\n")
+		project, err := configs.Find(mustRoot(t, root))
+		if err != nil || project.Name().String() != "mine" {
+			t.Fatalf("got %v (%v), want mine", project.Name(), err)
+		}
+		if err := configs.Save(project, ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		if len(names) != 1 || names[0].String() != "shop" {
-			t.Fatalf("got %v, want only shop", names)
-		}
-	})
-
-	t.Run("warns about each config with blank space around its name", func(t *testing.T) {
-		dir := writeConfigs(t, "shop .yml", " shop.yml", "shop\t.yml")
-		var warnings strings.Builder
-
-		if _, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names(); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if got := strings.Count(warnings.String(), "blank space around its name"); got != 3 {
-			t.Fatalf("got %q, want a warning for each of the three files", warnings.String())
-		}
-	})
-
-	t.Run("warns once per skipped config", func(t *testing.T) {
-		dir := writeConfigs(t, "edit.yml")
-		var warnings strings.Builder
-		configs := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings)
-
-		for range 2 {
-			if _, err := configs.Names(); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		}
-
-		if got := strings.Count(warnings.String(), "warning:"); got != 1 {
-			t.Fatalf("got %d warnings, want 1", got)
-		}
-	})
-
-	t.Run("has no projects when the directory is missing", func(t *testing.T) {
-		names, err := infra.NewFileProjectRegistry(filepath.Join(t.TempDir(), "missing")).Names()
-		if err != nil || len(names) != 0 {
-			t.Fatalf("got %v (%v), want no projects", names, err)
+		if got := read(t, filepath.Join(root, "weaver.yml")); !strings.Contains(got, "name: theirs\n") {
+			t.Fatalf("got %q, want the config's name kept", got)
 		}
 	})
 }
 
-func TestFileProjectRegistryYAMLExtension(t *testing.T) {
-	name, _ := domain.NewProjectName("shop")
-
-	t.Run("reads a config ending in .yaml", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yaml")
-
-		project, err := infra.NewFileProjectRegistry(dir).FindByName(name)
-		if err != nil {
+func TestFileProjectRegistryEditsTheSettings(t *testing.T) {
+	t.Run("fills an empty projects key, rather than adding another", func(t *testing.T) {
+		dir := t.TempDir()
+		settings := filepath.Join(dir, "settings.yml")
+		write(t, settings, "projects:\n")
+		configs := infra.NewFileProjectRegistry(settings)
+		root := filepath.Join(dir, "shop")
+		if err := configs.Save(domain.NewProject(mustName(t, "shop"), mustRoot(t, root)), ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := project.Root().String(); got != "/srv" {
-			t.Fatalf("got root %q, want /srv", got)
+		if got := read(t, settings); strings.Count(got, "projects:") != 1 {
+			t.Fatalf("got settings:\n%s\nwant one projects key", got)
+		}
+		if _, err := infra.LoadSettings(dir, io.Discard); err != nil {
+			t.Fatalf("the settings no longer load: %v", err)
 		}
 	})
 
-	t.Run("names the .yaml file as the config's document", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yaml")
-
-		document, err := infra.NewFileProjectRegistry(dir).Document(name)
-		if err != nil {
+	t.Run("renames a project its entry names in the entry", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "weaver.yml"), "name: theirs\n")
+		configs, dir := listing(t, "  - root: "+root+"\n    name: mine\n")
+		if err := configs.Save(domain.NewProject(mustName(t, "ours"), mustRoot(t, root)), ""); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if document.File != "shop.yaml" {
-			t.Fatalf("got %q, want shop.yaml", document.File)
+		if refs, err := configs.Registered(); err != nil || len(refs) != 1 || refs[0].Name().String() != "ours" {
+			t.Fatalf("got %q (%v), want ours", described(refs), err)
+		}
+		if got := read(t, filepath.Join(root, "weaver.yml")); !strings.Contains(got, "name: theirs\n") {
+			t.Fatalf("got %q, want the config's name kept", got)
+		}
+		if got := read(t, filepath.Join(dir, "settings.yml")); !strings.Contains(got, "name: ours") {
+			t.Fatalf("got settings:\n%s\nwant name: ours", got)
 		}
 	})
 
-	t.Run("saves over a .yaml config rather than beside it", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yaml")
-		configs := infra.NewFileProjectRegistry(dir)
-		project, err := configs.FindByName(name)
-		if err != nil {
+	t.Run("carries the config's name to the config a named project is pointed at", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "weaver.yml"), "name: theirs\n")
+		configs, _ := listing(t, "  - root: "+root+"\n    name: mine\n")
+		if err := configs.Save(domain.NewProject(mustName(t, "mine"), mustRoot(t, root)), "tmux/dev.yml"); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
+		if got := read(t, filepath.Join(root, "tmux", "dev.yml")); !strings.Contains(got, "name: theirs\n") {
+			t.Fatalf("got %q, want the config's name carried over", got)
+		}
+	})
 
-		if err := configs.Save(project); err != nil {
+	t.Run("keeps the settings file's permissions", func(t *testing.T) {
+		configs, dir := listing(t, "  - /srv/old\n")
+		settings := filepath.Join(dir, "settings.yml")
+		if err := os.Chmod(settings, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := configs.Delete(mustRoot(t, "/srv/old")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-
-		if _, err := os.Stat(filepath.Join(dir, "shop.yml")); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("got %v, want no shop.yml beside shop.yaml", err)
-		}
-	})
-
-	t.Run("deletes a .yaml config", func(t *testing.T) {
-		configs := infra.NewFileProjectRegistry(writeConfigs(t, "shop.yaml"))
-
-		if err := configs.Delete(name); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, err := configs.FindByName(name); !isNotFound(err) {
-			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
-		}
-	})
-
-	t.Run("refuses a project with both a .yml and a .yaml config, naming both", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml", "shop.yaml")
-
-		_, err := infra.NewFileProjectRegistry(dir).FindByName(name)
-
-		if err == nil || isNotFound(err) || !strings.Contains(err.Error(), filepath.Join(dir, "shop.yaml")) {
-			t.Fatalf("got %v, want an error naming both configs", err)
-		}
-	})
-}
-
-// writeConfig writes a config of root /srv in dir, under file.
-func writeConfig(t *testing.T, dir, file string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
-		t.Fatalf("writing fixture: %v", err)
-	}
-}
-
-// caseSensitive skips the test where dir's filesystem ignores case, as
-// macOS's does by default, and can't hold names differing only in case.
-func caseSensitive(t *testing.T, dir string) {
-	t.Helper()
-	probe := filepath.Join(dir, "case-probe")
-	writeConfig(t, dir, "case-probe")
-	defer func() { _ = os.Remove(probe) }()
-	if _, err := os.Stat(filepath.Join(dir, "CASE-PROBE")); err == nil {
-		t.Skip("the filesystem ignores case")
-	}
-}
-
-func TestFileProjectRegistryNamesDifferingInCase(t *testing.T) {
-	shop, _ := domain.NewProjectName("shop")
-
-	t.Run("doesn't find a project whose config's name differs in case", func(t *testing.T) {
-		dir := writeConfigs(t, "Shop.yml")
-
-		_, err := infra.NewFileProjectRegistry(dir).FindByName(shop)
-
-		if !isNotFound(err) || !errors.Is(err, domain.ErrNameDiffersInCase) {
-			t.Fatalf("got %v, want ErrProjectNotFound and ErrNameDiffersInCase", err)
-		}
-	})
-
-	t.Run("refuses a project with a config whose name differs in case beside its own, naming both", func(t *testing.T) {
-		dir := writeConfigs(t, "shop.yml")
-		caseSensitive(t, dir)
-		writeConfig(t, dir, "Shop.yml")
-
-		_, err := infra.NewFileProjectRegistry(dir).FindByName(shop)
-
-		if err == nil || isNotFound(err) || !strings.Contains(err.Error(), filepath.Join(dir, "Shop.yml")) {
-			t.Fatalf("got %v, want an error naming both configs", err)
-		}
-	})
-
-	t.Run("refuses to save a project whose name differs in case from a config's", func(t *testing.T) {
-		dir := writeConfigs(t, "Shop.yml")
-		root, _ := domain.NewProjectRoot("/srv/other")
-
-		err := infra.NewFileProjectRegistry(dir).Save(domain.NewProject(shop, root))
-
-		content, _ := os.ReadFile(filepath.Join(dir, "Shop.yml"))
-		if !errors.Is(err, domain.ErrNameDiffersInCase) || string(content) != "root: /srv\n" {
-			t.Fatalf("got %v and Shop.yml %q, want ErrNameDiffersInCase and Shop.yml kept", err, content)
+		if info, err := os.Stat(settings); err != nil || info.Mode().Perm() != 0o644 {
+			t.Fatalf("got %v (%v), want 0644 kept", info.Mode().Perm(), err)
 		}
 	})
 }
 
 func TestFileProjectRegistryDelete(t *testing.T) {
-	name, _ := domain.NewProjectName("shop")
-
-	t.Run("removes the project's config", func(t *testing.T) {
-		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/shop\n"), 0o600); err != nil {
-			t.Fatalf("writing fixture: %v", err)
-		}
-		configs := infra.NewFileProjectRegistry(dir)
-		if err := configs.Delete(name); err != nil {
+	t.Run("unlists the root, keeping its config", func(t *testing.T) {
+		configs, root := registeredShop(t, "{}\n")
+		if err := configs.Delete(root); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, err := configs.FindByName(name); !isNotFound(err) {
-			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
+		if refs, err := configs.Registered(); err != nil || len(refs) != 0 {
+			t.Fatalf("got %q (%v), want nothing registered", described(refs), err)
+		}
+		if _, err := os.Stat(filepath.Join(root.String(), "weaver.yml")); err != nil {
+			t.Fatalf("got the config gone: %v", err)
 		}
 	})
 
-	t.Run("removes a link to the config, keeping the file it points to", func(t *testing.T) {
-		dir := t.TempDir()
-		target := filepath.Join(t.TempDir(), "dotfiles-shop.yml")
-		if err := os.WriteFile(target, []byte("root: /srv/shop\n"), 0o600); err != nil {
-			t.Fatalf("writing fixture: %v", err)
-		}
-		if err := os.Symlink(target, filepath.Join(dir, "shop.yml")); err != nil {
-			t.Fatalf("linking fixture: %v", err)
-		}
-		configs := infra.NewFileProjectRegistry(dir)
-
-		if err := configs.Delete(name); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if _, err := configs.FindByName(name); !isNotFound(err) {
-			t.Fatalf("got %v, want ErrProjectNotFound once deleted", err)
-		}
-		if _, err := os.Stat(target); err != nil {
-			t.Fatalf("got %v, want the link's target kept", err)
-		}
-	})
-
-	t.Run("reports a project that isn't registered", func(t *testing.T) {
-		if err := infra.NewFileProjectRegistry(t.TempDir()).Delete(name); !isNotFound(err) {
+	t.Run("reports a root that isn't registered", func(t *testing.T) {
+		configs, _ := registeredShop(t, "{}\n")
+		if err := configs.Delete(mustRoot(t, "/srv/blog")); !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
+}
+
+func mustName(t *testing.T, raw string) domain.ProjectName {
+	t.Helper()
+	name, err := domain.NewProjectName(raw)
+	if err != nil {
+		t.Fatalf("NewProjectName(%q): %v", raw, err)
+	}
+	return name
 }
 
 // lines is the commands' text, in order.

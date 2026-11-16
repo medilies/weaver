@@ -7,14 +7,14 @@ import "slices"
 // its commands to run first after its project's and window's. Starting a
 // session follows it without decisions.
 type SessionPlan struct {
-	name    ProjectName
+	project ProjectRef
 	windows []WindowPlan
 	focused int
 }
 
-// Name is the tmux session name.
-func (p SessionPlan) Name() ProjectName {
-	return p.name
+// Project is the project the session is started for.
+func (p SessionPlan) Project() ProjectRef {
+	return p.project
 }
 
 // Windows are created in order.
@@ -142,7 +142,7 @@ func (p Project) Plan() SessionPlan {
 	for _, window := range p.windows {
 		windows = append(windows, p.planWindow(window))
 	}
-	return SessionPlan{name: p.name, windows: windows, focused: p.FocusedWindow()}
+	return SessionPlan{project: p.Ref(), windows: windows, focused: p.FocusedWindow()}
 }
 
 func (p Project) planWindow(window Window) WindowPlan {

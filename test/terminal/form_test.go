@@ -6,41 +6,32 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
-
-	tuitest "github.com/microsoft/tui-test/bindings/go"
 )
 
-// TestBindingUnderRegisteredNameAsksToReplace: `blog` started:
-// `weave bind blog`, Ctrl-S, `n`, Ctrl-U, `journal`, Enter, Ctrl-S, `y`.
+// TestBindingStartsFromASession: `blog` started; in a new directory,
+// `journal`: `weave bind w/blog`, Ctrl-S, `y`.
 //
-// Saving under `blog` asks `Replace blog's registered config with this?`
-// under the diff, once; `n` goes back to the form typing the name, under
-// it `blog is already registered`. Saving as `journal` asks
-// `Save the new project's config?`. `journal.yml` has no window but
-// `write`, and `focus: true` on `preview`.
-func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
+// The form names the project `journal`, after the directory. Saving asks
+// `Save the new project's config?`. `journal/weaver.yml` has no window but
+// `write`, and `focus: true` on `preview`; the settings list `journal`
+// first; `w/blog`, which weave started for `blog`, keeps its name.
+func TestBindingStartsFromASession(t *testing.T) {
 	h := start(t)
 	h.started("blog")
+	h.mkdir("journal")
 	h.promptIn("term")
-	h.typed("clear; weave bind blog")
+	h.typed("clear; cd " + filepath.Join(h.dir, "journal") + " && weave bind w/blog")
 	h.sees("↑↓ move")
+	h.sees("journal")
 
 	h.keys("Ctrl+s")
-
-	h.sees("Replace blog's registered config with this?")
-	if n, _ := h.screen.GetByText("Replace blog's", tuitest.TextSelectorOptions{}).Count(); n != 1 {
-		h.fatal("the question is asked %d times, not once", n)
-	}
-	h.keys("n")
-	h.sees("blog is already registered")
-	h.keys("Ctrl+u")
-	h.types("journal")
-	h.keys("Enter", "Ctrl+s")
 	h.sees("Save the new project's config?")
 	h.keys("y")
-	h.eventually("journal.yml is written", func() bool {
-		_, err := os.Stat(filepath.Join(h.dir, "cfg/weaver/projects/journal.yml"))
+
+	h.eventually("journal's weaver.yml is written", func() bool {
+		_, err := os.Stat(filepath.Join(h.dir, "journal", "weaver.yml"))
 		return err == nil
 	})
 	config := h.config("journal")
@@ -49,6 +40,13 @@ func TestBindingUnderRegisteredNameAsksToReplace(t *testing.T) {
 	}
 	if focused := regexp.MustCompile(`- name: (\w+)\s+focus: true`).FindStringSubmatch(config); focused == nil || focused[1] != "preview" {
 		t.Fatalf("the focused pane isn't preview:\n%s", config)
+	}
+	settings, err := os.ReadFile(filepath.Join(h.dir, "cfg/weaver/settings.yml"))
+	if journal, blog := strings.Index(string(settings), "/journal"), strings.Index(string(settings), "/blog"); err != nil || journal < 0 || journal > blog {
+		t.Fatalf("journal isn't listed first:\n%s", settings)
+	}
+	if !h.running("w/blog") {
+		t.Fatal("w/blog was renamed")
 	}
 }
 

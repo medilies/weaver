@@ -2,6 +2,7 @@ package infra
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -24,15 +25,18 @@ var (
 	// ErrUnknownSplitTarget is returned when "split.of" names no pane of
 	// the window.
 	ErrUnknownSplitTarget = errors.New("split.of names no pane of this window")
-	// ErrUnquotedHome is returned for a root or dir written as a bare ~,
-	// which YAML reads as null rather than as the home directory.
+	// ErrUnquotedHome is returned for a dir written as a bare ~, which
+	// YAML reads as null rather than as the home directory.
 	ErrUnquotedHome = errors.New(`a bare ~ is YAML's null: write "~" in quotes for the home directory`)
+	// ErrRootInConfig is returned for a config holding a root, which the
+	// settings now hold.
+	ErrRootInConfig = errors.New(`root: a config no longer holds its root: remove it, and list the root under projects: in settings.yml`)
 )
 
 // projectFile is the on-disk shape of a project config, e.g.
-// ~/.config/weaver/projects/<name>.yml or .yaml; docs/config.md documents it.
+// <root>/weaver.yml; docs/config.md documents it.
 type projectFile struct {
-	Root     string            `yaml:"root"`
+	Name     string            `yaml:"name,omitempty"`
 	Env      map[string]string `yaml:"env,omitempty"`
 	Setup    []string          `yaml:"setup,omitempty"`
 	Teardown []string          `yaml:"teardown,omitempty"`
@@ -111,9 +115,26 @@ type splitFile struct {
 	Size      string `yaml:"size,omitempty"`
 }
 
-// schemaHeader points YAML editors (e.g. VS Code's YAML extension) at the
-// schema saved next to the configs.
-const schemaHeader = "# yaml-language-server: $schema=./" + schemaFileName + "\n"
+// schemaHeaderPrefix starts the header pointing YAML editors (e.g. VS
+// Code's YAML extension) at the config's JSON Schema.
+const schemaHeaderPrefix = "# yaml-language-server: $schema="
+
+// schemaHeader is the header pointing at the schema at url.
+func schemaHeader(url string) string {
+	return schemaHeaderPrefix + url + "\n"
+}
+
+// withoutSchemaHeader is raw without its schema header, if it starts with
+// one.
+func withoutSchemaHeader(raw []byte) []byte {
+	if !bytes.HasPrefix(raw, []byte(schemaHeaderPrefix)) {
+		return raw
+	}
+	if _, rest, ok := bytes.Cut(raw, []byte("\n")); ok {
+		return rest
+	}
+	return nil
+}
 
 // fileTypes names the file shapes in YAML's errors as the config does,
 // e.g. "field comand not found in type pane".
@@ -122,13 +143,17 @@ var fileTypes = strings.NewReplacer(
 	"infra.paneFile", "pane", "infra.splitFile", "split", "infra.gridFile", "grid", "infra.taskFile", "task",
 )
 
-// decodeProject strictly parses a config: unknown fields (usually typos)
-// and a second document are errors, not silently ignored.
-func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) {
+// decodeProject strictly parses a config, the project rooted at root:
+// unknown fields (usually typos) and a second document are errors, not
+// silently ignored. The project is named named, unless empty, else as the
+// config names it, else after its root's directory.
+func decodeProject(raw []byte, root domain.ProjectRoot, named string) (domain.Project, error) {
+	if err := rootInConfig(raw); err != nil {
+		return domain.Project{}, err
+	}
 	var file projectFile
 	decoder := yaml.NewDecoder(bytes.NewReader(raw))
 	decoder.KnownFields(true)
-	// An empty document leaves the root empty, which toProject reports.
 	if err := decoder.Decode(&file); err != nil && !errors.Is(err, io.EOF) {
 		return domain.Project{}, errors.New(fileTypes.Replace(err.Error()))
 	}
@@ -141,7 +166,27 @@ func decodeProject(name domain.ProjectName, raw []byte) (domain.Project, error) 
 	if err := nullGrid(raw); err != nil {
 		return domain.Project{}, err
 	}
-	return file.toProject(name)
+	return file.toProject(root, named)
+}
+
+// rootInConfig reports a root written in raw.
+func rootInConfig(raw []byte) error {
+	var rooted struct {
+		Root yaml.Node `yaml:"root"`
+	}
+	if err := yaml.Unmarshal(raw, &rooted); err == nil && rooted.Root.Kind != 0 {
+		return ErrRootInConfig
+	}
+	return nil
+}
+
+// configName is the name raw gives its project, if it can be read.
+func configName(raw []byte) string {
+	var named struct {
+		Name string `yaml:"name"`
+	}
+	_ = yaml.Unmarshal(raw, &named)
+	return named.Name
 }
 
 // nullGrid reports a window's grid written empty or as null in raw, which
@@ -167,7 +212,6 @@ func nullGrid(raw []byte) error {
 // homeFile holds the nodes of the paths in a config, which a bare ~ would
 // quietly leave empty: the root, not the home directory.
 type homeFile struct {
-	Root    yaml.Node `yaml:"root"`
 	Windows []struct {
 		Dir   yaml.Node `yaml:"dir"`
 		Panes []struct {
@@ -176,15 +220,12 @@ type homeFile struct {
 	} `yaml:"windows"`
 }
 
-// bareHome reports a root, window dir or pane dir written as a bare ~ in raw, the
-// config f was decoded from.
+// bareHome reports a window dir or pane dir written as a bare ~ in raw,
+// the config f was decoded from.
 func (f projectFile) bareHome(raw []byte) error {
 	var paths homeFile
 	if err := yaml.Unmarshal(raw, &paths); err != nil {
 		return nil // decodeProject already read raw strictly
-	}
-	if isBareHome(paths.Root) {
-		return fmt.Errorf("root: %w", ErrUnquotedHome)
 	}
 	for i, window := range paths.Windows {
 		if isBareHome(window.Dir) {
@@ -204,10 +245,10 @@ func isBareHome(node yaml.Node) bool {
 	return node.Kind == yaml.ScalarNode && node.Tag == "!!null" && node.Value == "~"
 }
 
-func (f projectFile) toProject(name domain.ProjectName) (domain.Project, error) {
-	root, err := parseRoot(f.Root)
+func (f projectFile) toProject(root domain.ProjectRoot, named string) (domain.Project, error) {
+	name, err := domain.NewProjectName(cmp.Or(named, f.Name, filepath.Base(root.String())))
 	if err != nil {
-		return domain.Project{}, err
+		return domain.Project{}, fmt.Errorf("name: %w", err)
 	}
 	env, err := domain.NewEnv(f.Env)
 	if err != nil {
@@ -507,7 +548,7 @@ func (s splitFile) toSplit(index int, siblings []paneFile) (domain.Split, error)
 // schema header first.
 func hasComments(raw []byte) (bool, error) {
 	var doc yaml.Node
-	if err := yaml.Unmarshal(bytes.TrimPrefix(raw, []byte(schemaHeader)), &doc); err != nil {
+	if err := yaml.Unmarshal(withoutSchemaHeader(raw), &doc); err != nil {
 		return false, err
 	}
 	return commented(&doc), nil
@@ -526,11 +567,12 @@ func commented(node *yaml.Node) bool {
 // window's panes in creation order and no splits, "split.of" only when it
 // isn't the previous pane, a pane's dir only when it isn't its window's,
 // directories under the root relative to it, the home directory as "~",
-// and pointing to the schema saved next to it with a header line.
-func encodeProject(project domain.Project) ([]byte, error) {
+// named name unless empty, and pointing to the schema at schemaURL with a
+// header line, alone when there is nothing else to write.
+func encodeProject(project domain.Project, name, schemaURL string) ([]byte, error) {
 	root := project.Root()
 	file := projectFile{
-		Root:     contractHome(root.String()),
+		Name:     name,
 		Env:      envMap(project.Env()),
 		Setup:    lines(project.Setup()),
 		Teardown: lines(project.Teardown()),
@@ -545,7 +587,7 @@ func encodeProject(project domain.Project) ([]byte, error) {
 	}
 
 	var doc bytes.Buffer
-	doc.WriteString(schemaHeader)
+	doc.WriteString(schemaHeader(schemaURL))
 	encoder := yaml.NewEncoder(&doc)
 	encoder.SetIndent(2)
 	if err := encoder.Encode(file); err != nil {
@@ -554,7 +596,8 @@ func encodeProject(project domain.Project) ([]byte, error) {
 	if err := encoder.Close(); err != nil {
 		return nil, err
 	}
-	return doc.Bytes(), nil
+	// A project with nothing to write is its header alone, not "{}".
+	return bytes.TrimSuffix(doc.Bytes(), []byte("{}\n")), nil
 }
 
 func windowFileOf(root domain.ProjectRoot, window domain.Window) windowFile {

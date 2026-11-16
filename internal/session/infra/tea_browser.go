@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -58,7 +59,7 @@ type browserEnded struct {
 // action.
 type reshown struct {
 	projects []app.ProjectOverview
-	selected domain.ProjectName
+	selected domain.ProjectRoot
 	notice   app.Notice
 }
 
@@ -74,7 +75,7 @@ type doing struct{ text string }
 
 // browserPlace is what the browser had selected when it last ended.
 type browserPlace struct {
-	project            domain.ProjectName
+	project            domain.ProjectRoot
 	window, pane, task int
 	tasking            bool
 	filter             string
@@ -146,7 +147,7 @@ func (h *HeldOutput) release() {
 
 // Browse implements app.ProjectBrowser. Once the user quit while an
 // action ran, it is ErrAborted at once.
-func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) (app.Choice, error) {
+func (b TeaBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectRoot, notice app.Notice, live app.LiveSessions) (app.Choice, error) {
 	if b.kept.abandoned {
 		return app.Choice{}, app.ErrAborted
 	}
@@ -202,15 +203,15 @@ func (b TeaBrowser) Leave() error {
 }
 
 // show puts the browser on screen.
-func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, live app.LiveSessions) {
+func (b TeaBrowser) show(projects []app.ProjectOverview, selected domain.ProjectRoot, notice app.Notice, live app.LiveSessions) {
 	chosen := make(chan app.Choice, 1) // the browser waits after a choice, so one at most is unread
 	model := browser{projects: projects, notice: notice, theme: b.theme, every: b.every, small: b.small, mouse: b.mouse, keymap: b.keys, live: live, drawings: b.kept.drawings, chosen: chosen, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot))}
 	model.filter, model.config = b.kept.filter, b.kept.config
-	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Name() == selected }) {
+	if !slices.ContainsFunc(model.shown(), func(p app.ProjectOverview) bool { return p.Root() == selected }) {
 		model.filter = ""
 	}
 	for i, project := range model.shown() {
-		if project.Name() == selected {
+		if project.Root() == selected {
 			model.cursor = i
 		}
 	}
@@ -242,7 +243,7 @@ func (b TeaBrowser) ended(end browserEnded) error {
 	last := end.final.(browser)
 	b.kept.drawings, b.kept.filter, b.kept.config, b.kept.abandoned = last.drawings, last.filter, last.config, last.abandoned
 	if shown := last.shown(); len(shown) > 0 {
-		*b.kept = browserPlace{project: shown[last.cursor].Name(), window: last.window, pane: last.pane,
+		*b.kept = browserPlace{project: shown[last.cursor].Root(), window: last.window, pane: last.pane,
 			task: last.task, tasking: last.tasking, filter: last.filter, config: last.config,
 			drawings: last.drawings, abandoned: last.abandoned}
 	}
@@ -336,10 +337,10 @@ func (m browser) filtered(filter string) browser {
 		m.filter = filter
 		return m
 	}
-	selected := shown[m.cursor].Name()
+	selected := shown[m.cursor].Root()
 	m.filter, m.cursor = filter, 0
 	for i, project := range m.shown() {
-		if project.Name() == selected {
+		if project.Root() == selected {
 			m.cursor = i
 		}
 	}
@@ -349,8 +350,8 @@ func (m browser) filtered(filter string) browser {
 // reselected is m drawing the first window again, its first pane and
 // first task selected and the cursor out of the task list, unless the
 // project selected before is still.
-func (m browser) reselected(before domain.ProjectName) browser {
-	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Name() != before {
+func (m browser) reselected(before domain.ProjectRoot) browser {
+	if shown := m.shown(); len(shown) == 0 || shown[m.cursor].Root() != before {
 		m.window, m.pane, m.task, m.tasking = 0, 0, 0, false
 	}
 	return m
@@ -460,13 +461,13 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next.top = next.firstShown(height)
 	before, beforeWindow, wanted := m.previewKey()
 	after, afterWindow, wants := next.previewKey()
-	if wants != wanted || wants && (before.Name() != after.Name() || beforeWindow != afterWindow) {
+	if wants != wanted || wants && (before.Root() != after.Root() || beforeWindow != afterWindow) {
 		next.hasPreview = false // kept, it would bring back what was selected in it
 		var fetch tea.Cmd
 		next, fetch = next.fetch()
 		cmd = tea.Batch(cmd, fetch)
 	}
-	if !next.refreshStarted || next.selectedName() != m.selectedName() {
+	if !next.refreshStarted || next.selectedRoot() != m.selectedRoot() {
 		next.refreshStarted = true // the first ask, once the browser shows
 		var fetch tea.Cmd
 		next, fetch = next.refresh()
@@ -475,12 +476,12 @@ func (m browser) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return next, cmd
 }
 
-// selectedName is the selected project's name, if one is shown.
-func (m browser) selectedName() domain.ProjectName {
+// selectedRoot is the selected project's root, if one is shown.
+func (m browser) selectedRoot() domain.ProjectRoot {
 	if shown := m.shown(); len(shown) > 0 {
-		return shown[m.cursor].Name()
+		return shown[m.cursor].Root()
 	}
-	return domain.ProjectName{}
+	return domain.ProjectRoot{}
 }
 
 func (m browser) update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -558,7 +559,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		}
 		window := windows[m.drawn(windows)]
 		pane, _ := m.selectedInConfig(len(window.Panes()))
-		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Name(),
+		m.choice = app.Choice{Action: app.ActionRerun, Project: m.shown()[m.cursor].Ref(),
 			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
 		return m, nil
 	case "i":
@@ -571,7 +572,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		if !inConfig {
 			break
 		}
-		m.choice = app.Choice{Action: app.ActionInterruptPane, Project: m.shown()[m.cursor].Name(),
+		m.choice = app.Choice{Action: app.ActionInterruptPane, Project: m.shown()[m.cursor].Ref(),
 			Pane: app.PaneAt{Window: window.Name(), Pane: pane}}
 		return m, nil
 	case "R":
@@ -600,7 +601,7 @@ func (m browser) press(key string) (tea.Model, tea.Cmd) {
 		}
 		m.choice = app.Choice{Action: action}
 		if len(shown) > 0 {
-			m.choice.Project = shown[m.cursor].Name()
+			m.choice.Project = shown[m.cursor].Ref()
 		}
 		return m, nil
 	}
@@ -655,7 +656,7 @@ func (m browser) moved(by int) browser {
 	if len(shown) == 0 {
 		return m
 	}
-	before := shown[m.cursor].Name()
+	before := shown[m.cursor].Root()
 	m.cursor = max(min(m.cursor+by, len(shown)-1), 0)
 	return m.reselected(before)
 }
@@ -807,17 +808,17 @@ func (m browser) noticeLine() string {
 // window, pane and task kept while that project is the one selected
 // before.
 func (m browser) reshown(msg reshown) browser {
-	before := m.selectedName()
+	before := m.selectedRoot()
 	m.projects, m.notice, m.waiting, m.doing, m.interrupted = msg.projects, msg.notice, false, "", false
 	// An answer still on its way is about the projects as they were.
 	m.refreshStarted, m.refreshAsked = false, m.refreshAsked+1
 	m.refreshAnswered = m.refreshAsked
-	if !slices.ContainsFunc(m.shown(), func(p app.ProjectOverview) bool { return p.Name() == msg.selected }) {
+	if !slices.ContainsFunc(m.shown(), func(p app.ProjectOverview) bool { return p.Root() == msg.selected }) {
 		m.filter, m.filtering = "", false
 	}
 	m.cursor = 0
 	for i, project := range m.shown() {
-		if project.Name() == msg.selected {
+		if project.Root() == msg.selected {
 			m.cursor = i
 		}
 	}
@@ -883,7 +884,7 @@ func (m browser) asksReload() browser {
 // window, anything else nothing.
 func (m browser) reloadAnswered(key string) browser {
 	m.reloading = ""
-	project := m.shown()[m.cursor].Name()
+	project := m.shown()[m.cursor].Ref()
 	switch {
 	case key == "p" && m.reloadsPane:
 		m.choice = app.Choice{Action: app.ActionReloadPane, Project: project, Pane: m.reloadPane}
@@ -1045,7 +1046,8 @@ func (m browser) keys() (string, []hotspot) {
 }
 
 // list is the shown projects' names, those whose session runs in green
-// after a mark, the selected one bright after the cursor's mark, in the
+// after a mark, those whose config is missing or can't be read in red
+// after ✗, the selected one bright after the cursor's mark, in the
 // selected colour while the list holds the cursor, and kept in view. It
 // keeps its width when the filter shows no project.
 func (m browser) list(height int) string {
@@ -1056,13 +1058,16 @@ func (m browser) list(height int) string {
 	for i, project := range shown[first:] {
 		at := first+i == m.cursor
 		mark, style := " ", lipgloss.NewStyle()
-		if project.Running() {
+		switch {
+		case project.Running():
 			mark, style = m.theme.runningMark(), m.theme.ok
+		case project.Problem() != nil && project.Project().Root().String() == "":
+			mark, style = m.theme.failure.Render("✗"), m.theme.failure
 		}
 		if at {
 			style = style.Inherit(m.theme.bright)
 		}
-		lines = append(lines, m.theme.gutter(at, !m.tasking)+mark+" "+style.Render(fmt.Sprintf("%-*s", nameWidth, project.Name())))
+		lines = append(lines, m.theme.gutter(at, !m.tasking)+mark+" "+style.Render(padded(m.listed(project), nameWidth)))
 	}
 	if len(m.projects) == 0 {
 		return ""
@@ -1084,9 +1089,21 @@ func (m browser) listWidth() int {
 func (m browser) nameWidth() int {
 	width := 0
 	for _, project := range m.projects {
-		width = max(width, len(project.Name().String()))
+		width = max(width, ansi.StringWidth(m.listed(project)))
 	}
 	return width
+}
+
+// listed is how the list names project: by its name, followed by its
+// root when another project has that name.
+func (m browser) listed(project app.ProjectOverview) string {
+	shared := slices.ContainsFunc(m.projects, func(other app.ProjectOverview) bool {
+		return other.Name() == project.Name() && other.Root() != project.Root()
+	})
+	if shared {
+		return project.Name().String() + " " + contractHome(project.Root().String())
+	}
+	return project.Name().String()
 }
 
 // cardsBeside is the width the project list's card and the task list's
@@ -1109,10 +1126,9 @@ func (m browser) firstShown(height int) int {
 	return max(min(m.top, m.cursor, len(m.shown())-height), m.cursor-height+1, 0)
 }
 
-// root is project's root with the home directory as "~", or nothing when
-// its config can't be read.
+// root is project's root with the home directory as "~".
 func root(project app.ProjectOverview) string {
-	return contractHome(project.Project().Root().String())
+	return contractHome(project.Root().String())
 }
 
 // Below this size, the details list the selected window's panes
@@ -1331,16 +1347,21 @@ func alertOfWarning(warning app.Warning) alert {
 	return programAlert
 }
 
-// detailsTitle titles the details' card: the selected project's config
-// file, or its name; nothing when no project is shown.
+// detailsTitle titles the details' card: the selected project's name and
+// its config file, relative to its root when under it; nothing when no
+// project is shown.
 func (m browser) detailsTitle() string {
 	shown := m.shown()
 	if len(shown) == 0 {
 		return ""
 	}
-	title := shown[m.cursor].Name().String()
-	if file := shown[m.cursor].Config().File; file != "" {
-		title = file
+	project := shown[m.cursor]
+	title := project.Name().String()
+	if file := project.Config().File; file != "" {
+		if rel, err := filepath.Rel(project.Root().String(), file); err == nil && !strings.HasPrefix(rel, "..") {
+			file = rel
+		}
+		title += " · " + contractHome(file)
 	}
 	if _, ok := m.shownPreview(); ok {
 		title += " · preview"

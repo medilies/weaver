@@ -10,13 +10,10 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-func interrupting(t *testing.T, tasks *fakeTasks) (app.Interrupt, domain.ProjectName) {
+func interrupting(t *testing.T, tasks *fakeTasks) (app.Interrupt, domain.ProjectRef) {
 	t.Helper()
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
-	name, err := domain.NewProjectName("shop")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	name := tasked(t).Ref()
 	return app.NewInterrupt(configs, tasks), name
 }
 

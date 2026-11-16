@@ -1,5 +1,4 @@
-# yaml-language-server: $schema=./weaver.schema.json
-root: ~/dev/shop
+# yaml-language-server: $schema=https://raw.githubusercontent.com/medilies/weaver/main/internal/session/infra/weaver.schema.json
 env:
   APP_ENV: local
 setup:

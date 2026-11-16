@@ -10,13 +10,10 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-func reloading(t *testing.T, tasks *fakeTasks) (app.Reload, domain.ProjectName) {
+func reloading(t *testing.T, tasks *fakeTasks) (app.Reload, domain.ProjectRef) {
 	t.Helper()
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": tasked(t)}}
-	name, err := domain.NewProjectName("shop")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	name := tasked(t).Ref()
 	return app.NewReload(configs, tasks), name
 }
 

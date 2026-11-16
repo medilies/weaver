@@ -42,7 +42,7 @@ func NewRunTask(projects domain.ProjectRegistry, tasks domain.TaskRunner, confir
 // panes it can't tell, with ErrSessionNotOwned; a task of the pane the
 // browser runs in with ErrPaneRunsWeaver; declining to run the task apart
 // is ErrAborted.
-func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() error) error {
+func (uc RunTask) Handle(name domain.ProjectRef, at TaskAt, leaving func() error) error {
 	window, pane, task, err := uc.found(name, at)
 	if err != nil {
 		return err
@@ -71,7 +71,7 @@ func (uc RunTask) Handle(name domain.ProjectName, at TaskAt, leaving func() erro
 // the user where they are, the session's current window and pane
 // included, and says where it runs: "Running migrate in api › back."
 // It calls working with what it is doing once there is no more to ask.
-func (uc RunTask) HandleStaying(name domain.ProjectName, at TaskAt, working func(string)) (string, error) {
+func (uc RunTask) HandleStaying(name domain.ProjectRef, at TaskAt, working func(string)) (string, error) {
 	task, place, err := uc.started(name, at, false, working)
 	if err != nil {
 		return "", err
@@ -82,7 +82,7 @@ func (uc RunTask) HandleStaying(name domain.ProjectName, at TaskAt, working func
 // HandleApart runs the task at of project in a throwaway window without
 // asking, busy pane or not, leaving the user where they are as
 // HandleStaying does, and says so.
-func (uc RunTask) HandleApart(name domain.ProjectName, at TaskAt, working func(string)) (string, error) {
+func (uc RunTask) HandleApart(name domain.ProjectRef, at TaskAt, working func(string)) (string, error) {
 	window, _, task, err := uc.found(name, at)
 	if err != nil {
 		return "", err
@@ -96,8 +96,8 @@ func (uc RunTask) HandleApart(name domain.ProjectName, at TaskAt, working func(s
 
 // found is the task at of project, with its pane and that pane's window,
 // once its session is found running and owned.
-func (uc RunTask) found(name domain.ProjectName, at TaskAt) (domain.WindowPlan, domain.PanePlan, domain.Task, error) {
-	project, err := uc.projects.FindByName(name)
+func (uc RunTask) found(name domain.ProjectRef, at TaskAt) (domain.WindowPlan, domain.PanePlan, domain.Task, error) {
+	project, err := uc.projects.Find(name.Root())
 	if err != nil {
 		return domain.WindowPlan{}, domain.PanePlan{}, domain.Task{}, err
 	}
@@ -114,7 +114,7 @@ func (uc RunTask) found(name domain.ProjectName, at TaskAt) (domain.WindowPlan, 
 // started runs the task at of project, landing there or not, and returns
 // it and where it runs: its pane, "api › back", or the throwaway window it
 // ran apart in, calling working with what it is doing.
-func (uc RunTask) started(name domain.ProjectName, at TaskAt, landing bool, working func(string)) (domain.Task, string, error) {
+func (uc RunTask) started(name domain.ProjectRef, at TaskAt, landing bool, working func(string)) (domain.Task, string, error) {
 	window, pane, task, err := uc.found(name, at)
 	if err != nil {
 		return domain.Task{}, "", err
@@ -138,7 +138,7 @@ func (uc RunTask) started(name domain.ProjectName, at TaskAt, landing bool, work
 // whether it did so, calling working with what it does once agreed. The
 // pane the browser runs in is refused, pointing to w, which runs a task
 // apart.
-func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task, landing bool, working func(string)) (bool, error) {
+func (uc RunTask) run(name domain.ProjectRef, window domain.WindowPlan, index int, pane domain.PanePlan, task domain.Task, landing bool, working func(string)) (bool, error) {
 	shown := pane.Name().String()
 	if pane.Name().IsZero() {
 		shown = window.Name().String()
@@ -168,7 +168,7 @@ func (uc RunTask) run(name domain.ProjectName, window domain.WindowPlan, index i
 // copiesOf are the copies of cmd typed for the pane at index of window
 // still running in the project's session, in the order the user reaches
 // them: the one in the pane itself, then the others, most recent first.
-func copiesOf(tracker domain.CommandTracker, name domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command) ([]domain.RunningCommand, error) {
+func copiesOf(tracker domain.CommandTracker, name domain.ProjectRef, window domain.WindowPlan, index int, cmd domain.Command) ([]domain.RunningCommand, error) {
 	runs, err := tracker.RunningCommands(name, []domain.WindowPlan{window})
 	if err != nil {
 		return nil, err

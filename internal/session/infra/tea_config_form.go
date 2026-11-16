@@ -26,26 +26,27 @@ import (
 // the form only collects them.
 type TeaConfigForm struct {
 	workspace domain.Workspace
-	documents app.ProjectDocuments
+	encoder   configEncoder
 	settings  Settings
 }
 
-// NewTeaConfigForm constructs a TeaConfigForm checking directories in
-// workspace, and showing what saving a new project under a registered
-// name replaces in its config, read from documents, with the settings'
-// selected colour and drawing keys.
-func NewTeaConfigForm(workspace domain.Workspace, documents app.ProjectDocuments, settings Settings) TeaConfigForm {
-	return TeaConfigForm{workspace: workspace, documents: documents, settings: settings}
+// configEncoder writes a project's config as saving it writes it.
+type configEncoder interface {
+	Encoded(project domain.Project) ([]byte, error)
 }
 
-// Fill implements app.ProjectForm. The draft's name stays when it says
-// so, and is typed otherwise. It returns the project as ctrl+s saves it,
-// once the user has seen what saving changes in the draft's config, or
-// ErrAborted when the user leaves it unchanged or discards it. A draft
-// without a Config, as binding gives, is unsaved until then, and saving
-// it under a registered name shows what it changes in that config and asks
-// before replacing it; declining opens the form typing the name, so another
-// can be given. A name to type that isn't valid opens the form typing it.
+// NewTeaConfigForm constructs a TeaConfigForm checking directories in
+// workspace, showing what saving changes in a config as encoder writes
+// it, with the settings' selected colour and drawing keys.
+func NewTeaConfigForm(workspace domain.Workspace, encoder configEncoder, settings Settings) TeaConfigForm {
+	return TeaConfigForm{workspace: workspace, encoder: encoder, settings: settings}
+}
+
+// Fill implements app.ProjectForm. It returns the project as ctrl+s saves
+// it, once the user has seen what saving changes in the draft's config,
+// or ErrAborted when the user leaves it unchanged or discards it. A draft
+// without a Config, as binding a new project gives, is unsaved until
+// then. A name that isn't valid opens the form typing it.
 func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 	model, err := f.form(draft)
 	if err != nil {
@@ -66,9 +67,6 @@ func (f TeaConfigForm) Fill(draft app.ProjectDraft) (domain.Project, error) {
 // terminal's size is known.
 func (f TeaConfigForm) form(draft app.ProjectDraft) (configForm, error) {
 	name, nameErr := domain.NewProjectName(draft.Name)
-	if nameErr != nil && draft.NameStays {
-		return configForm{}, nameErr
-	}
 	if nameErr != nil {
 		name = standInName
 	}
@@ -84,16 +82,13 @@ func (f TeaConfigForm) form(draft app.ProjectDraft) (configForm, error) {
 	}
 	var original []byte
 	if len(draft.Config) > 0 {
-		if original, err = encodeProject(project); err != nil {
+		if original, err = f.encoder.Encoded(project); err != nil {
 			return configForm{}, err
 		}
 	}
 	model := configForm{
-		project: project, original: original, stored: draft.Config, nameStays: draft.NameStays,
-		workspace: f.workspace, documents: f.documents, theme: f.settings.theme(), mouse: f.settings.mouse, keymap: newKeymap(formActions, f.settings.formKeys), drawingKeys: f.settings.keys, focus: spot{window: -1, pane: -1, field: fieldRoot},
-	}
-	if !draft.NameStays {
-		model.focus.field = fieldName
+		project: project, original: original, stored: draft.Config, unregistered: draft.Unregistered,
+		workspace: f.workspace, encoder: f.encoder, theme: f.settings.theme(), mouse: f.settings.mouse, keymap: newKeymap(formActions, f.settings.formKeys), drawingKeys: f.settings.keys, focus: projectNameAt,
 	}
 	if nameErr != nil {
 		model.unnamed = true
@@ -108,7 +103,6 @@ type field int
 
 const (
 	fieldName field = iota + 1
-	fieldRoot
 	fieldDir
 	fieldBefore
 	fieldSetup
@@ -161,11 +155,11 @@ type configForm struct {
 	project       domain.Project
 	original      []byte // the project as its config writes it, to tell changes; none when unsaved
 	stored        []byte // the config as stored, which saving replaces
-	nameStays     bool   // the project's name can't be typed
+	unregistered  bool   // saving registers the root, so it saves even unchanged
 	unnamed       bool   // the project has standInName until a name typed is kept
 	start         tea.Cmd
 	workspace     domain.Workspace
-	documents     app.ProjectDocuments
+	encoder       configEncoder
 	focus         spot
 	picked        spot // the window and pane shown, kept while the cursor is above them
 	top           int  // the first line shown
@@ -195,13 +189,11 @@ var standInName, _ = domain.NewProjectName("project")
 var projectNameAt = spot{window: -1, pane: -1, field: fieldName}
 
 // review is what saving changes in the stored config, shown before
-// saving, and its first line shown. A new project saved under a
-// registered name replaces that project's config.
+// saving, and its first line shown.
 type review struct {
 	diff     []string
 	top      int
-	unstored bool // no config is stored under the name
-	replaces bool // a new project's config replaces a registered one's
+	unstored bool // no config is stored yet
 }
 
 // typing is a field being typed.
@@ -412,54 +404,25 @@ func (m configForm) save() (configForm, tea.Cmd) {
 		m.focus, m.problem = projectNameAt, "Type the project's name first."
 		return m, nil
 	}
-	if !m.dirty() {
+	if !m.dirty() && !m.unregistered {
 		return m, tea.Quit
 	}
-	doc, err := encodeProject(m.project)
+	doc, err := m.encoder.Encoded(m.project)
 	if err != nil {
 		m.problem = err.Error()
 		return m, nil
 	}
-	stored, replaces, err := m.replaced()
-	if errors.Is(err, domain.ErrNameDiffersInCase) {
-		m, cmd := m.typeInto(projectNameAt, m.project.Name().String(), false)
-		m.edit.err = fmt.Errorf("a registered name differs from %s only in case, and %w: type another name", m.project.Name(), domain.ErrNameDiffersInCase)
-		return m, cmd
-	}
-	if err != nil {
-		m.problem = err.Error()
-		return m, nil
-	}
-	diff := configDiff(string(stored), string(doc))
-	if len(diff) == 0 && !replaces {
+	diff := configDiff(string(m.stored), string(doc))
+	if len(diff) == 0 {
 		m.saved = true
 		return m, tea.Quit
 	}
-	m.reviewing = &review{diff: diff, unstored: len(stored) == 0, replaces: replaces}
+	m.reviewing = &review{diff: diff, unstored: len(m.stored) == 0}
 	return m, nil
 }
 
-// replaced is the config saving replaces: the one stored, else, for a new
-// project, the config registered under its name, if any. A config under
-// a name differing from it only in case is an error wrapping
-// domain.ErrNameDiffersInCase.
-func (m configForm) replaced() ([]byte, bool, error) {
-	if len(m.stored) > 0 || m.nameStays || m.documents == nil {
-		return m.stored, false, nil
-	}
-	document, err := m.documents.Document(m.project.Name())
-	if errors.Is(err, domain.ErrProjectNotFound) && !errors.Is(err, domain.ErrNameDiffersInCase) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, err
-	}
-	return document.Content, true, nil
-}
-
 // reviewed is m after key, pressed on what saving changes: y, enter or
-// ctrl+s saves, n or esc goes back to the form, typing the name when
-// saving would replace a registered project's config, ↑↓ scroll.
+// ctrl+s saves, n or esc goes back to the form, ↑↓ scroll.
 func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 	top := m.reviewing.top
 	switch m.keymap.pressed(inForm, key) {
@@ -473,14 +436,8 @@ func (m configForm) reviewed(key string) (configForm, tea.Cmd) {
 		m.saved = true
 		return m, tea.Quit
 	case "n", "N", "esc", "ctrl+c":
-		replaces := m.reviewing.replaces
 		m.reviewing = nil
-		if !replaces {
-			return m, nil
-		}
-		m, cmd := m.typeInto(projectNameAt, m.project.Name().String(), false)
-		m.edit.err = fmt.Errorf("%s is already registered: type another name, or keep it to replace it", m.project.Name())
-		return m, cmd
+		return m, nil
 	case "up", "k":
 		top--
 	case "down", "j":
@@ -504,8 +461,8 @@ func (r review) scrolledTo(top, height int) *review {
 // became is m with project, the project before it kept for undo, unless
 // its config is the same.
 func (m configForm) became(project domain.Project) configForm {
-	before, errBefore := encodeProject(m.project)
-	after, errAfter := encodeProject(project)
+	before, errBefore := m.encoder.Encoded(m.project)
+	after, errAfter := m.encoder.Encoded(project)
 	if errBefore != nil || errAfter != nil || !bytes.Equal(before, after) || m.project.Name() != project.Name() {
 		m.undos = append(slices.Clip(m.undos), state{project: m.project, focus: m.focus, unnamed: m.unnamed})
 		m.redos = nil
@@ -558,7 +515,7 @@ func (m configForm) leave() (configForm, tea.Cmd) {
 
 // dirty reports whether the project's config would change.
 func (m configForm) dirty() bool {
-	doc, err := encodeProject(m.project)
+	doc, err := m.encoder.Encoded(m.project)
 	return err != nil || !bytes.Equal(doc, m.original)
 }
 
@@ -1159,12 +1116,6 @@ func (m configForm) applied(at spot, text string) (domain.Project, error) {
 			return domain.Project{}, err
 		}
 		return m.project.Named(name), nil
-	case at.field == fieldRoot:
-		root, err := parseRoot(text)
-		if err != nil {
-			return domain.Project{}, err
-		}
-		return m.project.RootedAt(root), nil
 	case at.field == fieldEnv:
 		return m.withVar(at, text)
 	case at.field == fieldHigherEnv:
@@ -1528,8 +1479,6 @@ func (m configForm) current(at spot) string {
 	switch {
 	case at.window < 0 && at.field == fieldName:
 		return m.project.Name().String()
-	case at.field == fieldRoot:
-		return contractHome(root.String())
 	case isList(at.field):
 		if items := m.items(at); at.item < len(items) {
 			return items[at.item]
@@ -1900,16 +1849,12 @@ func (m configForm) clicked(x, y int) (configForm, tea.Cmd) {
 func (m configForm) projectCard() section {
 	p := m.project
 	s := newSection()
-	if m.nameStays {
-		shownText(&s, "name", m.theme.muted.Render(p.Name().String()))
-	} else {
-		name := p.Name().String()
-		if m.unnamed {
-			name = m.theme.muted.Render("none yet")
-		}
-		m.put(&s, "name", name, "", projectNameAt)
+	name := p.Name().String()
+	if m.unnamed {
+		name = m.theme.muted.Render("none yet")
 	}
-	m.put(&s, "root", contractHome(p.Root().String()), m.mark(p.Root().String()), spot{window: -1, pane: -1, field: fieldRoot})
+	m.put(&s, "name", name, "", projectNameAt)
+	shownText(&s, "root", m.theme.muted.Render(contractHome(p.Root().String()))+" "+m.mark(p.Root().String()))
 	m.list(&s, "setup", lines(p.Setup()), spot{window: -1, pane: -1, field: fieldSetup})
 	m.list(&s, "teardown", lines(p.Teardown()), spot{window: -1, pane: -1, field: fieldTeardown})
 	m.list(&s, "before", lines(p.Before()), spot{window: -1, pane: -1, field: fieldBefore})
@@ -2285,8 +2230,6 @@ func (m configForm) trail() string {
 // the last change was refused.
 func (m configForm) status() string {
 	switch {
-	case m.reviewing != nil && m.reviewing.replaces:
-		return fmt.Sprintf(" Replace %s's registered config with this?", m.project.Name()) + keysGap + m.toldKeys(saveKeys)
 	case m.reviewing != nil && m.reviewing.unstored:
 		return " Save the new project's config?" + keysGap + m.toldKeys(saveKeys)
 	case m.reviewing != nil:

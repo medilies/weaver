@@ -187,7 +187,7 @@ func (m browser) runningTask(index int) (browser, bool) {
 		return m, false
 	}
 	m = m.taskSelected(index)
-	m.choice = app.Choice{Action: app.ActionRunTask, Project: m.shown()[m.cursor].Name(), Task: listed[index].at}
+	m.choice = app.Choice{Action: app.ActionRunTask, Project: m.shown()[m.cursor].Ref(), Task: listed[index].at}
 	return m, true
 }
 
@@ -213,7 +213,7 @@ func (m browser) refresh() (browser, tea.Cmd) {
 		return m, nil
 	}
 	m.refreshAsked++
-	asked, projects, selected, live := m.refreshAsked, m.projects, m.selectedName(), m.live
+	asked, projects, selected, live := m.refreshAsked, m.projects, m.selectedRoot(), m.live
 	return m, func() tea.Msg {
 		return refreshed{asked: asked, projects: live.Live(projects, selected)}
 	}
@@ -224,19 +224,19 @@ func (m browser) refresh() (browser, tea.Cmd) {
 // it is shown, else the cursor goes to the first shown after it, or
 // before it when none is, as after a delete.
 func (m browser) withRefreshed(projects []app.ProjectOverview) browser {
-	before, selected := m.shown(), m.selectedName()
+	before, selected := m.shown(), m.selectedRoot()
 	m.projects, m.cursor = projects, 0
 	shown := m.shown()
-	index := func(name domain.ProjectName) int {
-		return slices.IndexFunc(shown, func(p app.ProjectOverview) bool { return p.Name() == name })
+	index := func(root domain.ProjectRoot) int {
+		return slices.IndexFunc(shown, func(p app.ProjectOverview) bool { return p.Root() == root })
 	}
-	if i := slices.IndexFunc(before, func(p app.ProjectOverview) bool { return p.Name() == selected }); i >= 0 {
+	if i := slices.IndexFunc(before, func(p app.ProjectOverview) bool { return p.Root() == selected }); i >= 0 {
 		candidates := slices.Clone(before[i:])
 		for j := i - 1; j >= 0; j-- {
 			candidates = append(candidates, before[j])
 		}
 		for _, candidate := range candidates {
-			if at := index(candidate.Name()); at >= 0 {
+			if at := index(candidate.Root()); at >= 0 {
 				m.cursor = at
 				break
 			}

@@ -44,19 +44,16 @@ windows:
       - name: server
 `
 
-// save saves project into a fresh directory and returns the directory and
-// the saved config.
+// save registers project in fresh settings, its config in their
+// directory, and returns the directory and the saved config.
 func save(t *testing.T, project domain.Project) (string, string) {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), "projects")
-	if err := infra.NewFileProjectRegistry(dir).Save(project); err != nil {
+	dir := t.TempDir()
+	config := filepath.Join(dir, "config.yml")
+	if err := infra.NewFileProjectRegistry(filepath.Join(dir, "settings.yml")).Save(project, config); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	doc, err := os.ReadFile(filepath.Join(dir, project.Name().String()+".yml"))
-	if err != nil {
-		t.Fatalf("reading the saved config: %v", err)
-	}
-	return dir, string(doc)
+	return dir, read(t, config)
 }
 
 func mustLoad(t *testing.T, name, doc string) domain.Project {
@@ -83,9 +80,9 @@ func TestFileProjectRegistrySave(t *testing.T) {
 		})
 	}
 
-	t.Run("saves a project opening its default window as its root alone", func(t *testing.T) {
+	t.Run("saves a project opening its default window as its schema header alone", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "weaver", "root: /home/someone/dev/weaver\nwindows: [{name: weaver}]\n"))
-		want := "# yaml-language-server: $schema=./weaver.schema.json\nroot: ~/dev/weaver\n"
+		want := "# yaml-language-server: $schema=" + infra.SchemaURL("") + "\n"
 		if got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
@@ -175,8 +172,7 @@ windows:
 
 	t.Run("writes a grid back, its panes in the config's order and without splits", func(t *testing.T) {
 		_, got := save(t, mustLoad(t, "grid", gridDoc))
-		want := `# yaml-language-server: $schema=./weaver.schema.json
-root: /srv/grid
+		want := "# yaml-language-server: $schema=" + infra.SchemaURL("") + `
 windows:
   - name: app
     grid:
@@ -215,8 +211,7 @@ windows:
 	t.Run("keeps a grid through a save and reload", func(t *testing.T) {
 		saved, _ := save(t, mustLoad(t, "grid", gridDoc))
 
-		name, _ := domain.NewProjectName("grid")
-		reloaded, err := infra.NewFileProjectRegistry(saved).FindByName(name)
+		reloaded, err := infra.NewFileProjectRegistry(filepath.Join(saved, "settings.yml")).Find(mustRoot(t, "/srv/grid"))
 		if err != nil {
 			t.Fatalf("reloading: %v", err)
 		}
@@ -252,8 +247,7 @@ windows:
 		t.Run("keeps "+dir+" under the root through a save and reload", func(t *testing.T) {
 			saved, _ := save(t, mustLoad(t, "notes", fmt.Sprintf("root: /srv/notes\nwindows: [{name: main, panes: [{name: notes, dir: %q}]}]\n", dir)))
 
-			name, _ := domain.NewProjectName("notes")
-			reloaded, err := infra.NewFileProjectRegistry(saved).FindByName(name)
+			reloaded, err := infra.NewFileProjectRegistry(filepath.Join(saved, "settings.yml")).Find(mustRoot(t, "/srv/notes"))
 			if err != nil {
 				t.Fatalf("reloading: %v", err)
 			}
@@ -275,42 +269,30 @@ windows:
 		}
 	})
 
-	t.Run("replaces the project's config", func(t *testing.T) {
+	t.Run("points the config at the schema of weave's release", func(t *testing.T) {
 		dir := t.TempDir()
-		if err := os.WriteFile(filepath.Join(dir, "shop.yml"), []byte("root: /srv/old\n"), 0o600); err != nil {
-			t.Fatalf("writing fixture: %v", err)
-		}
-		configs := infra.NewFileProjectRegistry(dir)
-		saved := mustLoad(t, "shop", "root: /srv/shop\n")
-		if err := configs.Save(saved); err != nil {
+		config := filepath.Join(dir, "config.yml")
+		configs := infra.NewFileProjectRegistry(filepath.Join(dir, "settings.yml")).WithSchema(infra.SchemaURL("v1.2.3"))
+		if err := configs.Save(mustLoad(t, "splits", splitOfDoc), config); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got, err := configs.FindByName(saved.Name()); err != nil || got.Root().String() != "/srv/shop" {
-			t.Fatalf("got %v (%v), want the saved project", got.Root(), err)
+		want := "# yaml-language-server: $schema=https://raw.githubusercontent.com/medilies/weaver/v1.2.3/internal/session/infra/weaver.schema.json\n"
+		if got := read(t, config); !strings.HasPrefix(got, want) {
+			t.Fatalf("got:\n%s\nwant it to start with %q", got, want)
 		}
 	})
 
-	t.Run("saves the JSON Schema next to the configs", func(t *testing.T) {
-		dir, _ := save(t, mustLoad(t, "splits", splitOfDoc))
-		if _, err := os.Stat(filepath.Join(dir, "weaver.schema.json")); err != nil {
-			t.Fatalf("got no schema: %v", err)
-		}
-	})
-
-	t.Run("lists the saved project, not the schema", func(t *testing.T) {
-		dir, _ := save(t, mustLoad(t, "splits", splitOfDoc))
-		names, err := infra.NewFileProjectRegistry(dir).Names()
-		if err != nil || len(names) != 1 || names[0].String() != "splits" {
-			t.Fatalf("got %v (%v), want splits only", names, err)
+	t.Run("points a development build's config at the schema on main", func(t *testing.T) {
+		if got := infra.SchemaURL("v1.2.4-0.20261116093000-abcdef123456"); !strings.Contains(got, "/main/") {
+			t.Fatalf("got %s, want the schema on main", got)
 		}
 	})
 }
 
-// schemaFor saves a project and returns the schema saved next to it.
+// schemaFor is the configs' schema, which the saved configs point to.
 func schemaFor(t *testing.T) map[string]any {
 	t.Helper()
-	dir, _ := save(t, mustLoad(t, "splits", splitOfDoc))
-	raw, err := os.ReadFile(filepath.Join(dir, "weaver.schema.json"))
+	raw, err := os.ReadFile("weaver.schema.json")
 	if err != nil {
 		t.Fatalf("reading the schema: %v", err)
 	}

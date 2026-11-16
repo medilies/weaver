@@ -3,6 +3,7 @@ package app_test
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -16,24 +17,29 @@ import (
 // "#" is commented.
 type storedDocuments map[string]string
 
-func (d storedDocuments) Commented(name domain.ProjectName) (bool, error) {
-	return strings.Contains(d[name.String()], "#"), nil
+func (d storedDocuments) Commented(root domain.ProjectRoot) (bool, error) {
+	return strings.Contains(d[filepath.Base(root.String())], "#"), nil
 }
 
-func (d storedDocuments) Document(name domain.ProjectName) (app.ConfigDocument, error) {
-	content, ok := d[name.String()]
+func (d storedDocuments) Document(root domain.ProjectRoot) (app.ConfigDocument, error) {
+	content, ok := d[filepath.Base(root.String())]
 	if !ok {
-		return app.ConfigDocument{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
+		return app.ConfigDocument{}, fmt.Errorf("%w: %s", domain.ErrProjectNotFound, root)
 	}
-	return app.ConfigDocument{File: name.String() + ".yml", Content: []byte(content)}, nil
+	return app.ConfigDocument{File: root.String() + "/weaver.yml", Content: []byte(content)}, nil
 }
 
-func (d storedDocuments) ReplaceDocument(name domain.ProjectName, content []byte) error {
+func (d storedDocuments) ReplaceDocument(root domain.ProjectRoot, content []byte) error {
 	if string(content) == "invalid" {
 		return domain.ErrInvalidConfig
 	}
-	d[name.String()] = string(content)
+	d[filepath.Base(root.String())] = string(content)
 	return nil
+}
+
+// ConfigAt finds no config: binding starts from a blank project.
+func (d storedDocuments) ConfigAt(root domain.ProjectRoot, _ string) (domain.Project, app.ConfigDocument, error) {
+	return domain.Project{}, app.ConfigDocument{}, fmt.Errorf("%w: in %s", domain.ErrMissingConfig, root)
 }
 
 // scriptedEditor is an app.ConfigEditor saving the next scripted text on
@@ -72,14 +78,14 @@ func TestEditProject(t *testing.T) {
 	edit := func(t *testing.T, documents storedDocuments, form *fakeForm, confirm app.Confirmer) (inMemoryRegistry, error) {
 		t.Helper()
 		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-		return registry, app.NewEditProject(registry, documents, form, &scriptedEditor{}, confirm).Handle("shop")
+		return registry, app.NewEditProject(registry, documents, form, &scriptedEditor{}, confirm).Handle(rootOf(t, "shop"))
 	}
-	moved := shop(t).RootedAt(mustRoot(t, "/srv/store"))
+	changed := shop(t).WithClearing(domain.ClearingOn)
 
 	t.Run("saves the project the form returns", func(t *testing.T) {
-		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: moved}, answer(true))
-		if err != nil || registry.projects["shop"].Root().String() != "/srv/store" {
-			t.Fatalf("got %v, root %s; want /srv/store saved", err, registry.projects["shop"].Root())
+		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: changed}, answer(true))
+		if err != nil || registry.projects["shop"].Clearing() != domain.ClearingOn {
+			t.Fatalf("got %v, clearing %v; want the change saved", err, registry.projects["shop"].Clearing())
 		}
 	})
 
@@ -93,9 +99,9 @@ func TestEditProject(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).WithEnv(env).RunningFirst(nvm).WithClearing(domain.ClearingOn)}}
-		form := &fakeForm{project: moved}
+		form := &fakeForm{project: changed}
 		documents := storedDocuments{"shop": "root: /srv/shop"}
-		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
+		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle(rootOf(t, "shop")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		draft := form.draft
@@ -108,9 +114,9 @@ func TestEditProject(t *testing.T) {
 	t.Run("gives the form the setup and teardown commands to keep", func(t *testing.T) {
 		up, down := command(t, "docker compose up -d"), command(t, "docker compose down")
 		registry := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t).SettingUp(up).TearingDown(down)}}
-		form := &fakeForm{project: moved}
+		form := &fakeForm{project: changed}
 		documents := storedDocuments{"shop": "root: /srv/shop"}
-		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle("shop"); err != nil {
+		if err := app.NewEditProject(registry, documents, form, &scriptedEditor{}, answer(true)).Handle(rootOf(t, "shop")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got := form.draft; len(got.Setup) != 1 || got.Setup[0] != up || len(got.Teardown) != 1 || got.Teardown[0] != down {
@@ -118,18 +124,8 @@ func TestEditProject(t *testing.T) {
 		}
 	})
 
-	t.Run("keeps the project's name in the form", func(t *testing.T) {
-		form := &fakeForm{project: moved}
-		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, form, answer(true)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !form.draft.NameStays {
-			t.Fatal("got a name to type, want shop's name kept")
-		}
-	})
-
 	t.Run("gives the form the config as stored, to show what saving changes", func(t *testing.T) {
-		form := &fakeForm{project: moved}
+		form := &fakeForm{project: changed}
 		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, form, answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -140,14 +136,14 @@ func TestEditProject(t *testing.T) {
 
 	t.Run("saves nothing when the user leaves the form", func(t *testing.T) {
 		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{err: app.ErrAborted}, answer(true))
-		if !errors.Is(err, app.ErrAborted) || registry.projects["shop"].Root().String() != "/srv/shop" {
-			t.Fatalf("got %v, root %s; want ErrAborted and /srv/shop kept", err, registry.projects["shop"].Root())
+		if !errors.Is(err, app.ErrAborted) || registry.projects["shop"].Clearing() != domain.ClearingUnset {
+			t.Fatalf("got %v, clearing %v; want ErrAborted and shop unchanged", err, registry.projects["shop"].Clearing())
 		}
 	})
 
 	t.Run("asks before dropping a config's comments, and stops on no", func(t *testing.T) {
 		confirm := &countingConfirmer{answer: false}
-		form := &fakeForm{project: moved}
+		form := &fakeForm{project: changed}
 		_, err := edit(t, storedDocuments{"shop": "# mine\nroot: /srv/shop"}, form, confirm)
 		if !errors.Is(err, app.ErrAborted) || confirm.asked != 1 || form.draft.Name != "" {
 			t.Fatalf("got %v after %d questions, form opened on %q; want ErrAborted after one, no form", err, confirm.asked, form.draft.Name)
@@ -155,47 +151,39 @@ func TestEditProject(t *testing.T) {
 	})
 
 	t.Run("saves a commented config once the user goes on", func(t *testing.T) {
-		registry, err := edit(t, storedDocuments{"shop": "# mine\nroot: /srv/shop"}, &fakeForm{project: moved}, answer(true))
-		if err != nil || registry.projects["shop"].Root().String() != "/srv/store" {
-			t.Fatalf("got %v, root %s; want /srv/store saved", err, registry.projects["shop"].Root())
+		registry, err := edit(t, storedDocuments{"shop": "# mine\nroot: /srv/shop"}, &fakeForm{project: changed}, answer(true))
+		if err != nil || registry.projects["shop"].Clearing() != domain.ClearingOn {
+			t.Fatalf("got %v, clearing %v; want the change saved", err, registry.projects["shop"].Clearing())
 		}
 	})
 
 	t.Run("doesn't ask about a config without comments", func(t *testing.T) {
 		confirm := &countingConfirmer{answer: true}
-		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: moved}, confirm); err != nil || confirm.asked != 0 {
+		if _, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: changed}, confirm); err != nil || confirm.asked != 0 {
 			t.Fatalf("got %v after %d questions, want none", err, confirm.asked)
 		}
 	})
 
-	t.Run("refuses a project the form renamed", func(t *testing.T) {
-		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: project(t, "store")}, answer(true))
-		if err == nil || len(registry.projects) != 1 {
-			t.Fatalf("got %v with %d configs, want an error and shop alone", err, len(registry.projects))
+	t.Run("saves a project the form renamed, at its root", func(t *testing.T) {
+		renamed := domain.NewProject(projectName(t, "store"), shop(t).Root())
+		registry, err := edit(t, storedDocuments{"shop": "root: /srv/shop"}, &fakeForm{project: renamed}, answer(true))
+		if _, ok := registry.projects["store"]; err != nil || !ok || len(registry.projects) != 1 {
+			t.Fatalf("got %v with %d configs, want shop saved as store", err, len(registry.projects))
 		}
 	})
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		err := app.NewEditProject(inMemoryRegistry{projects: map[string]domain.Project{}}, storedDocuments{},
-			&fakeForm{}, &scriptedEditor{}, answer(true)).Handle("shop")
+			&fakeForm{}, &scriptedEditor{}, answer(true)).Handle(rootOf(t, "shop"))
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
 	})
 }
 
-func mustRoot(t *testing.T, raw string) domain.ProjectRoot {
-	t.Helper()
-	root, err := domain.NewProjectRoot(raw)
-	if err != nil {
-		t.Fatalf("NewProjectRoot(%q): %v", raw, err)
-	}
-	return root
-}
-
 func TestEditProjectRaw(t *testing.T) {
 	edit := func(documents storedDocuments, editor *scriptedEditor, confirm app.Confirmer) (bool, error) {
-		return app.NewEditProject(inMemoryRegistry{}, documents, &fakeForm{}, editor, confirm).HandleRaw("shop")
+		return app.NewEditProject(inMemoryRegistry{}, documents, &fakeForm{}, editor, confirm).HandleRaw(rootOf(t, "shop"))
 	}
 
 	t.Run("stores a valid edit", func(t *testing.T) {
@@ -231,7 +219,7 @@ func TestEditProjectRaw(t *testing.T) {
 		if _, err := edit(storedDocuments{"shop": "old"}, editor, &countingConfirmer{answer: false}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if want := []string{"shop.yml", "shop.yml"}; !slices.Equal(editor.files, want) {
+		if want := []string{"/srv/shop/weaver.yml", "/srv/shop/weaver.yml"}; !slices.Equal(editor.files, want) {
 			t.Fatalf("the editor opened %q, want %q", editor.files, want)
 		}
 	})

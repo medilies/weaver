@@ -29,27 +29,25 @@ func NewEditProject(
 	return EditProject{projects: projects, documents: documents, form: form, editor: editor, confirm: confirm}
 }
 
-// Handle changes the project named rawName in the config form, starting
-// from its project and its config as stored, and saves the project the
-// form returns. Saving drops the config's comments, so a commented config
-// asks first; ErrAborted when the user declines or leaves the form.
-func (uc EditProject) Handle(rawName string) error {
-	name, err := domain.NewProjectName(rawName)
-	if err != nil {
-		return err
-	}
-	project, err := uc.projects.FindByName(name)
+// Handle changes the project registered at root in the config form,
+// starting from its project and its config as stored, and saves the
+// project the form returns. Saving drops the config's comments, so a
+// commented config asks first; ErrAborted when the user declines or
+// leaves the form.
+func (uc EditProject) Handle(root domain.ProjectRoot) error {
+	project, err := uc.projects.Find(root)
 	if errors.Is(err, domain.ErrInvalidConfig) {
 		return fmt.Errorf("%w; edit it raw to fix it", err)
 	}
 	if err != nil {
 		return err
 	}
-	stored, err := uc.documents.Document(name)
+	name := project.Name()
+	stored, err := uc.documents.Document(root)
 	if err != nil {
 		return err
 	}
-	commented, err := uc.documents.Commented(name)
+	commented, err := uc.documents.Commented(root)
 	if err != nil {
 		return err
 	}
@@ -64,36 +62,28 @@ func (uc EditProject) Handle(rawName string) error {
 		}
 	}
 	changed, err := uc.form.Fill(ProjectDraft{
-		Name:      name.String(),
-		NameStays: true,
-		Root:      project.Root().String(),
-		Env:       project.Env(),
-		Before:    project.Before(),
-		Clearing:  project.Clearing(),
-		Setup:     project.Setup(),
-		Teardown:  project.Teardown(),
-		Windows:   project.Windows(),
-		Config:    stored.Content,
+		Name:     name.String(),
+		Root:     project.Root().String(),
+		Env:      project.Env(),
+		Before:   project.Before(),
+		Clearing: project.Clearing(),
+		Setup:    project.Setup(),
+		Teardown: project.Teardown(),
+		Windows:  project.Windows(),
+		Config:   stored.Content,
 	})
 	if err != nil {
 		return err
 	}
-	if changed.Name() != name {
-		return fmt.Errorf("the form renamed %s to %s, which only a new config can be", name, changed.Name())
-	}
-	return uc.projects.Save(changed)
+	return uc.projects.Save(changed, "")
 }
 
-// HandleRaw edits the config of the project named rawName in the user's
-// editor and reports whether it changed. The user may edit an invalid
+// HandleRaw edits the config of the project registered at root in the
+// user's editor and reports whether it changed. The user may edit an invalid
 // config again, starting from what they wrote, or discard it and keep the
 // stored one. Answering No reopens the editor, so Esc never loses edits.
-func (uc EditProject) HandleRaw(rawName string) (bool, error) {
-	name, err := domain.NewProjectName(rawName)
-	if err != nil {
-		return false, err
-	}
-	stored, err := uc.documents.Document(name)
+func (uc EditProject) HandleRaw(root domain.ProjectRoot) (bool, error) {
+	stored, err := uc.documents.Document(root)
 	if err != nil {
 		return false, err
 	}
@@ -106,7 +96,7 @@ func (uc EditProject) HandleRaw(rawName string) (bool, error) {
 		if bytes.Equal(edited, stored.Content) {
 			return false, nil
 		}
-		err = uc.documents.ReplaceDocument(name, edited)
+		err = uc.documents.ReplaceDocument(root, edited)
 		if !errors.Is(err, domain.ErrInvalidConfig) {
 			return err == nil, err
 		}

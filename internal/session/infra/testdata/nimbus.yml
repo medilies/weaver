@@ -1,5 +1,4 @@
-# yaml-language-server: $schema=./weaver.schema.json
-root: ~/dev/nimbus
+# yaml-language-server: $schema=https://raw.githubusercontent.com/medilies/weaver/main/internal/session/infra/weaver.schema.json
 windows:
   - name: api
     dir: api

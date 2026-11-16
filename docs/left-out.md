@@ -33,9 +33,10 @@ of scope. Kept so they aren't reported again. What is still to do is in
   the safe way round: the editor warns, and weave still loads the
   config. Tightening the parsers could reject released configs that load
   today, and every other value object trims its input (`oneLine`).
-- **Editing races.** Edits are lost if the config is deleted while
-  the editor is open (`ErrProjectNotFound`), and nothing protects
-  against a lost update from a concurrent `weave bind`.
+- **Editing races.** Edits are lost if the project is unregistered
+  while the editor is open (`ErrProjectNotFound`), and nothing protects
+  against a lost update from a concurrent `weave bind`, of a config or
+  of the settings' projects list.
 - **Binding a pane with a job.** It is captured in its shell's directory,
   read from `/proc`, so `make -C sub dev` from the root keeps the root.
   macOS has no `/proc`, so there it gets the job's directory.
@@ -73,9 +74,11 @@ As other session managers have them:
 - Templates and variables passed when opening (tmuxinator's ERB
   `key=value`, smug's `-v`): there is one config per project, and `env`
   covers the rest.
-- A config committed inside the repository (`.tmuxp.yaml`,
-  `.laio.yaml`): it breaks "one file per project in the config folder",
-  and only pays off when a team shares it.
+- Approving a config's changes before running them, as direnv's
+  `allow` does: registering a config is when you trust it, as running a
+  repository's `make` is ([ADR 0005](adr/0005-projects-are-roots-listed-in-the-settings.md)).
+  It would add a record of what was approved, and a question to open,
+  start and the browser.
 - Saving pane contents to bring back after a reboot (tmux-resurrect):
   weaver rebuilds from the config, which is the better source of truth.
 - Opening some windows from the command line (smug's `proj:win1,win2`):

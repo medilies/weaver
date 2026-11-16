@@ -3,7 +3,6 @@ package app_test
 import (
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -44,12 +43,12 @@ func (b *scriptedBrowser) asking(confirm app.Confirmer) *scriptedBrowser {
 // browserView is what one call to Browse showed.
 type browserView struct {
 	projects []app.ProjectOverview
-	selected domain.ProjectName
+	selected domain.ProjectRoot
 	notice   string
 	failure  bool
 }
 
-func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectName, notice app.Notice, previews app.LiveSessions) (app.Choice, error) {
+func (b *scriptedBrowser) Browse(projects []app.ProjectOverview, selected domain.ProjectRoot, notice app.Notice, previews app.LiveSessions) (app.Choice, error) {
 	b.previews, b.onScreen = previews, true
 	b.shown = append(b.shown, browserView{projects: projects, selected: selected, notice: notice.Text(), failure: notice.Failure()})
 	if len(b.choices) == 0 {
@@ -96,18 +95,18 @@ func (v browserView) overview(name string) (app.ProjectOverview, bool) {
 // killed session shows as not running.
 type tmuxServer struct{ *fakeSessions }
 
-func (s tmuxServer) Running() ([]string, error) {
+func (s tmuxServer) Running() ([]domain.ListedSession, error) {
 	if s.unlisted != nil {
 		return nil, s.unlisted
 	}
-	return slices.Sorted(maps.Keys(s.running)), nil
+	return listed(s.running), nil
 }
 
-func (s tmuxServer) InterruptPanes(domain.ProjectName, time.Duration) ([]string, error) {
+func (s tmuxServer) InterruptPanes(domain.ProjectRef, time.Duration) ([]string, error) {
 	return nil, nil
 }
 
-func (s tmuxServer) Kill(name domain.ProjectName) error {
+func (s tmuxServer) Kill(name domain.ProjectRef) error {
 	if _, ok := s.running[name.String()]; !ok {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
 	}
@@ -118,26 +117,26 @@ func (s tmuxServer) Kill(name domain.ProjectName) error {
 // unfindableSessions is a domain.SessionFinder that fails.
 type unfindableSessions struct{ err error }
 
-func (s unfindableSessions) Find(domain.ProjectName) (domain.RunningSession, bool, error) {
+func (s unfindableSessions) Find(domain.ProjectRef) (domain.RunningSession, bool, error) {
 	return domain.RunningSession{}, false, s.err
 }
 
-func (s unfindableSessions) Idle(domain.ProjectName, []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+func (s unfindableSessions) Idle(domain.ProjectRef, []domain.WindowPlan) (map[domain.WindowName][]int, error) {
 	return nil, s.err
 }
 
-func (s unfindableSessions) RunningCommands(domain.ProjectName, []domain.WindowPlan) ([]domain.RunningCommand, error) {
+func (s unfindableSessions) RunningCommands(domain.ProjectRef, []domain.WindowPlan) ([]domain.RunningCommand, error) {
 	return nil, s.err
 }
 
-func (s unfindableSessions) Preview(domain.ProjectName, domain.WindowPlan) (domain.WindowPreview, error) {
+func (s unfindableSessions) Preview(domain.ProjectRef, domain.WindowPlan) (domain.WindowPreview, error) {
 	return domain.WindowPreview{}, s.err
 }
 
 // uninspectableSessions is fakeSessions failing to tell which panes idle.
 type uninspectableSessions struct{ *fakeSessions }
 
-func (s uninspectableSessions) Idle(domain.ProjectName, []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+func (s uninspectableSessions) Idle(domain.ProjectRef, []domain.WindowPlan) (map[domain.WindowName][]int, error) {
 	return nil, errors.New("ps gone")
 }
 
@@ -147,15 +146,19 @@ type unkillableSessions struct {
 	err error
 }
 
-func (s unkillableSessions) Find(domain.ProjectName) (domain.RunningSession, bool, error) {
+func (s unkillableSessions) Find(domain.ProjectRef) (domain.RunningSession, bool, error) {
 	return domain.NewRunningSession(false), true, nil
 }
 
-func (s unkillableSessions) InterruptPanes(domain.ProjectName, time.Duration) ([]string, error) {
+func (s unkillableSessions) Running() ([]domain.ListedSession, error) {
 	return nil, nil
 }
 
-func (s unkillableSessions) Kill(domain.ProjectName) error {
+func (s unkillableSessions) InterruptPanes(domain.ProjectRef, time.Duration) ([]string, error) {
+	return nil, nil
+}
+
+func (s unkillableSessions) Kill(domain.ProjectRef) error {
 	return s.err
 }
 
@@ -198,7 +201,7 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 		s.browser.asking(confirm), s.configs, s.documents, s.workspace, server,
 		app.NewListProjects(s.configs, server),
 		app.NewOpenProject(s.configs, server, s.workspace, commands),
-		app.NewBindProject(s.configs, capturedSessions{}, &fakeWorkspace{}, s.form),
+		app.NewBindProject(s.configs, s.documents, capturedSessions{}, &fakeWorkspace{}, s.form),
 		app.NewEditProject(s.configs, s.documents, s.form, s.editor, confirm),
 		app.NewKillProject(server, capturedSessions{}, s.configs, commands, &fakeAcks{}),
 		app.NewRunTask(s.configs, s.tasks, s.browser),
@@ -212,8 +215,8 @@ func (s browseSetup) browse(confirm app.Confirmer) error {
 // among the projects last shown.
 func liveOne(t *testing.T, s browseSetup, project app.ProjectOverview) app.ProjectOverview {
 	t.Helper()
-	for _, live := range s.browser.previews.Live(s.browser.last().projects, project.Name()) {
-		if live.Name() == project.Name() {
+	for _, live := range s.browser.previews.Live(s.browser.last().projects, project.Root()) {
+		if live.Root() == project.Root() {
 			return live
 		}
 	}
@@ -223,11 +226,7 @@ func liveOne(t *testing.T, s browseSetup, project app.ProjectOverview) app.Proje
 
 func choose(t *testing.T, action app.Action, raw string) app.Choice {
 	t.Helper()
-	name, err := domain.NewProjectName(raw)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	return app.Choice{Action: action, Project: name}
+	return app.Choice{Action: action, Project: project(t, raw).Ref()}
 }
 
 func TestBrowseProjects(t *testing.T) {
@@ -237,8 +236,8 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shop, _ := s.browser.last().overview("shop")
-		if got := shop.Config(); got.File != "shop.yml" || string(got.Content) != "root: /srv/shop\n" {
-			t.Fatalf("got %q %q, want shop.yml as stored", got.File, got.Content)
+		if got := shop.Config(); got.File != "/srv/shop/weaver.yml" || string(got.Content) != "root: /srv/shop\n" {
+			t.Fatalf("got %q %q, want /srv/shop/weaver.yml as stored", got.File, got.Content)
 		}
 	})
 
@@ -262,8 +261,8 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		shop, _ := s.browser.last().overview("shop")
-		if !errors.Is(shop.Problem(), domain.ErrInvalidConfig) || shop.Config().File != "shop.yml" {
-			t.Fatalf("got problem %v and file %q, want ErrInvalidConfig beside shop.yml", shop.Problem(), shop.Config().File)
+		if !errors.Is(shop.Problem(), domain.ErrInvalidConfig) || shop.Config().File != "/srv/shop/weaver.yml" {
+			t.Fatalf("got problem %v and file %q, want ErrInvalidConfig beside /srv/shop/weaver.yml", shop.Problem(), shop.Config().File)
 		}
 	})
 
@@ -595,7 +594,7 @@ func TestBrowseProjects(t *testing.T) {
 		delete(s.sessions.running, "shop")
 		s.sessions.running["blog"] = owned(t, "blog")
 		running := map[string]bool{}
-		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "shop")) {
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, project(t, "shop").Root()) {
 			running[project.Name().String()] = project.Running()
 		}
 		if running["shop"] || !running["blog"] {
@@ -626,7 +625,7 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		delete(s.sessions.running, "shop")
-		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "blog")) {
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, project(t, "blog").Root()) {
 			if project.Name().String() == "shop" && project.Previewable() {
 				t.Fatal("got shop previewable, want its overview built again without a session")
 			}
@@ -640,7 +639,7 @@ func TestBrowseProjects(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		s.sessions.running["blog"] = owned(t, "blog")
-		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "shop")) {
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, project(t, "shop").Root()) {
 			if project.Name().String() == "blog" && !project.Previewable() {
 				t.Fatal("got blog not previewable, want its overview built again with its session")
 			}
@@ -654,10 +653,11 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		s.configs.projects["blog"] = serving(t, "", "hugo server")
 		var names []string
-		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "shop")) {
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, project(t, "shop").Root()) {
 			names = append(names, project.Name().String())
 		}
-		if want := []string{"blog", "shop"}; !slices.Equal(names, want) {
+		// shop runs, so it comes first.
+		if want := []string{"shop", "blog"}; !slices.Equal(names, want) {
 			t.Fatalf("got %q, want %q", names, want)
 		}
 	})
@@ -670,7 +670,7 @@ func TestBrowseProjects(t *testing.T) {
 		}
 		delete(s.configs.projects, "blog")
 		var names []string
-		for _, project := range s.browser.previews.Live(s.browser.last().projects, projectName(t, "blog")) {
+		for _, project := range s.browser.previews.Live(s.browser.last().projects, project(t, "blog").Root()) {
 			names = append(names, project.Name().String())
 		}
 		if want := []string{"shop"}; !slices.Equal(names, want) {
@@ -686,7 +686,7 @@ func TestBrowseProjects(t *testing.T) {
 		shown := s.browser.last().projects
 		delete(s.sessions.running, "shop")
 		s.sessions.unlisted = errors.New("tmux: no server")
-		for _, project := range s.browser.previews.Live(shown, projectName(t, "shop")) {
+		for _, project := range s.browser.previews.Live(shown, project(t, "shop").Root()) {
 			if project.Name().String() == "shop" && !project.Running() {
 				t.Fatal("got shop not running, want it as it was")
 			}
@@ -1266,22 +1266,22 @@ func TestBrowseProjects(t *testing.T) {
 		}
 	})
 
-	t.Run("deletes a project once confirmed", func(t *testing.T) {
+	t.Run("unregisters a project once confirmed", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionDelete, "blog"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, shown := s.browser.last().overview("blog"); shown || s.browser.last().notice != "Deleted blog." {
+		if _, shown := s.browser.last().overview("blog"); shown || s.browser.last().notice != "Unregistered blog." {
 			t.Fatalf("got blog shown=%v and notice %q, want blog gone", shown, s.browser.last().notice)
 		}
 	})
 
-	t.Run("selects the project after a deleted one", func(t *testing.T) {
+	t.Run("selects the project after an unregistered one", func(t *testing.T) {
 		s := newBrowseSetup(t, choose(t, app.ActionDelete, "blog"))
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := s.browser.last().selected.String(); got != "shop" {
+		if got := s.browser.last().selected.String(); got != "/srv/shop" {
 			t.Fatalf("got %q selected, want shop", got)
 		}
 	})
@@ -1291,7 +1291,7 @@ func TestBrowseProjects(t *testing.T) {
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := s.browser.last().selected.String(); got != "blog" {
+		if got := s.browser.last().selected.String(); got != "/srv/blog" {
 			t.Fatalf("got %q selected, want blog", got)
 		}
 	})
@@ -1321,7 +1321,7 @@ func TestBrowseProjects(t *testing.T) {
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := s.browser.last().selected.String(); got != "new" {
+		if got := s.browser.last().selected.String(); got != "/srv/new" {
 			t.Fatalf("got %q selected, want new", got)
 		}
 	})
@@ -1332,7 +1332,7 @@ func TestBrowseProjects(t *testing.T) {
 		if err := s.browse(answer(true)); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if last := s.browser.last(); last.selected.String() != "shop" || last.notice != "Nothing done." {
+		if last := s.browser.last(); last.selected.String() != "/srv/shop" || last.notice != "Nothing done." {
 			t.Fatalf("got %q selected and notice %q, want shop and nothing done", last.selected, last.notice)
 		}
 	})
@@ -1433,7 +1433,7 @@ func isProjectNotFound(err error) bool {
 // failingBrowser is an app.ProjectBrowser that can't show anything.
 type failingBrowser struct{ err error }
 
-func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectName, app.Notice, app.LiveSessions) (app.Choice, error) {
+func (b failingBrowser) Browse([]app.ProjectOverview, domain.ProjectRoot, app.Notice, app.LiveSessions) (app.Choice, error) {
 	return app.Choice{}, b.err
 }
 
@@ -1454,11 +1454,11 @@ type invalidConfig struct {
 	invalid string
 }
 
-func (r invalidConfig) FindByName(name domain.ProjectName) (domain.Project, error) {
-	if name.String() == r.invalid {
-		return domain.Project{}, fmt.Errorf("%s: %w", name, domain.ErrInvalidConfig)
+func (r invalidConfig) Find(root domain.ProjectRoot) (domain.Project, error) {
+	if root.String() == "/srv/"+r.invalid {
+		return domain.Project{}, fmt.Errorf("%s: %w", root, domain.ErrInvalidConfig)
 	}
-	return r.inMemoryRegistry.FindByName(name)
+	return r.inMemoryRegistry.Find(root)
 }
 
 // sharingDocs is a project blog whose windows one and two each have a

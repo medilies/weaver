@@ -12,7 +12,7 @@ import (
 // keeping its ID, size and place, with its start script, or else a plain
 // shell, then types what opening types into it. Its tags of a task
 // typed into it go, with the task.
-func (t Tmux) ReloadPane(project domain.ProjectName, window domain.WindowPlan, index int) error {
+func (t Tmux) ReloadPane(project domain.ProjectRef, window domain.WindowPlan, index int) error {
 	id, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
@@ -20,7 +20,11 @@ func (t Tmux) ReloadPane(project domain.ProjectName, window domain.WindowPlan, i
 	if id == t.opts.Pane {
 		return domain.ErrPaneRunsWeaver
 	}
-	defaultCommand, err := t.option("="+project.String(), "default-command")
+	session, err := t.target(project)
+	if err != nil {
+		return err
+	}
+	defaultCommand, err := t.option(session, "default-command")
 	if absent(err) {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
 	}
@@ -57,8 +61,11 @@ func respawnCommand(pane domain.PanePlan, defaultCommand string) []string {
 // at the session's first free index, then swapped with the old one, so no
 // other window moves, and the old one killed. Throwaway windows of the
 // old panes' tasks are tied to the new panes in their places.
-func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan) error {
-	session := "=" + project.String()
+func (t Tmux) ReloadWindow(project domain.ProjectRef, window domain.WindowPlan) error {
+	session, err := t.target(project)
+	if err != nil {
+		return err
+	}
 	panes, err := t.projectPanes(project)
 	if err != nil {
 		return err
@@ -144,8 +151,12 @@ func (t Tmux) currentAndLast(session string) (current, last string, err error) {
 // windowTagged is the ID of the first window of the project's session
 // tagged with name, and its panes' IDs; an error wrapping
 // ErrWindowNotRunning when there is none.
-func (t Tmux) windowTagged(project domain.ProjectName, name domain.WindowName) (string, []string, error) {
-	out, err := t.run("list-panes", "-s", "-t", "="+project.String(), "-F", "#{window_id} #{pane_id} "+sized("@weaver_window"))
+func (t Tmux) windowTagged(project domain.ProjectRef, name domain.WindowName) (string, []string, error) {
+	session, err := t.target(project)
+	if err != nil {
+		return "", nil, err
+	}
+	out, err := t.run("list-panes", "-s", "-t", session, "-F", "#{window_id} #{pane_id} "+sized("@weaver_window"))
 	if absent(err) {
 		return "", nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
 	}
@@ -170,11 +181,15 @@ func (t Tmux) windowTagged(project domain.ProjectName, name domain.WindowName) (
 
 // retie points the throwaway windows of the tasks of oldPanes, the panes
 // window had by their IDs, at the panes now in their places.
-func (t Tmux) retie(project domain.ProjectName, window domain.WindowPlan, oldPanes map[string]int) error {
+func (t Tmux) retie(project domain.ProjectRef, window domain.WindowPlan, oldPanes map[string]int) error {
 	if len(oldPanes) == 0 {
 		return nil
 	}
-	out, err := t.run("list-windows", "-t", "="+project.String(), "-F", "#{window_id} #{"+taskOfTag+"}")
+	session, err := t.target(project)
+	if err != nil {
+		return err
+	}
+	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} #{"+taskOfTag+"}")
 	if err != nil {
 		return err
 	}

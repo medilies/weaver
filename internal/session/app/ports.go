@@ -14,27 +14,27 @@ var ErrAborted = errors.New("aborted")
 // Ports about domain concepts live in the domain package. The ones below
 // are about talking to the user, which only use cases do.
 
-// ProjectDraft is what a form starts from: suggestions the user can
-// change when binding, or a registered project and its config when
-// editing it, whose name stays.
+// ProjectDraft is what a form starts from: when binding, the root, its
+// config if it has one, and the captured windows if any; when editing, a
+// registered project and its config.
 type ProjectDraft struct {
-	Name      string
-	NameStays bool // editing: only a new config can be named otherwise
-	Root      string
-	Env       domain.Env
-	Before    []domain.Command
-	Clearing  domain.Clearing
-	Setup     []domain.Command
-	Teardown  []domain.Command
-	Windows   []domain.Window // a running session's, to start from; none to start blank
-	Config    []byte          // the config as stored, which saving replaces; none when binding
+	Name     string
+	Root     string
+	Env      domain.Env
+	Before   []domain.Command
+	Clearing domain.Clearing
+	Setup    []domain.Command
+	Teardown []domain.Command
+	Windows  []domain.Window // a running session's, to start from; none to start blank
+	Config   []byte          // the config as stored, which saving replaces; none for a new one
+	// Unregistered is true when binding a root not registered yet: saving
+	// registers it, so the form saves even what it didn't change.
+	Unregistered bool
 }
 
 // ProjectForm lets the user describe a project, starting from a draft.
 type ProjectForm interface {
-	// Fill returns the project the user described, or ErrAborted. Given a
-	// draft whose name doesn't stay, it returns a project only once the
-	// user has agreed to replace any config registered under its name.
+	// Fill returns the project the user described, or ErrAborted.
 	Fill(draft ProjectDraft) (domain.Project, error)
 }
 
@@ -52,7 +52,7 @@ type Acknowledger interface {
 }
 
 // ConfigDocument is a project's config as the user writes it: the file it
-// is stored in, e.g. "shop.yml", and what that file holds.
+// is stored in, e.g. "/srv/shop/weaver.yml", and what that file holds.
 type ConfigDocument struct {
 	File    string
 	Content []byte
@@ -67,15 +67,23 @@ type ConfigEditor interface {
 
 // ProjectDocuments are projects' configs as the user writes them.
 type ProjectDocuments interface {
-	// Document is the project's config as stored, or ErrProjectNotFound.
-	Document(name domain.ProjectName) (ConfigDocument, error)
+	// Document is the config of the project registered at root as
+	// stored, or ErrProjectNotFound, or ErrMissingConfig.
+	Document(root domain.ProjectRoot) (ConfigDocument, error)
 	// ReplaceDocument stores content as the project's config, in the
 	// stored config's file, if it is valid; otherwise the
 	// stored config stays and the error wraps domain.ErrInvalidConfig.
-	ReplaceDocument(name domain.ProjectName, content []byte) error
+	ReplaceDocument(root domain.ProjectRoot, content []byte) error
 	// Commented reports whether the project's config holds comments of
 	// the user's, which saving the project in place of it drops.
-	Commented(name domain.ProjectName) (bool, error)
+	Commented(root domain.ProjectRoot) (bool, error)
+	// ConfigAt is the project a config describes, rooted at root, and the
+	// config as stored, registered or not: config, relative to root or
+	// absolute, when given, else root's registered config, else the
+	// first of weaver.yml, weaver.yaml, .weaver.yml and .weaver.yaml in
+	// root. An error wrapping domain.ErrMissingConfig when there is none,
+	// or domain.ErrInvalidConfig when it isn't valid.
+	ConfigAt(root domain.ProjectRoot, config string) (domain.Project, ConfigDocument, error)
 }
 
 // Action is what the user can do from the project browser.
@@ -84,7 +92,7 @@ type Action int
 const (
 	// ActionOpen opens the chosen project, as `weave <project>` does.
 	ActionOpen Action = iota + 1
-	// ActionBind registers a project rooted at the working directory.
+	// ActionBind registers the working directory as a project's root.
 	ActionBind
 	// ActionEdit edits the chosen project's config in the config form.
 	ActionEdit
@@ -129,7 +137,7 @@ const (
 // rerunning its command or interrupting it.
 type Choice struct {
 	Action  Action
-	Project domain.ProjectName
+	Project domain.ProjectRef
 	Task    TaskAt
 	Pane    PaneAt
 }
@@ -165,14 +173,14 @@ func (n Notice) Failure() bool {
 // what to do next. It stays on screen from one choice to the next, until
 // it leaves.
 type ProjectBrowser interface {
-	// Browse shows projects, the one named selected highlighted and
+	// Browse shows projects, the one rooted at selected highlighted and
 	// notice in a status line, and returns the user's choice, or
 	// ErrAborted when they quit. Already on screen, it shows them in
 	// place; after a choice, it stays on screen, waiting. While it shows
 	// a project whose Previewable reports true, it keeps asking live for
 	// the preview of the selected window and for the project as it is
 	// now.
-	Browse(projects []ProjectOverview, selected domain.ProjectName, notice Notice, live LiveSessions) (Choice, error)
+	Browse(projects []ProjectOverview, selected domain.ProjectRoot, notice Notice, live LiveSessions) (Choice, error)
 	// Confirm asks in the status line while the browser is on screen,
 	// otherwise as a Confirmer of its own.
 	Confirmer
@@ -194,11 +202,11 @@ type LiveSessions interface {
 	// domain.ErrWindowNotFound when the project has no such window, or
 	// domain.ErrWindowNotRunning when the session lacks it.
 	Preview(project ProjectOverview, window domain.WindowName) (domain.WindowPreview, error)
-	// Live is the registered projects as they are now, sorted by name:
-	// those registered since projects were listed added, those no longer
-	// registered dropped, whether each one's session runs, and the one
-	// named selected, and those whose session started or ended, as Browse
+	// Live is the registered projects as they are now, in ListProjects'
+	// order: those registered since projects were listed added, those no
+	// longer registered dropped, whether each one's session runs, and the
+	// one rooted at selected, and those whose session started or ended, as Browse
 	// would show them now, their configs read again, their warnings and
 	// running tasks found again.
-	Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview
+	Live(projects []ProjectOverview, selected domain.ProjectRoot) []ProjectOverview
 }

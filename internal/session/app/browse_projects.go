@@ -43,6 +43,16 @@ func (o ProjectOverview) Name() domain.ProjectName {
 	return o.status.Name()
 }
 
+// Root is the project's root, which identifies it.
+func (o ProjectOverview) Root() domain.ProjectRoot {
+	return o.status.Root()
+}
+
+// Ref is how the session ports tell the project apart.
+func (o ProjectOverview) Ref() domain.ProjectRef {
+	return o.status.Ref()
+}
+
 // TaskRuns reports whether the task at still runs in the project's owned
 // session, in its pane or in a throwaway window, as far as tmux can tell.
 func (o ProjectOverview) TaskRuns(at TaskAt) bool {
@@ -211,7 +221,7 @@ func (uc BrowseProjects) Handle(workingDir string) (err error) {
 			err = left
 		}
 	}()
-	var selected domain.ProjectName
+	var selected domain.ProjectRoot
 	var notice Notice
 	for {
 		overviews, err := uc.overviews()
@@ -246,20 +256,20 @@ func (uc BrowseProjects) Handle(workingDir string) (err error) {
 // started or ended, and those registered since, are built again in full;
 // those no longer registered are dropped. When the listing fails,
 // projects are as they were.
-func (uc BrowseProjects) Live(projects []ProjectOverview, selected domain.ProjectName) []ProjectOverview {
+func (uc BrowseProjects) Live(projects []ProjectOverview, selected domain.ProjectRoot) []ProjectOverview {
 	statuses, err := uc.list.Handle()
 	if err != nil {
 		return projects
 	}
-	known := make(map[domain.ProjectName]ProjectOverview, len(projects))
+	known := make(map[domain.ProjectRoot]ProjectOverview, len(projects))
 	for _, project := range projects {
-		known[project.Name()] = project
+		known[project.Root()] = project
 	}
 	live := make([]ProjectOverview, 0, len(statuses))
 	for _, status := range statuses {
-		project, ok := known[status.Name()]
+		project, ok := known[status.Root()]
 		switch {
-		case !ok || status.Name() == selected || status.Running() != project.Running():
+		case !ok || status.Root() == selected || status.Running() != project.Running() || status.Name() != project.Name():
 			project = uc.overview(status)
 		default:
 			project.status = status
@@ -279,7 +289,7 @@ func (uc BrowseProjects) Preview(project ProjectOverview, window domain.WindowNa
 	}
 	for _, plan := range project.project.Plan().Windows() {
 		if plan.Name() == window {
-			return uc.sessions.Preview(project.Name(), plan)
+			return uc.sessions.Preview(project.Ref(), plan)
 		}
 	}
 	return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrWindowNotFound, window)
@@ -304,11 +314,11 @@ func (uc BrowseProjects) overviews() ([]ProjectOverview, error) {
 // from it.
 func (uc BrowseProjects) overview(status ProjectStatus) ProjectOverview {
 	overview := ProjectOverview{status: status}
-	overview.config, overview.problem = uc.documents.Document(status.Name())
+	overview.config, overview.problem = uc.documents.Document(status.Root())
 	if overview.problem != nil {
 		return overview
 	}
-	project, err := uc.projects.FindByName(status.Name())
+	project, err := uc.projects.Find(status.Root())
 	if err != nil {
 		overview.problem = err
 		return overview
@@ -340,7 +350,7 @@ func (uc BrowseProjects) runningTasks(overview ProjectOverview) []TaskAt {
 	if !tasked || !overview.found || !overview.session.Owned() {
 		return nil
 	}
-	commands, err := uc.sessions.RunningCommands(overview.project.Name(), windows)
+	commands, err := uc.sessions.RunningCommands(overview.Ref(), windows)
 	if err != nil {
 		return nil
 	}
@@ -369,7 +379,7 @@ func (uc BrowseProjects) exited(overview ProjectOverview) []Warning {
 		return nil
 	}
 	windows := overview.project.Plan().Windows()
-	idle, err := uc.sessions.Idle(overview.project.Name(), windows)
+	idle, err := uc.sessions.Idle(overview.Ref(), windows)
 	if err != nil {
 		return nil
 	}
@@ -399,7 +409,7 @@ func (uc BrowseProjects) restoration(overview *ProjectOverview) []domain.WindowP
 	var err error
 	// The session only adds to the summary: if tmux can't describe it,
 	// the browser shows the project as running, without the comparison.
-	overview.session, overview.found, err = uc.sessions.Find(project.Name())
+	overview.session, overview.found, err = uc.sessions.Find(overview.Ref())
 	if err != nil {
 		overview.found = false
 		return nil
@@ -547,110 +557,112 @@ func runs(pane domain.PanePlan, cmd domain.Command) (string, bool) {
 	return cmd.Program()
 }
 
-// act carries out choice on one of overviews, and returns the project to
-// select next and what to tell the user. Declining to confirm is ErrAborted.
-func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []ProjectOverview) (domain.ProjectName, string, error) {
-	name := choice.Project
+// act carries out choice on one of overviews, and returns the root of the
+// project to select next and what to tell the user. Declining to confirm
+// is ErrAborted.
+func (uc BrowseProjects) act(choice Choice, workingDir string, overviews []ProjectOverview) (domain.ProjectRoot, string, error) {
+	project := choice.Project
+	root := project.Root()
 	switch choice.Action {
 	case ActionOpen, ActionBind, ActionEdit, ActionEditRaw, ActionRerun:
 		if err := uc.browser.Leave(); err != nil {
-			return name, "", err
+			return root, "", err
 		}
 	}
 	switch choice.Action {
 	case ActionOpen:
-		return name, "", uc.open.Handle(name.String())
+		return root, "", uc.open.Handle(root)
 	case ActionStart:
-		if uc.settingUp(name) {
+		if uc.settingUp(project) {
 			if err := uc.browser.Leave(); err != nil {
-				return name, "", err
+				return root, "", err
 			}
 		}
-		uc.browser.Working(fmt.Sprintf("Starting %s…", name))
-		notice, err := uc.open.HandleStart(name.String())
-		return name, notice, err
+		uc.browser.Working(fmt.Sprintf("Starting %s…", project))
+		notice, err := uc.open.HandleStart(root)
+		return root, notice, err
 	case ActionBind:
-		project, err := uc.bind.Handle(BindRequest{WorkingDir: workingDir})
+		bound, err := uc.bind.Handle(BindRequest{WorkingDir: workingDir})
 		if err != nil {
-			return name, "", err
+			return root, "", err
 		}
-		return project.Name(), fmt.Sprintf("Saved %s.", project.Name()), nil
+		return bound.Root(), fmt.Sprintf("Saved %s.", bound.Name()), nil
 	case ActionEdit:
-		if err := uc.edit.Handle(name.String()); err != nil {
-			return name, "", err
+		if err := uc.edit.Handle(root); err != nil {
+			return root, "", err
 		}
-		return name, fmt.Sprintf("Saved %s.", name), nil
+		return root, fmt.Sprintf("Saved %s.", project), nil
 	case ActionEditRaw:
-		changed, err := uc.edit.HandleRaw(name.String())
+		changed, err := uc.edit.HandleRaw(root)
 		if err != nil || !changed {
-			return name, "No changes.", err
+			return root, "No changes.", err
 		}
-		return name, fmt.Sprintf("Saved %s.", name), nil
+		return root, fmt.Sprintf("Saved %s.", project), nil
 	case ActionKill:
 		// Don't ask to kill what isn't running. When finding the session
 		// fails, ask anyway: killing it then reports the failure.
-		if _, found, err := uc.sessions.Find(name); err == nil && !found {
-			return name, "", fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
+		if _, found, err := uc.sessions.Find(project); err == nil && !found {
+			return root, "", fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
 		}
-		if err := uc.ask(fmt.Sprintf("Kill %s's session and everything running in it?", name)); err != nil {
-			return name, "", err
+		if err := uc.ask(fmt.Sprintf("Kill %s's session and everything running in it?", project)); err != nil {
+			return root, "", err
 		}
-		if uc.tearingDown(name) {
+		if uc.tearingDown(project) {
 			if err := uc.browser.Leave(); err != nil {
-				return name, "", err
+				return root, "", err
 			}
 		}
-		uc.browser.Working(fmt.Sprintf("Killing %s…", name))
-		lingering, err := uc.kill.HandleShowing(name.String(), uc.browser.Working)
+		uc.browser.Working(fmt.Sprintf("Killing %s…", project))
+		lingering, err := uc.kill.HandleShowing(root, uc.browser.Working)
 		if err != nil {
-			return name, "", err
+			return root, "", err
 		}
-		return name, strings.TrimSpace(fmt.Sprintf("Killed %s. %s", name, lingering)), nil
+		return root, strings.TrimSpace(fmt.Sprintf("Killed %s. %s", project, lingering)), nil
 	case ActionDelete:
-		if err := uc.ask(fmt.Sprintf("Delete %s's config? A running session keeps running.", name)); err != nil {
-			return name, "", err
+		if err := uc.ask(fmt.Sprintf("Unregister %s? Its config, and a running session, stay.", project)); err != nil {
+			return root, "", err
 		}
-		uc.browser.Working(fmt.Sprintf("Deleting %s's config…", name))
-		if err := uc.projects.Delete(name); err != nil {
-			return name, "", err
+		uc.browser.Working(fmt.Sprintf("Unregistering %s…", project))
+		if err := uc.projects.Delete(root); err != nil {
+			return root, "", err
 		}
-		return neighbour(overviews, name), fmt.Sprintf("Deleted %s.", name), nil
+		return neighbour(overviews, root), fmt.Sprintf("Unregistered %s.", project), nil
 	case ActionRunTask:
-		return name, "", uc.run.Handle(name, choice.Task, uc.browser.Leave)
+		return root, "", uc.run.Handle(project, choice.Task, uc.browser.Leave)
 	case ActionRunTaskStaying:
-		notice, err := uc.run.HandleStaying(name, choice.Task, uc.browser.Working)
-		return name, notice, err
+		notice, err := uc.run.HandleStaying(project, choice.Task, uc.browser.Working)
+		return root, notice, err
 	case ActionRunTaskApart:
-		notice, err := uc.run.HandleApart(name, choice.Task, uc.browser.Working)
-		return name, notice, err
+		notice, err := uc.run.HandleApart(project, choice.Task, uc.browser.Working)
+		return root, notice, err
 	case ActionRerun:
-		return name, "", uc.rerun.Handle(name, choice.Pane)
+		return root, "", uc.rerun.Handle(project, choice.Pane)
 	case ActionInterruptTask:
-		notice, err := uc.interrupt.HandleTask(name, choice.Task)
-		return name, notice, err
+		notice, err := uc.interrupt.HandleTask(project, choice.Task)
+		return root, notice, err
 	case ActionInterruptPane:
-		notice, err := uc.interrupt.HandlePane(name, choice.Pane)
-		return name, notice, err
+		notice, err := uc.interrupt.HandlePane(project, choice.Pane)
+		return root, notice, err
 	case ActionReloadPane:
 		uc.browser.Working(fmt.Sprintf("Reloading %s…", choice.Pane.Window))
-		notice, err := uc.reload.HandlePane(name, choice.Pane)
-		return name, notice, err
+		notice, err := uc.reload.HandlePane(project, choice.Pane)
+		return root, notice, err
 	case ActionReloadWindow:
 		uc.browser.Working(fmt.Sprintf("Reloading %s…", choice.Pane.Window))
-		notice, err := uc.reload.HandleWindow(name, choice.Pane.Window)
-		return name, notice, err
+		notice, err := uc.reload.HandleWindow(project, choice.Pane.Window)
+		return root, notice, err
 	}
-	return name, "", fmt.Errorf("unknown action %d", choice.Action)
+	return root, "", fmt.Errorf("unknown action %d", choice.Action)
 }
 
 // settingUp reports whether starting the project would run its setup
 // commands, which need the terminal: its session isn't running, and its
 // config, as stored now, has some.
-func (uc BrowseProjects) settingUp(name domain.ProjectName) bool {
-	if _, running, err := uc.sessions.Find(name); err != nil || running {
+func (uc BrowseProjects) settingUp(ref domain.ProjectRef) bool {
+	if _, running, err := uc.sessions.Find(ref); err != nil || running {
 		return false
 	}
-	project, err := uc.projects.FindByName(name)
+	project, err := uc.projects.Find(ref.Root())
 	return err == nil && len(project.Setup()) > 0
 }
 
@@ -658,32 +670,33 @@ func (uc BrowseProjects) settingUp(name domain.ProjectName) bool {
 // commands, or tell why it can't, which both need the terminal: its
 // session is weaver's, and its config, as stored now, has some or can't
 // be read.
-func (uc BrowseProjects) tearingDown(name domain.ProjectName) bool {
-	if session, running, err := uc.sessions.Find(name); err != nil || !running || !session.Owned() {
+func (uc BrowseProjects) tearingDown(ref domain.ProjectRef) bool {
+	if session, running, err := uc.sessions.Find(ref); err != nil || !running || !session.Owned() {
 		return false
 	}
-	project, err := uc.projects.FindByName(name)
+	project, err := uc.projects.Find(ref.Root())
 	if errors.Is(err, domain.ErrProjectNotFound) {
 		return false
 	}
 	return err != nil || len(project.Teardown()) > 0
 }
 
-// neighbour is the project after name in overviews, or before it when
-// name was the last, so the selection stays where a deleted project was.
-func neighbour(overviews []ProjectOverview, name domain.ProjectName) domain.ProjectName {
+// neighbour is the project after root's in overviews, or before it when
+// root's was the last, so the selection stays where an unregistered
+// project was.
+func neighbour(overviews []ProjectOverview, root domain.ProjectRoot) domain.ProjectRoot {
 	for i, overview := range overviews {
-		if overview.Name() != name {
+		if overview.Root() != root {
 			continue
 		}
 		if i+1 < len(overviews) {
-			return overviews[i+1].Name()
+			return overviews[i+1].Root()
 		}
 		if i > 0 {
-			return overviews[i-1].Name()
+			return overviews[i-1].Root()
 		}
 	}
-	return name
+	return root
 }
 
 // ask returns ErrAborted unless the user answers yes to question.

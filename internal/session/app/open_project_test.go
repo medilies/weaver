@@ -3,6 +3,7 @@ package app_test
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -25,7 +26,7 @@ type fakeSessions struct {
 	unlisted error                                  // why listing the sessions fails, if it does
 }
 
-func (s *fakeSessions) Preview(name domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
+func (s *fakeSessions) Preview(name domain.ProjectRef, window domain.WindowPlan) (domain.WindowPreview, error) {
 	if _, ok := s.running[name.String()]; !ok {
 		return domain.WindowPreview{}, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
 	}
@@ -36,26 +37,26 @@ func (s *fakeSessions) Preview(name domain.ProjectName, window domain.WindowPlan
 	return preview, nil
 }
 
-func (s *fakeSessions) RunningCommands(name domain.ProjectName, _ []domain.WindowPlan) ([]domain.RunningCommand, error) {
+func (s *fakeSessions) RunningCommands(name domain.ProjectRef, _ []domain.WindowPlan) ([]domain.RunningCommand, error) {
 	if _, ok := s.running[name.String()]; !ok {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
 	}
 	return s.commands[name.String()], nil
 }
 
-func (s *fakeSessions) Idle(name domain.ProjectName, _ []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+func (s *fakeSessions) Idle(name domain.ProjectRef, _ []domain.WindowPlan) (map[domain.WindowName][]int, error) {
 	if _, ok := s.running[name.String()]; !ok {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
 	}
 	return s.idle[name.String()], nil
 }
 
-func (s *fakeSessions) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
+func (s *fakeSessions) Find(name domain.ProjectRef) (domain.RunningSession, bool, error) {
 	session, ok := s.running[name.String()]
 	return session, ok, nil
 }
 
-func (s *fakeSessions) Restore(_ domain.ProjectName, placements []domain.WindowPlacement) error {
+func (s *fakeSessions) Restore(_ domain.ProjectRef, placements []domain.WindowPlacement) error {
 	for _, placement := range placements {
 		s.restored = append(s.restored, placement.Window().Name().String())
 	}
@@ -63,16 +64,31 @@ func (s *fakeSessions) Restore(_ domain.ProjectName, placements []domain.WindowP
 }
 
 func (s *fakeSessions) Start(plan domain.SessionPlan) error {
-	s.started = append(s.started, plan.Name().String())
+	s.started = append(s.started, plan.Project().String())
 	return nil
 }
 
-func (s *fakeSessions) Attach(name domain.ProjectName) error {
+func (s *fakeSessions) Attach(name domain.ProjectRef) error {
 	s.attached = append(s.attached, name.String())
 	if s.onAttach != nil {
 		s.onAttach()
 	}
 	return nil
+}
+
+// listed is running as tmux lists it: each session started for, or in,
+// the root of the project it is keyed by, /srv/ and its name, as
+// project builds them.
+func listed(running map[string]domain.RunningSession) []domain.ListedSession {
+	var sessions []domain.ListedSession
+	for _, name := range slices.Sorted(maps.Keys(running)) {
+		session := domain.NewListedSession("w/"+name, "/srv/"+name)
+		if running[name].Owned() {
+			session = session.StartedFor("/srv/" + name)
+		}
+		sessions = append(sessions, session)
+	}
+	return sessions
 }
 
 // fakeWorkspace is an in-memory domain.Workspace: a set of existing
@@ -145,7 +161,7 @@ func shop(t *testing.T) domain.Project {
 func openShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspace) error {
 	t.Helper()
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-	return app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).Handle("shop")
+	return app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).Handle(rootOf(t, "shop"))
 }
 
 // openSetUpShop runs OpenProject on the shop project, with APP_ENV=local
@@ -158,7 +174,7 @@ func openSetUpShop(t *testing.T, sessions *fakeSessions, workspace *fakeWorkspac
 	}
 	setup := shop(t).WithEnv(env).SettingUp(command(t, "docker compose up -d"), command(t, "php artisan migrate"))
 	configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": setup}}
-	return app.NewOpenProject(configs, sessions, workspace, commands).Handle("shop")
+	return app.NewOpenProject(configs, sessions, workspace, commands).Handle(rootOf(t, "shop"))
 }
 
 // owned is a running session weaver started, which still has windows.
@@ -331,7 +347,7 @@ func TestOpenProject(t *testing.T) {
 
 	t.Run("reports a project that isn't registered", func(t *testing.T) {
 		configs := inMemoryRegistry{projects: map[string]domain.Project{}}
-		err := app.NewOpenProject(configs, &fakeSessions{}, everything(), &fakeCommands{}).Handle("shop")
+		err := app.NewOpenProject(configs, &fakeSessions{}, everything(), &fakeCommands{}).Handle(rootOf(t, "shop"))
 		if !errors.Is(err, domain.ErrProjectNotFound) {
 			t.Fatalf("got %v, want ErrProjectNotFound", err)
 		}
@@ -352,178 +368,12 @@ func rootedAt(t *testing.T, raw, root string) domain.Project {
 	return domain.NewProject(name, projectRoot)
 }
 
-// withBrokenConfig is a registry that also lists the project "broken",
-// whose stored config can't be read.
-type withBrokenConfig struct {
-	inMemoryRegistry
-}
-
-func (r withBrokenConfig) Names() ([]domain.ProjectName, error) {
-	names, err := r.inMemoryRegistry.Names()
-	broken, _ := domain.NewProjectName("broken")
-	return append([]domain.ProjectName{broken}, names...), err
-}
-
-func (r withBrokenConfig) FindByName(name domain.ProjectName) (domain.Project, error) {
-	if name.String() == "broken" {
-		return domain.Project{}, fmt.Errorf("broken.yml: %w: root: missing", domain.ErrInvalidConfig)
-	}
-	return r.inMemoryRegistry.FindByName(name)
-}
-
-func TestOpenProjectHandleDir(t *testing.T) {
-	registry := func(projects ...domain.Project) inMemoryRegistry {
-		configs := inMemoryRegistry{projects: map[string]domain.Project{}}
-		for _, p := range projects {
-			configs.projects[p.Name().String()] = p
-		}
-		return configs
-	}
-	open := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
-		t.Helper()
-		return app.NewOpenProject(registry(projects...), sessions, everything(), &fakeCommands{}).HandleDir(dir)
-	}
-	openPastBroken := func(t *testing.T, sessions *fakeSessions, dir string, projects ...domain.Project) error {
-		t.Helper()
-		configs := withBrokenConfig{registry(projects...)}
-		return app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleDir(dir)
-	}
-
-	t.Run("opens the project whose root contains the directory", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		if err := open(t, sessions, "/srv/shop/front/src", shop(t), rootedAt(t, "blog", "/srv/blog")); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"shop"}) {
-			t.Fatalf("got %q attached, want shop", sessions.attached)
-		}
-	})
-
-	t.Run("prefers the innermost root when roots nest", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		// shop-back sorts after shop, so the first root found isn't it.
-		if err := open(t, sessions, "/srv/shop/back/app", shop(t), rootedAt(t, "shop-back", "/srv/shop/back")); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"shop-back"}) {
-			t.Fatalf("got %q attached, want shop-back", sessions.attached)
-		}
-	})
-
-	t.Run("opens the project whose root a symlinked directory leads into", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		workspace := everything()
-		workspace.links = map[string]string{"/home/me/shop/front": "/srv/shop/front"}
-		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace, &fakeCommands{}).HandleDir("/home/me/shop/front"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"shop"}) {
-			t.Fatalf("got %q attached, want shop", sessions.attached)
-		}
-	})
-
-	t.Run("opens the project whose root is written through a symlink", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		workspace := everything()
-		workspace.links = map[string]string{"/home/me/blog": "/srv/blog"}
-		workspace.dirs["/home/me/blog"] = true
-		if err := app.NewOpenProject(registry(rootedAt(t, "blog", "/home/me/blog")), sessions, workspace, &fakeCommands{}).HandleDir("/srv/blog/posts"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"blog"}) {
-			t.Fatalf("got %q attached, want blog", sessions.attached)
-		}
-	})
-
-	t.Run("prefers the innermost root when only one is written through a symlink", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		workspace := everything()
-		workspace.links = map[string]string{"/home/me/projects/shop": "/srv/shop", "/home/me/projects/shop/front": "/srv/shop/front"}
-		workspace.dirs["/home/me/projects/shop"] = true
-		configs := registry(rootedAt(t, "outer", "/home/me/projects/shop"), rootedAt(t, "inner", "/srv/shop/front"))
-		if err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleDir("/home/me/projects/shop/front"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"inner"}) {
-			t.Fatalf("got %q attached, want inner", sessions.attached)
-		}
-	})
-
-	t.Run("opens the project a symlink inside it leads out of", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		workspace := everything()
-		workspace.links = map[string]string{"/srv/shop/vendor": "/opt/vendor"}
-		if err := app.NewOpenProject(registry(shop(t)), sessions, workspace, &fakeCommands{}).HandleDir("/srv/shop/vendor"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"shop"}) {
-			t.Fatalf("got %q attached, want shop", sessions.attached)
-		}
-	})
-
-	t.Run("opens the project a symlink leads into over the one it is in", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		workspace := everything()
-		workspace.links = map[string]string{"/srv/shop/data": "/srv/big/data"}
-		workspace.dirs["/srv/big"] = true
-		configs := registry(shop(t), rootedAt(t, "big", "/srv/big"))
-		if err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleDir("/srv/shop/data"); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"big"}) {
-			t.Fatalf("got %q attached, want big", sessions.attached)
-		}
-	})
-
-	t.Run("reports a directory no project contains", func(t *testing.T) {
-		err := open(t, &fakeSessions{}, "/home/me", shop(t))
-		if !errors.Is(err, app.ErrNoProjectAt) {
-			t.Fatalf("got %v, want ErrNoProjectAt", err)
-		}
-	})
-
-	t.Run("opens the matching project past an invalid config", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		if err := openPastBroken(t, sessions, "/srv/shop/front", shop(t)); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(sessions.attached, []string{"shop"}) {
-			t.Fatalf("got %q attached, want shop", sessions.attached)
-		}
-	})
-
-	t.Run("names the invalid configs when no project contains the directory", func(t *testing.T) {
-		err := openPastBroken(t, &fakeSessions{}, "/home/me", shop(t))
-		if !errors.Is(err, app.ErrNoProjectAt) || !errors.Is(err, domain.ErrInvalidConfig) || !strings.Contains(err.Error(), "broken.yml") {
-			t.Fatalf("got %v, want ErrNoProjectAt naming broken.yml", err)
-		}
-	})
-
-	t.Run("names each root as written when projects share one through a symlink", func(t *testing.T) {
-		workspace := everything()
-		workspace.links = map[string]string{"/home/me/blog": "/srv/blog"}
-		configs := registry(rootedAt(t, "blog", "/home/me/blog"), rootedAt(t, "notes", "/srv/blog"))
-		err := app.NewOpenProject(configs, &fakeSessions{}, workspace, &fakeCommands{}).HandleDir("/srv/blog")
-		if !errors.Is(err, app.ErrAmbiguousProject) || !strings.Contains(err.Error(), "blog, rooted at /home/me/blog, and notes, rooted at /srv/blog") {
-			t.Fatalf("got %v, want each project named with its own root", err)
-		}
-	})
-
-	t.Run("refuses to guess between projects sharing a root", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		err := open(t, sessions, "/srv/blog", rootedAt(t, "blog", "/srv/blog"), rootedAt(t, "notes", "/srv/blog"))
-		if !errors.Is(err, app.ErrAmbiguousProject) || len(sessions.attached) != 0 {
-			t.Fatalf("got %v with %q attached, want ErrAmbiguousProject and nothing attached", err, sessions.attached)
-		}
-	})
-}
-
 func TestOpenProjectStart(t *testing.T) {
 	// started starts shop against sessions, returning what it said.
 	started := func(t *testing.T, sessions *fakeSessions) string {
 		t.Helper()
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleStart("shop")
+		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleStart(rootOf(t, "shop"))
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -559,18 +409,15 @@ func TestOpenProjectStart(t *testing.T) {
 		workspace := everything()
 		delete(workspace.dirs, "/srv/shop/logs")
 		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-		said, err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleStart("shop")
+		said, err := app.NewOpenProject(configs, sessions, workspace, &fakeCommands{}).HandleStart(rootOf(t, "shop"))
 		if !errors.Is(err, app.ErrMissingDirectory) || said != "" || len(sessions.restored) != 0 {
 			t.Fatalf("got %q, %v, restored %q; want ErrMissingDirectory and nothing restored", said, err, sessions.restored)
 		}
 	})
+}
 
-	t.Run("starts the project whose root contains a directory", func(t *testing.T) {
-		sessions := &fakeSessions{}
-		configs := inMemoryRegistry{projects: map[string]domain.Project{"shop": shop(t)}}
-		said, err := app.NewOpenProject(configs, sessions, everything(), &fakeCommands{}).HandleDirStart("/srv/shop/back")
-		if err != nil || said != "Started shop." || len(sessions.attached) != 0 {
-			t.Fatalf("got %q, %v, attached %q; want shop started, not attached", said, err, sessions.attached)
-		}
-	})
+// rootOf is the root of the project named raw, as project builds it.
+func rootOf(t *testing.T, raw string) domain.ProjectRoot {
+	t.Helper()
+	return project(t, raw).Root()
 }

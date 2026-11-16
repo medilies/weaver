@@ -30,7 +30,7 @@ func (e Editor) Preferring(preferred func() string) Editor {
 
 // Edit implements app.ConfigEditor. The editor works on a copy named like
 // the stored config, so it opens in the config's format, in a temporary
-// directory that also holds the JSON Schema the config points to.
+// directory.
 func (e Editor) Edit(document app.ConfigDocument) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "weaver-edit-")
 	if err != nil {
@@ -38,9 +38,6 @@ func (e Editor) Edit(document app.ConfigDocument) ([]byte, error) {
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	path := filepath.Join(dir, filepath.Base(document.File))
-	if err := os.WriteFile(filepath.Join(dir, schemaFileName), schema, 0o600); err != nil {
-		return nil, err
-	}
 	if err := os.WriteFile(path, document.Content, 0o600); err != nil {
 		return nil, err
 	}

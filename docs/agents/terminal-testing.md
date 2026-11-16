@@ -108,7 +108,7 @@ Each is a test, in [`scenarios_test.go`](../../test/terminal/scenarios_test.go),
 
 ## Sample projects
 
-[`testdata/projects`](../../test/terminal/testdata/projects) holds them, `ROOT` standing for the test's directory. Each is there for some cases:
+[`testdata/projects`](../../test/terminal/testdata/projects) holds their configs, `ROOT` standing for the test's directory: each is written as `weaver.yml` in its root, a directory of the same name in the test's, and the settings list the roots in name order. `h.register` adds one, `h.unregister` takes one off the list, and `h.settings` keeps the list. Each is there for some cases:
 
 - `shop`: window `env`, `focus`, setup and teardown commands (one of them failing), tasks, and a command that exits.
 - `blog`: a grid window whose focused pane isn't the first.

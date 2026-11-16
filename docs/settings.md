@@ -1,8 +1,14 @@
 # Settings
 
-Settings are weaver-wide preferences, the same for every project, in
-`settings.yml`, beside the [`projects` folder](config.md). They are never
-part of a project's config. Without the file, every setting has its default.
+Settings are weaver-wide preferences, the same for every project, and
+the projects' roots, in `settings.yml`:
+
+- Linux: `~/.config/weaver/settings.yml`, or
+  `$XDG_CONFIG_HOME/weaver/settings.yml` when that is set.
+- macOS: `~/Library/Application Support/weaver/settings.yml`.
+
+They are never part of a project's config. Without the file, there are
+no projects, and every setting has its default.
 
 ```yaml
 # yaml-language-server: $schema=./settings.schema.json
@@ -14,11 +20,20 @@ keys:
 ```
 
 The browser (`weave`) and the config form (`weave bind`) read the
-settings, and refuse to start while the file is invalid, naming the file
+preferences, and refuse to start while they are invalid, naming the file
 and the field; the other commands, the help, the version and completion
 run either way, with every setting at its default. Each saves `settings.schema.json` beside the file once
 that folder exists, so an editor with a YAML language server completes
 and checks it; failing to save it only warns.
+
+## `projects`
+
+The registered projects, each by its root; see
+[Registering](config.md#registering). `weave bind` adds one first, and
+`d` in the browser takes one off. weave keeps the file's comments and
+permissions when it changes the list, but rewrites its layout, blank
+lines included. An entry weave can't
+read, such as a relative root, is skipped with a warning.
 
 ## `theme`
 
@@ -151,7 +166,7 @@ weave reads only this file, never your tmux bindings: see
 | `edit` | change the config in the config form | `e` |
 | `edit-raw` | edit the config raw in the editor | `E` |
 | `kill` | kill the session | `x` |
-| `delete` | delete the config | `d` |
+| `delete` | unregister the project, its config staying | `d` |
 | `rerun` | rerun the selected pane's exited command | `r` |
 | `reload` | reload the selected pane or its window | `R` |
 | `interrupt` | interrupt the selected pane, or a task in the task list | `i` |

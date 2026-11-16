@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,31 +36,35 @@ func NewKillProject(
 	return KillProject{sessions: sessions, locator: locator, projects: projects, commands: commands, acknowledger: acknowledger}
 }
 
-// Handle kills the session of the project named rawName, weaver's or
-// not. It says which panes still ran once it gave up waiting on them, as
-// in "api › logs still ran; killed anyway.", and nothing otherwise.
-func (uc KillProject) Handle(rawName string) (string, error) {
-	return uc.HandleShowing(rawName, func(string) {})
+// Handle kills the session of the project registered at root, weaver's
+// or not. It says which panes still ran once it gave up waiting on them,
+// as in "api › logs still ran; killed anyway.", and nothing otherwise.
+func (uc KillProject) Handle(root domain.ProjectRoot) (string, error) {
+	return uc.HandleShowing(root, func(string) {})
 }
 
 // HandleShowing is Handle, telling working what it does meanwhile, as in
 // "Interrupting shop's panes…".
-func (uc KillProject) HandleShowing(rawName string, working func(text string)) (string, error) {
-	name, err := domain.NewProjectName(rawName)
+func (uc KillProject) HandleShowing(root domain.ProjectRoot, working func(text string)) (string, error) {
+	project, err := registeredAt(uc.projects, root)
 	if err != nil {
 		return "", err
 	}
-	session, running, err := uc.sessions.Find(name)
+	session, running, err := uc.sessions.Find(project)
 	if err != nil {
 		return "", err
 	}
-	return uc.kill(name, running && session.Owned(), working)
+	if !running {
+		return "", fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	return uc.kill(project, session, working)
 }
 
 // HandleCurrent kills the session weaver runs in, or returns
-// domain.ErrNotInsideTmux. Only a session weaver started is killed: one
-// that merely has a project's name, as tmux's own "0", is left running,
-// and Handle kills it when named. Weaver's own pane goes with the
+// domain.ErrNotInsideTmux. Only a session weaver started is killed, its
+// project's or one whose project was unregistered since: one that merely
+// counts as a project's, started by hand, is left running, and Handle
+// kills it when its project is named. Weaver's own pane goes with the
 // session, so what still ran isn't told.
 func (uc KillProject) HandleCurrent() error {
 	current, err := uc.locator.Current()
@@ -69,19 +74,58 @@ func (uc KillProject) HandleCurrent() error {
 	if err != nil {
 		return err
 	}
-	name, err := domain.NewProjectName(current)
-	if err != nil {
-		return fmt.Errorf("the session you're in, %q, isn't a project's: %w", current, err)
-	}
-	session, running, err := uc.sessions.Find(name)
+	sessions, err := uc.sessions.Running()
 	if err != nil {
 		return err
 	}
-	if running && !session.Owned() {
-		return fmt.Errorf("%w: %s; run weave kill %s to kill it anyway", domain.ErrSessionNotOwned, name, name)
+	var listed domain.ListedSession
+	for _, s := range sessions {
+		if s.Name() == current {
+			listed = s
+		}
 	}
-	_, err = uc.kill(name, running, func(string) {})
+	if !listed.Owned() {
+		return fmt.Errorf("%w: %s; name its project to kill it anyway", domain.ErrSessionNotOwned, current)
+	}
+	root, err := domain.NewProjectRoot(listed.Root())
+	if err != nil {
+		return err
+	}
+	project, err := registeredAt(uc.projects, root)
+	if errors.Is(err, domain.ErrProjectNotFound) {
+		name, nameErr := domain.NewProjectName(filepath.Base(root.String()))
+		if nameErr != nil {
+			return nameErr
+		}
+		project, err = domain.NewProjectRef(root, name), nil
+	}
+	if err != nil {
+		return err
+	}
+	session, running, err := uc.sessions.Find(project)
+	if err != nil {
+		return err
+	}
+	if !running {
+		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
+	_, err = uc.kill(project, session, func(string) {})
 	return err
+}
+
+// registeredAt is the project registered at root, its config read or
+// not, or an error wrapping domain.ErrProjectNotFound.
+func registeredAt(projects domain.ProjectRegistry, root domain.ProjectRoot) (domain.ProjectRef, error) {
+	refs, err := projects.Registered()
+	if err != nil {
+		return domain.ProjectRef{}, err
+	}
+	for _, ref := range refs {
+		if ref.Root() == root {
+			return ref, nil
+		}
+	}
+	return domain.ProjectRef{}, fmt.Errorf("%w: nothing registered at %s", domain.ErrProjectNotFound, root)
 }
 
 // kill kills the project's session. When owned, it first interrupts its
@@ -91,10 +135,10 @@ func (uc KillProject) HandleCurrent() error {
 // teardown fails, which is then reported: first to the user, who reads it
 // before the kill, when weaver runs inside that session, since its pane
 // goes with it.
-func (uc KillProject) kill(name domain.ProjectName, owned bool, working func(string)) (string, error) {
+func (uc KillProject) kill(name domain.ProjectRef, session domain.RunningSession, working func(string)) (string, error) {
 	var lingering []string
 	var teardown error
-	if owned {
+	if session.Owned() {
 		working(fmt.Sprintf("Interrupting %s's panes…", name))
 		var err error
 		lingering, err = uc.sessions.InterruptPanes(name, interruptGrace)
@@ -104,7 +148,7 @@ func (uc KillProject) kill(name domain.ProjectName, owned bool, working func(str
 		working(fmt.Sprintf("Killing %s…", name))
 		teardown = errors.Join(teardown, uc.tearDown(name))
 	}
-	if teardown != nil && uc.inside(name) {
+	if teardown != nil && uc.inside(session) {
 		message := fmt.Sprintf("%v\n\n%s's session will be killed anyway, with this pane.", teardown, name)
 		if err := uc.acknowledger.Acknowledge(message); err != nil {
 			return "", errors.Join(err, teardown)
@@ -122,18 +166,18 @@ func (uc KillProject) kill(name domain.ProjectName, owned bool, working func(str
 	return fmt.Sprintf("%s still ran; killed anyway.", strings.Join(lingering, ", ")), nil
 }
 
-// inside reports whether weaver runs in the project's session.
-func (uc KillProject) inside(name domain.ProjectName) bool {
+// inside reports whether weaver runs in session.
+func (uc KillProject) inside(session domain.RunningSession) bool {
 	current, err := uc.locator.Current()
-	return err == nil && current == name.String()
+	return err == nil && current == session.Name()
 }
 
 // tearDown runs the project's teardown commands in its root, in order,
 // stopping at a failing one. A project without a config has none, as when
 // it was deleted while running; one whose config can't be read is
 // reported.
-func (uc KillProject) tearDown(name domain.ProjectName) error {
-	project, err := uc.projects.FindByName(name)
+func (uc KillProject) tearDown(name domain.ProjectRef) error {
+	project, err := uc.projects.Find(name.Root())
 	if errors.Is(err, domain.ErrProjectNotFound) {
 		return nil
 	}

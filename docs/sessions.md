@@ -1,5 +1,30 @@
 # Opening, killing and binding
 
+## Naming a project
+
+A command names a project by its name, or by a directory its root holds:
+
+- `weave shop` opens the project named `shop`. A name two projects
+  share is refused: the error names their roots.
+- `weave ~/dev/b/api`, or anything holding a `/`, opens the project
+  whose root holds that directory, the innermost when roots nest; `.`
+  is the current directory.
+- `weave open <project>` does the same as `weave <project>`, and reaches
+  a project named after a command, such as `weave open kill`.
+
+`weave kill` names one the same way.
+
+## Sessions and their projects
+
+A project's session is named `w/` and its name, as `w/shop`, or `w/`
+and its root, as `w/home/you/dev/b/api`, when another session has that
+name. `.` and `:` in it become `_`, as tmux writes them.
+
+- A session weave started is its project's, by its root, even once
+  renamed or the project renamed.
+- A session you started is a project's when it has its session name
+  and started in its root: `tmux new -s w/shop -c ~/dev/shop`.
+
 ## Open
 
 `weave <project>` attaches to the project's tmux session (inside tmux,
@@ -32,8 +57,7 @@ didn't start is only attached. Neither runs the `setup` commands.
 ## Start
 
 Opening is starting, then attaching: `weave -d <project>`
-(`--detached`; `.` for the current directory's project) does all of the
-above but attach, so the
+(`--detached`) does all of the above but attach, so the
 session starts, or its missing windows come back, and you
 stay where you are, told what was done: `Started shop.`, `Restored
 "logs" in shop.` or `shop is already running.` In the browser, `s`
@@ -59,8 +83,24 @@ shows a failed teardown and waits for Enter first.
 
 ## Bind
 
-`weave bind <session>` starts the [config form](config-form.md) from
-the session as it runs: its windows and panes, laid out as they are, each in its directory,
+`weave bind` registers the directory it runs in as a project's root,
+through the [config form](config-form.md):
+
+- When the directory has a config, `weaver.yml` or another
+  [config name](config.md#registering), the form starts from it, and
+  the diff before saving shows what changes. Otherwise it starts from a
+  new project named after the directory.
+- `--config` names another file, relative to the directory or
+  absolute, such as `--config ~/.config/weaver/api.yml` to keep the
+  config out of a team's repository; `--name` names the project.
+- Saving writes the config and lists the directory first under
+  `projects:` in `settings.yml`, unless it is listed already.
+
+A teammate who cloned a repository holding `weaver.yml` registers it
+with `weave bind` there, then `ctrl+s`.
+
+`weave bind <session>` starts the form's windows from the session as it
+runs: its windows and panes, laid out as they are, each in its directory,
 written relative to the root even when you reached the root through a
 symlink. The command in a pane's foreground is typed at its prompt but
 not run, from the directory of the shell that started it. Check it
@@ -70,10 +110,10 @@ that command typed at its prompt too, from the directory it started in.
 A window laid out by a `grid` is captured as splits, and the window
 and panes that were active get `focus`.
 
-The name is the session's, else the root's base name, and the root the
-current directory; `--name` and `--root` set them. Binding under a
-registered name keeps its `setup` and `teardown`, and the diff before
-saving shows what it replaces.
+The config's `setup`, `teardown` and the rest are kept. Once saved, a
+session started in the root is renamed after the project, so it is the
+project's. Any other keeps its name: one started elsewhere, or one weave
+started for another project.
 
 ## When tmux doesn't answer
 

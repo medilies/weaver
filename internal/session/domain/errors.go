@@ -5,26 +5,26 @@ import "errors"
 var (
 	// ErrEmptyProjectName is returned when a project name is blank.
 	ErrEmptyProjectName = errors.New("project name must not be empty")
-	// ErrInvalidProjectName is returned when a project name has characters
-	// a filename, a tmux session name or a command-line argument can't
-	// carry safely.
-	ErrInvalidProjectName = errors.New("project name must start with a letter or digit and contain only letters, digits, '-' and '_'")
-	// ErrReservedProjectName is returned when a project name is one of
-	// weave's commands, which `weave <name>` would run instead, or one
-	// kept for them.
-	ErrReservedProjectName = errors.New("project name is reserved for a weave command")
+	// ErrInvalidProjectName is returned when a project name couldn't be a
+	// directory's: ".", ".." or holding "/".
+	ErrInvalidProjectName = errors.New(`project name must not be "." or ".." nor hold "/"`)
 	// ErrEmptyProjectRoot is returned when a project root path is blank.
 	ErrEmptyProjectRoot = errors.New("project root must not be empty")
 	// ErrRelativeProjectRoot is returned when a project root is not an
 	// absolute path: `weave <project>` runs from anywhere.
 	ErrRelativeProjectRoot = errors.New("project root must be an absolute path")
-	// ErrProjectNotFound is returned when a registry has no project
-	// under the given name.
+	// ErrProjectNotFound is returned when a registry has no project at
+	// the given root, or by the given name.
 	ErrProjectNotFound = errors.New("project not found")
-	// ErrNameDiffersInCase is returned, with ErrProjectNotFound, when a
-	// registry has no project under the given name but has a config
-	// under a name differing from it only in case (ProjectName.SameAs).
-	ErrNameDiffersInCase = errors.New("names differing only in case are one project")
+	// ErrAmbiguousProject is returned when several registered projects
+	// share the name a project is looked up by.
+	ErrAmbiguousProject = errors.New("several projects share this name")
+	// ErrRootListedTwice is returned when the settings list a root
+	// twice, so which entry is its project's can't be told.
+	ErrRootListedTwice = errors.New("root listed twice in the settings")
+	// ErrMissingConfig is returned when a registered project's config
+	// file doesn't exist.
+	ErrMissingConfig = errors.New("config not found")
 	// ErrInvalidConfig wraps whatever makes a stored project config
 	// unreadable, as opposed to failing to read it at all.
 	ErrInvalidConfig = errors.New("invalid config")

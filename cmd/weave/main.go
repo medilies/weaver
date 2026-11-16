@@ -21,6 +21,7 @@ type application struct {
 	bindProject    app.BindProject
 	browseProjects app.BrowseProjects
 	editProject    app.EditProject
+	findProject    app.FindProject
 	openProject    app.OpenProject
 	killProject    app.KillProject
 	listProjects   app.ListProjects
@@ -53,8 +54,9 @@ func (a application) readSettings() error {
 	return err
 }
 
-// wire builds the use cases against this machine: settings and configs
-// under the user config directory, and the user's tmux server. Invalid
+// wire builds the use cases against this machine: the settings, listing
+// the projects' roots, under the user config directory, the configs in
+// those roots, and the user's tmux server. Invalid
 // settings stop only what shows the confirmation dialog, the config form
 // or the browser.
 func wire() (application, error) {
@@ -68,7 +70,9 @@ func wire() (application, error) {
 	// Warnings wait while the browser is on screen, which they would
 	// show over.
 	warnings := infra.NewHeldOutput(os.Stderr)
-	projects := infra.NewFileProjectRegistry(filepath.Join(weaverDir, "projects")).WithWarnings(warnings)
+	projects := infra.NewFileProjectRegistry(infra.SettingsFile(weaverDir)).
+		WithWarnings(warnings, filepath.Join(weaverDir, "projects")).
+		WithSchema(infra.SchemaURL(buildVersion()))
 	// TMUX= weave, to attach from inside tmux, keeps $TMUX_PANE: it only
 	// counts with $TMUX, which names the server it belongs to. A popup or
 	// run-shell has $TMUX but no pane.
@@ -112,7 +116,7 @@ func wire() (application, error) {
 
 	weaver := application{
 		popup:       popup,
-		bindProject: app.NewBindProject(projects, tmux, workspace, configForm),
+		bindProject: app.NewBindProject(projects, projects, tmux, workspace, configForm),
 		editProject: app.NewEditProject(projects, projects, configForm, infra.NewEditor().Preferring(func() string {
 			if s, err := settings(); err == nil {
 				return s.Editor()
@@ -120,6 +124,7 @@ func wire() (application, error) {
 			return ""
 		}), confirm),
 		sessions:     tmux,
+		findProject:  app.NewFindProject(projects, workspace),
 		openProject:  app.NewOpenProject(projects, tmux, workspace, commands),
 		killProject:  app.NewKillProject(tmux, tmux, projects, commands, infra.NewLineAcknowledger(os.Stdin, os.Stderr)),
 		listProjects: app.NewListProjects(projects, tmux),

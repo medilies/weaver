@@ -55,9 +55,9 @@ const callLimit = 5 * time.Second
 // and windows are targeted by the IDs tmux prints when creating them, so
 // user options such as base-index never matter.
 //
-// weaver tags the sessions it starts with the @weaver_project option and
-// their windows with @weaver_window, so it recognises them later, even
-// once renamed.
+// weaver tags the sessions it starts with the @weaver_project option,
+// holding their project's root, and their windows with @weaver_window,
+// so it recognises them later, even once renamed.
 type Tmux struct {
 	opts TmuxOptions
 }
@@ -67,42 +67,184 @@ func NewTmux(opts TmuxOptions) Tmux {
 	return Tmux{opts: opts}
 }
 
+// tmuxSession is a running session: its ID, which targets it, and the
+// session as SessionLister lists it.
+type tmuxSession struct {
+	id     string
+	listed domain.ListedSession
+}
+
+// sessions are the running sessions, none when no server runs. Each value
+// that may hold any character is read on its own, sized.
+func (t Tmux) sessions() ([]tmuxSession, error) {
+	out, err := t.run("list-sessions", "-F", "#{session_id} #{session_last_attached} #{session_created} "+sized("session_name"))
+	if absent(err) {
+		return nil, nil // no server, so no sessions
+	}
+	if err != nil || out == "" {
+		return nil, err
+	}
+	type read struct {
+		name, path, root string
+		active           time.Time
+	}
+	byID := map[string]*read{}
+	var ids []string
+	for line := range strings.Lines(out) {
+		fields := strings.SplitN(strings.TrimSuffix(line, "\n"), " ", 4)
+		if len(fields) < 4 {
+			continue
+		}
+		attached, _ := strconv.ParseInt(fields[1], 10, 64)
+		created, _ := strconv.ParseInt(fields[2], 10, 64)
+		byID[fields[0]] = &read{name: verbatim(fields[3]), active: time.Unix(max(attached, created), 0)}
+		ids = append(ids, fields[0])
+	}
+	for _, column := range []struct {
+		variable string
+		into     func(r *read, value string)
+	}{
+		{"session_path", func(r *read, value string) { r.path = value }},
+		{"@weaver_project", func(r *read, value string) { r.root = value }},
+	} {
+		out, err := t.run("list-sessions", "-F", "#{session_id} "+sized(column.variable))
+		if absent(err) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		for line := range strings.Lines(out) {
+			id, value, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+			if r, ok := byID[id]; ok {
+				column.into(r, verbatim(value))
+			}
+		}
+	}
+	sessions := make([]tmuxSession, 0, len(ids))
+	for _, id := range ids {
+		r := byID[id]
+		listed := domain.NewListedSession(r.name, r.path).ActiveAt(r.active)
+		// A root, unlike a project name weaver tagged sessions with before.
+		if filepath.IsAbs(r.root) {
+			listed = listed.StartedFor(r.root)
+		}
+		sessions = append(sessions, tmuxSession{id: id, listed: listed})
+	}
+	return sessions, nil
+}
+
+// session is the project's running session, or an error wrapping
+// ErrSessionNotRunning.
+func (t Tmux) session(project domain.ProjectRef) (tmuxSession, error) {
+	sessions, err := t.sessions()
+	if err != nil {
+		return tmuxSession{}, err
+	}
+	listed := make([]domain.ListedSession, 0, len(sessions))
+	for _, s := range sessions {
+		listed = append(listed, s.listed)
+	}
+	if found, ok := project.SessionAmong(listed); ok {
+		for _, s := range sessions {
+			if s.listed.Name() == found.Name() {
+				return s, nil
+			}
+		}
+	}
+	return tmuxSession{}, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+}
+
+// target is the ID of the project's running session, or an error
+// wrapping ErrSessionNotRunning.
+func (t Tmux) target(project domain.ProjectRef) (string, error) {
+	session, err := t.session(project)
+	return session.id, err
+}
+
 // Find implements domain.SessionFinder. A session is owned when it
-// carries its project's tag.
-func (t Tmux) Find(name domain.ProjectName) (domain.RunningSession, bool, error) {
-	// A window's format sees its session's options too. "/" can't be in a
-	// project name, so it ends the session's tag.
-	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{@weaver_project}/"+sized("@weaver_window"))
+// carries its project's root as its tag.
+func (t Tmux) Find(project domain.ProjectRef) (domain.RunningSession, bool, error) {
+	session, err := t.session(project)
+	if errors.Is(err, domain.ErrSessionNotRunning) {
+		return domain.RunningSession{}, false, nil
+	}
+	if err != nil {
+		return domain.RunningSession{}, false, err
+	}
+	out, err := t.run("list-windows", "-t", session.id, "-F", sized("@weaver_window"))
 	if absent(err) {
 		return domain.RunningSession{}, false, nil
 	}
 	if err != nil {
 		return domain.RunningSession{}, false, err
 	}
-	owned := false
 	var windows []domain.WindowName
 	for line := range strings.Lines(out) {
-		project, tag, _ := strings.Cut(strings.TrimSuffix(line, "\n"), "/")
-		owned = owned || project == name.String()
-		if window, err := domain.NewWindowName(verbatim(tag)); err == nil {
+		if window, err := domain.NewWindowName(verbatim(strings.TrimSuffix(line, "\n"))); err == nil {
 			windows = append(windows, window)
 		}
 	}
-	return domain.NewRunningSession(owned, windows...), true, nil
+	return domain.NewRunningSession(session.listed.Owned(), windows...).Named(session.listed.Name()), true, nil
+}
+
+// freeName is the first of the project's session names no running
+// session has but except, or an error naming the sessions holding them.
+func (t Tmux) freeName(project domain.ProjectRef, except string) (string, error) {
+	sessions, err := t.sessions()
+	if err != nil {
+		return "", err
+	}
+	usual, apart := project.SessionNames()
+	for _, name := range []string{usual, apart} {
+		if name == except || !slices.ContainsFunc(sessions, func(s tmuxSession) bool { return s.listed.Name() == name }) {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("sessions %s and %s already run: rename or kill one", usual, apart)
+}
+
+// Adopt implements domain.SessionCapturer. Only a session started in the
+// project's root is renamed, the one a name makes the project's; one
+// weaver started for another project stays as it is.
+func (t Tmux) Adopt(session string, project domain.ProjectRef) error {
+	sessions, err := t.sessions()
+	if err != nil {
+		return err
+	}
+	for _, s := range sessions {
+		if s.listed.Name() != session {
+			continue
+		}
+		if s.listed.Owned() && s.listed.Root() != project.Root().String() ||
+			!s.listed.Owned() && filepath.Clean(s.listed.Path()) != project.Root().String() {
+			return nil
+		}
+	}
+	name, err := t.freeName(project, session)
+	if err != nil || name == session {
+		return err
+	}
+	_, err = t.run("rename-session", "-t", "="+session, name)
+	return err
 }
 
 // Start implements domain.SessionLauncher. The session lands in its
 // focused window.
 func (t Tmux) Start(plan domain.SessionPlan) error {
+	name, err := t.freeName(plan.Project(), "")
+	if err != nil {
+		return err
+	}
 	var session, previous, defaultCommand string
 	var focused string
 	for i, window := range plan.Windows() {
 		var windowID, paneID string
 		var err error
 		if i == 0 {
-			session, windowID, paneID, defaultCommand, err = t.newSession(plan.Name(), window)
+			session, windowID, paneID, defaultCommand, err = t.newSession(name, window)
 			if err == nil {
-				_, err = t.run("set-option", "-t", session, "@weaver_project", plan.Name().String())
+				_, err = t.run("set-option", "-t", session, "@weaver_project", plan.Project().Root().String())
 			}
 		} else {
 			windowID, paneID, err = t.newWindow([]string{"-a", "-t", previous}, window, defaultCommand)
@@ -132,12 +274,16 @@ func (t Tmux) Start(plan domain.SessionPlan) error {
 
 // Restore implements domain.SessionLauncher. A window whose anchor is
 // gone too goes at the end.
-func (t Tmux) Restore(name domain.ProjectName, placements []domain.WindowPlacement) error {
-	out, err := t.run("list-windows", "-t", "="+name.String(), "-F", "#{window_id} "+sized("@weaver_window"))
+func (t Tmux) Restore(project domain.ProjectRef, placements []domain.WindowPlacement) error {
+	session, err := t.target(project)
 	if err != nil {
 		return err
 	}
-	defaultCommand, err := t.option("="+name.String(), "default-command")
+	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} "+sized("@weaver_window"))
+	if err != nil {
+		return err
+	}
+	defaultCommand, err := t.option(session, "default-command")
 	if err != nil {
 		return err
 	}
@@ -387,26 +533,23 @@ func unique(name string, taken map[string]bool) string {
 }
 
 // Running implements domain.SessionLister.
-func (t Tmux) Running() ([]string, error) {
-	out, err := t.run("list-sessions", "-F", sized("session_name"))
-	if absent(err) {
-		return nil, nil // no server, so no sessions
+func (t Tmux) Running() ([]domain.ListedSession, error) {
+	sessions, err := t.sessions()
+	listed := make([]domain.ListedSession, 0, len(sessions))
+	for _, s := range sessions {
+		listed = append(listed, s.listed)
 	}
-	if err != nil || out == "" {
-		return nil, err
-	}
-	var sessions []string
-	for line := range strings.Lines(out) {
-		sessions = append(sessions, verbatim(strings.TrimSuffix(line, "\n")))
-	}
-	return sessions, nil
+	return listed, err
 }
 
 // Kill implements domain.SessionKiller.
 // Its zoomed windows are unzoomed first: tmux 3.4 crashes, ending every
 // session, when it kills a session with a zoomed window.
-func (t Tmux) Kill(name domain.ProjectName) error {
-	session := "=" + name.String()
+func (t Tmux) Kill(name domain.ProjectRef) error {
+	session, err := t.target(name)
+	if err != nil {
+		return err
+	}
 	out, err := t.run("list-windows", "-t", session, "-F", "#{window_zoomed_flag} #{window_id}")
 	if absent(err) {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
@@ -433,8 +576,11 @@ func (t Tmux) Kill(name domain.ProjectName) error {
 
 // InterruptPanes implements domain.SessionKiller. A pane in a mode, such
 // as copy mode, leaves it first, for ctrl+c to reach what runs there.
-func (t Tmux) InterruptPanes(name domain.ProjectName, within time.Duration) ([]string, error) {
-	session := "=" + name.String()
+func (t Tmux) InterruptPanes(name domain.ProjectRef, within time.Duration) ([]string, error) {
+	session, err := t.target(name)
+	if err != nil {
+		return nil, err
+	}
 	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} "+sized("window_name"))
 	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, name)
@@ -515,8 +661,11 @@ func (t Tmux) InterruptPanes(name domain.ProjectName, within time.Duration) ([]s
 
 // Attach implements domain.SessionLauncher. Outside tmux it replaces
 // weaver with `tmux attach-session`, like the shell scripts it replaces.
-func (t Tmux) Attach(name domain.ProjectName) error {
-	target := "=" + name.String()
+func (t Tmux) Attach(name domain.ProjectRef) error {
+	target, err := t.target(name)
+	if err != nil {
+		return err
+	}
 	if t.opts.Inside {
 		_, err := t.run("switch-client", "-t", target)
 		return err
@@ -573,7 +722,7 @@ const throwawayTag = "@weaver_throwaway"
 // a job other than its shell is in its terminal's foreground, a command
 // its shell was replaced with by exec included, or that ps can't tell.
 // An error is the session's options failing to read.
-func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index int) (bool, error) {
+func (t Tmux) Busy(project domain.ProjectRef, window domain.WindowPlan, index int) (bool, error) {
 	id, pid, err := t.paneOf(project, window, index)
 	if err != nil {
 		return false, err
@@ -599,7 +748,7 @@ func (t Tmux) Busy(project domain.ProjectName, window domain.WindowPlan, index i
 // prefill not run yet, is cut first, with C-e C-u, which shells keep to
 // paste back with C-y, so the task's command isn't added to it. Landing,
 // the pane and its window are selected first, so a failure types nothing.
-func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index int, cmd domain.Command, landing bool) error {
+func (t Tmux) Type(project domain.ProjectRef, window domain.WindowPlan, index int, cmd domain.Command, landing bool) error {
 	id, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
@@ -624,13 +773,16 @@ func (t Tmux) Type(project domain.ProjectName, window domain.WindowPlan, index i
 // RunApart implements domain.TaskRunner. The window takes the
 // session's first free index, so it may sit between others, and is
 // selected when landing.
-func (t Tmux) RunApart(project domain.ProjectName, window domain.WindowPlan, index int, task domain.Task, landing bool) error {
+func (t Tmux) RunApart(project domain.ProjectRef, window domain.WindowPlan, index int, task domain.Task, landing bool) error {
 	source, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
 	}
 	pane := window.Panes()[index]
-	session := "=" + project.String()
+	session, err := t.target(project)
+	if err != nil {
+		return err
+	}
 	defaultCommand, err := t.option(session, "default-command")
 	if absent(err) {
 		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
@@ -683,7 +835,7 @@ func (t Tmux) tagTask(id string, cmd domain.Command) error {
 
 // Reach implements domain.TaskRunner: run's place is the ID of the pane
 // it runs in.
-func (t Tmux) Reach(project domain.ProjectName, run domain.RunningCommand) error {
+func (t Tmux) Reach(project domain.ProjectRef, run domain.RunningCommand) error {
 	if err := t.ownedBy(project, run.Place()); err != nil {
 		return err
 	}
@@ -695,7 +847,7 @@ func (t Tmux) Reach(project domain.ProjectName, run domain.RunningCommand) error
 }
 
 // Interrupt implements domain.TaskRunner.
-func (t Tmux) Interrupt(project domain.ProjectName, window domain.WindowPlan, index int) error {
+func (t Tmux) Interrupt(project domain.ProjectRef, window domain.WindowPlan, index int) error {
 	id, _, err := t.paneOf(project, window, index)
 	if err != nil {
 		return err
@@ -709,7 +861,7 @@ func (t Tmux) Interrupt(project domain.ProjectName, window domain.WindowPlan, in
 
 // InterruptRun implements domain.TaskRunner: run's place is the ID of the
 // pane it runs in.
-func (t Tmux) InterruptRun(project domain.ProjectName, run domain.RunningCommand) error {
+func (t Tmux) InterruptRun(project domain.ProjectRef, run domain.RunningCommand) error {
 	if err := t.ownedBy(project, run.Place()); err != nil {
 		return err
 	}
@@ -722,12 +874,16 @@ func (t Tmux) InterruptRun(project domain.ProjectName, run domain.RunningCommand
 
 // ownedBy returns an error wrapping ErrPaneNotRunning unless the pane id
 // is in the project's session.
-func (t Tmux) ownedBy(project domain.ProjectName, id string) error {
-	session, err := t.run("display-message", "-p", "-t", id, "#{session_name}")
-	if err != nil && !absent(err) {
+func (t Tmux) ownedBy(project domain.ProjectRef, id string) error {
+	target, err := t.target(project)
+	if err != nil && !errors.Is(err, domain.ErrSessionNotRunning) {
 		return err
 	}
-	if err != nil || session != project.String() {
+	session, idErr := t.run("display-message", "-p", "-t", id, "#{session_id}")
+	if idErr != nil && !absent(idErr) {
+		return idErr
+	}
+	if err != nil || idErr != nil || session != target {
 		return fmt.Errorf("%w: it ended", domain.ErrPaneNotRunning)
 	}
 	return nil
@@ -735,7 +891,7 @@ func (t Tmux) ownedBy(project domain.ProjectName, id string) error {
 
 // paneOf is the ID and process of the pane at index of window in the
 // project's running session, found as pick finds it.
-func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index int) (id, pid string, err error) {
+func (t Tmux) paneOf(project domain.ProjectRef, window domain.WindowPlan, index int) (id, pid string, err error) {
 	windows, err := t.projectPanes(project)
 	if err != nil {
 		return "", "", err
@@ -756,7 +912,7 @@ func (t Tmux) paneOf(project domain.ProjectName, window domain.WindowPlan, index
 
 // Idle implements domain.SessionInspector. Every pane is checked with one
 // ps, as idleShells checks them.
-func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map[domain.WindowName][]int, error) {
+func (t Tmux) Idle(project domain.ProjectRef, windows []domain.WindowPlan) (map[domain.WindowName][]int, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
 		return nil, err
@@ -795,7 +951,7 @@ func (t Tmux) Idle(project domain.ProjectName, windows []domain.WindowPlan) (map
 // apart. A pane whose process ps doesn't report isn't counted: the mark
 // is a hint, left out when it can't be told. Nor is the pane weaver runs
 // in, which weaver keeps busy itself.
-func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.WindowPlan) ([]domain.RunningCommand, error) {
+func (t Tmux) RunningCommands(project domain.ProjectRef, windows []domain.WindowPlan) ([]domain.RunningCommand, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
 		return nil, err
@@ -812,7 +968,11 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 			}
 		}
 	}
-	out, err := t.run("list-panes", "-s", "-t", "="+project.String(), "-F",
+	session, err := t.target(project)
+	if err != nil {
+		return nil, err
+	}
+	out, err := t.run("list-panes", "-s", "-t", session, "-F",
 		"#{pane_id} #{pane_pid} #{?"+taskOfTag+",#{"+taskOfTag+"},-} #{?"+taskSinceTag+",#{"+taskSinceTag+"},0} "+sized(taskTag))
 	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
@@ -855,7 +1015,7 @@ func (t Tmux) RunningCommands(project domain.ProjectName, windows []domain.Windo
 // terminal's foreground process group is its own, and it is still the
 // shell, not a command it was replaced with by exec. Seen are those ps
 // reports at all.
-func (t Tmux) idleShells(project domain.ProjectName, pids []string) (idle, seen map[string]bool, err error) {
+func (t Tmux) idleShells(project domain.ProjectRef, pids []string) (idle, seen map[string]bool, err error) {
 	idle, seen = map[string]bool{}, map[string]bool{}
 	if len(pids) == 0 {
 		return idle, seen, nil
@@ -886,10 +1046,14 @@ func (t Tmux) idleShells(project domain.ProjectName, pids []string) (idle, seen 
 // its default-command when set, past an exec and variable assignments.
 // Linux's ps cuts a name at 15 characters, so a longer one never matches:
 // its panes are never found idle.
-func (t Tmux) shellNames(project domain.ProjectName) (map[string]bool, error) {
+func (t Tmux) shellNames(project domain.ProjectRef) (map[string]bool, error) {
+	session, err := t.target(project)
+	if err != nil {
+		return nil, err
+	}
 	names := map[string]bool{}
 	for _, option := range []string{"default-shell", "default-command"} {
-		value, err := t.option("="+project.String(), option)
+		value, err := t.option(session, option)
 		if absent(err) {
 			return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
 		}
@@ -939,8 +1103,11 @@ type listedPane struct {
 // projectPanes are the panes of the project's running session, by the
 // name each window is tagged with: the first window tagged with it, in
 // order, which may have no pane listed if it closes meanwhile.
-func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane, error) {
-	session := "=" + project.String()
+func (t Tmux) projectPanes(project domain.ProjectRef) (map[string][]listedPane, error) {
+	session, err := t.target(project)
+	if err != nil {
+		return nil, err
+	}
 	out, err := t.run("list-windows", "-t", session, "-F", "#{window_id} "+sized("@weaver_window"))
 	if absent(err) {
 		return nil, fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
@@ -985,7 +1152,7 @@ func (t Tmux) projectPanes(project domain.ProjectName) (map[string][]listedPane,
 // dropped: a pane just cleared then shows its prompt at the bottom. The
 // pane weaver runs in isn't captured. A zoomed window shows its zoomed
 // pane alone, as tmux draws it.
-func (t Tmux) Preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
+func (t Tmux) Preview(project domain.ProjectRef, window domain.WindowPlan) (domain.WindowPreview, error) {
 	return readAgainIfLost(window.Name(), func() (domain.WindowPreview, error) { return t.preview(project, window) })
 }
 
@@ -1005,7 +1172,7 @@ func readAgainIfLost(window domain.WindowName, read func() (domain.WindowPreview
 
 // preview is Preview, read once: an error lost reports is a pane or
 // window closed meanwhile.
-func (t Tmux) preview(project domain.ProjectName, window domain.WindowPlan) (domain.WindowPreview, error) {
+func (t Tmux) preview(project domain.ProjectRef, window domain.WindowPlan) (domain.WindowPreview, error) {
 	listed, err := t.projectPanes(project)
 	if err != nil {
 		return domain.WindowPreview{}, err
@@ -1137,10 +1304,10 @@ func pick(panes []listedPane, window domain.WindowPlan, index int) (listedPane, 
 // a placeholder until it is read, then restarts with its script. Keys a
 // hook of the user's config types into that pane, as on session-created,
 // go to the placeholder and are lost.
-func (t Tmux) newSession(name domain.ProjectName, window domain.WindowPlan) (session, windowID, paneID, defaultCommand string, err error) {
+func (t Tmux) newSession(name string, window domain.WindowPlan) (session, windowID, paneID, defaultCommand string, err error) {
 	pane := window.Panes()[0]
 	args := []string{
-		"new-session", "-d", "-s", name.String(),
+		"new-session", "-d", "-s", name,
 		"-n", formatArgument(window.Name().String()),
 		"-c", formatArgument(pane.Dir()),
 		"-P", "-F", "#{session_id} #{window_id} #{pane_id} " + sized("default-command"),

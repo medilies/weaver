@@ -8,19 +8,6 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
-func TestProjectNameSameAs(t *testing.T) {
-	shop, _ := domain.NewProjectName("shop")
-	cases := map[string]bool{"shop": true, "Shop": true, "SHOP": true, "shops": false}
-	for other, same := range cases {
-		t.Run(other, func(t *testing.T) {
-			name, _ := domain.NewProjectName(other)
-			if got := shop.SameAs(name); got != same {
-				t.Fatalf("shop.SameAs(%s) = %v, want %v", other, got, same)
-			}
-		})
-	}
-}
-
 func TestNewProjectName(t *testing.T) {
 	t.Run("trims surrounding whitespace", func(t *testing.T) {
 		name, err := domain.NewProjectName("  weaver  ")
@@ -39,7 +26,7 @@ func TestNewProjectName(t *testing.T) {
 		}
 	})
 
-	for _, valid := range []string{"nimbus", "my-app_2", "2fa"} {
+	for _, valid := range []string{"nimbus", "my-app_2", "weaver.nvim", "My Site", "kill", "-app"} {
 		t.Run("accepts "+valid, func(t *testing.T) {
 			if _, err := domain.NewProjectName(valid); err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -47,37 +34,14 @@ func TestNewProjectName(t *testing.T) {
 		})
 	}
 
-	invalid := map[string]string{
-		"a path separator":           "../etc",
-		"a dot tmux would rewrite":   "my.app",
-		"a colon tmux would rewrite": "my:app",
-		"a hash tmux would expand":   "my#app",
-		"inner whitespace":           "my app",
-		"a leading dash":             "-app",
-		"a leading underscore":       "_app",
-	}
-	for reason, name := range invalid {
-		t.Run("rejects "+reason, func(t *testing.T) {
+	for _, name := range []string{".", "..", "dev/shop"} {
+		t.Run("rejects "+name+", which can't be a directory's name", func(t *testing.T) {
 			_, err := domain.NewProjectName(name)
 			if !errors.Is(err, domain.ErrInvalidProjectName) {
 				t.Fatalf("got %v, want ErrInvalidProjectName", err)
 			}
 		})
 	}
-
-	t.Run("rejects a command's name in another case", func(t *testing.T) {
-		_, err := domain.NewProjectName("Edit")
-		if !errors.Is(err, domain.ErrReservedProjectName) {
-			t.Fatalf("got %v, want ErrReservedProjectName", err)
-		}
-	})
-
-	t.Run("rejects a name kept for a removed command", func(t *testing.T) {
-		_, err := domain.NewProjectName("show")
-		if !errors.Is(err, domain.ErrReservedProjectName) {
-			t.Fatalf("got %v, want ErrReservedProjectName", err)
-		}
-	})
 }
 
 func TestNewProjectRoot(t *testing.T) {

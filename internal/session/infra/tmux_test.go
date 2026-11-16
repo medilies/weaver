@@ -198,9 +198,10 @@ func (s tmuxServer) attached(t *testing.T, session string) (tmuxServer, string) 
 	return viewer, "=viewer:"
 }
 
-// paneLabelled is the ID of the pane labelled label in session.
-func (s tmuxServer) paneLabelled(t *testing.T, session, label string) string {
+// paneLabelled is the ID of the pane labelled label in project's session.
+func (s tmuxServer) paneLabelled(t *testing.T, project, label string) string {
 	t.Helper()
+	session := "w/" + project
 	for line := range strings.Lines(s.query(t, "list-panes", "-s", "-t", "="+session, "-F", "#{pane_id} #{@label}")) {
 		if id, got, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " "); got == label {
 			return id
@@ -208,6 +209,12 @@ func (s tmuxServer) paneLabelled(t *testing.T, session, label string) string {
 	}
 	t.Fatalf("no pane labelled %q in session %s", label, session)
 	return ""
+}
+
+// refAt refers to the project named name rooted at root.
+func refAt(t *testing.T, root, name string) domain.ProjectRef {
+	t.Helper()
+	return domain.NewProjectRef(mustRoot(t, root), mustName(t, name))
 }
 
 // planOf loads doc as project name and resolves it for tmux.
@@ -250,34 +257,34 @@ func TestTmuxStart(t *testing.T) {
 	}
 
 	t.Run("creates the windows in order", func(t *testing.T) {
-		got := server.query(t, "list-windows", "-t", "=start", "-F", "#{window_name}")
+		got := server.query(t, "list-windows", "-t", "=w/start", "-F", "#{window_name}")
 		if want := "api\nenv\nrepo"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("keeps the first window current", func(t *testing.T) {
-		got := server.query(t, "list-windows", "-t", "=start", "-F", "#{window_active} #{window_name}")
+		got := server.query(t, "list-windows", "-t", "=w/start", "-F", "#{window_active} #{window_name}")
 		if want := "1 api\n0 env\n0 repo"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("labels the panes of a split window", func(t *testing.T) {
-		got := server.query(t, "list-panes", "-t", "=start:api", "-F", "#{@label}")
+		got := server.query(t, "list-panes", "-t", "=w/start:api", "-F", "#{@label}")
 		if want := "shell\nside\nbelow"; got != want {
 			t.Fatalf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("shows the labels in the top border", func(t *testing.T) {
-		if got := server.query(t, "show-options", "-w", "-v", "-t", "=start:api", "pane-border-status"); got != "top" {
+		if got := server.query(t, "show-options", "-w", "-v", "-t", "=w/start:api", "pane-border-status"); got != "top" {
 			t.Fatalf("got %q, want %q", got, "top")
 		}
 	})
 
 	t.Run("leaves a single-pane window's border alone", func(t *testing.T) {
-		if got := server.query(t, "show-options", "-w", "-t", "=start:repo"); strings.Contains(got, "pane-border-status") {
+		if got := server.query(t, "show-options", "-w", "-t", "=w/start:repo"); strings.Contains(got, "pane-border-status") {
 			t.Fatalf("got window options %q, want no pane-border-status", got)
 		}
 	})
@@ -312,15 +319,15 @@ func TestTmuxStart(t *testing.T) {
 	})
 
 	t.Run("prints a pane's note", func(t *testing.T) {
-		server.waitFor(t, "=start:env", "it's a note")
+		server.waitFor(t, "=w/start:env", "it's a note")
 	})
 
 	t.Run("exports a pane's env literally", func(t *testing.T) {
-		server.waitFor(t, "=start:env", "[hi $HOME]")
+		server.waitFor(t, "=w/start:env", "[hi $HOME]")
 	})
 
 	t.Run("runs the window's and the pane's commands before the pane's own", func(t *testing.T) {
-		server.waitFor(t, "=start:env", "first-window-pane")
+		server.waitFor(t, "=w/start:env", "first-window-pane")
 	})
 }
 
@@ -348,33 +355,33 @@ func TestTmuxFocus(t *testing.T) {
 
 	t.Run("lands a started session in its focused window", func(t *testing.T) {
 		server, _ := start(t)
-		if got := server.query(t, "display-message", "-p", "-t", "=focus:", "#{window_name}"); got != "b" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/focus:", "#{window_name}"); got != "b" {
 			t.Fatalf("got window %q, want b", got)
 		}
 	})
 
 	t.Run("selects a window's focused pane", func(t *testing.T) {
 		server, _ := start(t)
-		if got := server.query(t, "display-message", "-p", "-t", "=focus:b", "#{@label}"); got != "right" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/focus:b", "#{@label}"); got != "right" {
 			t.Fatalf("got pane %q, want right", got)
 		}
 	})
 
 	t.Run("selects a restored window's focused pane without switching to it", func(t *testing.T) {
 		server, project := start(t)
-		server.query(t, "select-window", "-t", "=focus:a")
-		server.query(t, "kill-window", "-t", "=focus:b")
-		session, _, err := server.tmux().Find(project.Name())
+		server.query(t, "select-window", "-t", "=w/focus:a")
+		server.query(t, "kill-window", "-t", "=w/focus:b")
+		session, _, err := server.tmux().Find(project.Ref())
 		if err != nil {
 			t.Fatalf("finding: %v", err)
 		}
-		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+		if err := server.tmux().Restore(project.Ref(), project.Restoration(session.Windows())); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := server.query(t, "display-message", "-p", "-t", "=focus:", "#{window_name}"); got != "a" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/focus:", "#{window_name}"); got != "a" {
 			t.Fatalf("got window %q, want a still", got)
 		}
-		if got := server.query(t, "display-message", "-p", "-t", "=focus:b", "#{@label}"); got != "right" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/focus:b", "#{@label}"); got != "right" {
 			t.Fatalf("got pane %q, want right", got)
 		}
 	})
@@ -405,7 +412,7 @@ func TestTmuxStartSizesTheWindowBelowTheStatusLine(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got := server.query(t, "display-message", "-p", "-t", "=status:", "#{window_width}x#{window_height}"); got != "200x50" {
+	if got := server.query(t, "display-message", "-p", "-t", "=w/status:", "#{window_width}x#{window_height}"); got != "200x50" {
 		t.Fatalf("got %s, want 200x50 in a 200x51 terminal", got)
 	}
 }
@@ -422,7 +429,7 @@ func TestTmuxStartSizesTheWindowByTheStatusLinesTheConfigSets(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got := server.query(t, "display-message", "-p", "-t", "=nostatus:", "#{window_width}x#{window_height}"); got != "200x51" {
+	if got := server.query(t, "display-message", "-p", "-t", "=w/nostatus:", "#{window_width}x#{window_height}"); got != "200x51" {
 		t.Fatalf("got %s, want the whole 200x51 terminal without a status line", got)
 	}
 }
@@ -446,7 +453,7 @@ func TestTmuxStartInsideTmuxTakesTheClientsSize(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got := server.query(t, "display-message", "-p", "-t", "=inner:", "#{window_width}x#{window_height}"); got != "200x49" {
+	if got := server.query(t, "display-message", "-p", "-t", "=w/inner:", "#{window_width}x#{window_height}"); got != "200x49" {
 		t.Fatalf("got %s, want 200x49: the client's 200x50 less the status line", got)
 	}
 }
@@ -462,16 +469,16 @@ func TestTmuxStartClearing(t *testing.T) {
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	server.waitFor(t, "=cleared:w", "shown-4")
+	server.waitFor(t, "=w/cleared:w", "shown-4")
 
 	t.Run("hides the before commands once they ran", func(t *testing.T) {
-		if shown := server.query(t, "capture-pane", "-p", "-t", "=cleared:w"); strings.Contains(shown, "hidden") {
+		if shown := server.query(t, "capture-pane", "-p", "-t", "=w/cleared:w"); strings.Contains(shown, "hidden") {
 			t.Fatalf("the before command still shows:\n%s", shown)
 		}
 	})
 
 	t.Run("prints the note after clearing", func(t *testing.T) {
-		server.waitFor(t, "=cleared:w", "kept note")
+		server.waitFor(t, "=w/cleared:w", "kept note")
 	})
 }
 
@@ -492,7 +499,7 @@ func TestTmuxStartTypesAClearingPanesBeforeCommandsAfterASpace(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	typed := func(window string) string {
-		shown := server.waitFor(t, "=spaced:"+window, "echo done")
+		shown := server.waitFor(t, "=w/spaced:"+window, "echo done")
 		for line := range strings.SplitSeq(shown, "\n") {
 			if strings.Contains(line, "echo typed") {
 				return line
@@ -529,8 +536,8 @@ func TestTmuxStartEndsAPaneScriptWithTheDefaultCommand(t *testing.T) {
 	}
 
 	t.Run("in the session's first pane", func(t *testing.T) {
-		server.waitFor(t, "=dflt:first", "first note")
-		server.waitFor(t, "=dflt:first", "by-default")
+		server.waitFor(t, "=w/dflt:first", "first note")
+		server.waitFor(t, "=w/dflt:first", "by-default")
 	})
 
 	t.Run("in a later window's first pane", func(t *testing.T) {
@@ -542,16 +549,16 @@ func TestTmuxStartEndsAPaneScriptWithTheDefaultCommand(t *testing.T) {
 	})
 
 	t.Run("in a restored window", func(t *testing.T) {
-		server.query(t, "kill-window", "-t", "=dflt:third")
-		session, _, err := server.tmux().Find(project.Name())
+		server.query(t, "kill-window", "-t", "=w/dflt:third")
+		session, _, err := server.tmux().Find(project.Ref())
 		if err != nil {
 			t.Fatalf("finding: %v", err)
 		}
-		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+		if err := server.tmux().Restore(project.Ref(), project.Restoration(session.Windows())); err != nil {
 			t.Fatalf("restoring: %v", err)
 		}
-		server.waitFor(t, "=dflt:third", "third note")
-		server.waitFor(t, "=dflt:third", "by-default")
+		server.waitFor(t, "=w/dflt:third", "third note")
+		server.waitFor(t, "=w/dflt:third", "by-default")
 	})
 }
 
@@ -580,13 +587,13 @@ func TestTmuxStartPassesTextVerbatim(t *testing.T) {
 	})
 
 	t.Run("keeps a hash in a window name", func(t *testing.T) {
-		if got := server.query(t, "list-windows", "-t", "=verbatim", "-F", "#{window_name}"); got != "a#Sb" {
+		if got := server.query(t, "list-windows", "-t", "=w/verbatim", "-F", "#{window_name}"); got != "a#Sb" {
 			t.Fatalf("got %q, want %q", got, "a#Sb")
 		}
 	})
 
 	t.Run("draws a hash in a pane name as written", func(t *testing.T) {
-		viewer, pane := server.attached(t, "verbatim")
+		viewer, pane := server.attached(t, "w/verbatim")
 		viewer.waitFor(t, pane, " a##b #[reverse]c ")
 	})
 
@@ -612,7 +619,7 @@ func TestTmuxStartLeavesNothingWhenAStepFails(t *testing.T) {
 	server := newTmuxServer(t)
 	plan := planOf(t, "broken", fmt.Sprintf(`{"root": %q, "windows": [{"name": "main", "panes": [%s]}]}`,
 		t.TempDir(), tooManyPanes()))
-	name, _ := domain.NewProjectName("broken")
+	name := plan.Project()
 
 	if err := server.tmux().Start(plan); err == nil {
 		t.Fatal("got no error, want a split to run out of space")
@@ -627,7 +634,7 @@ func TestTmuxStartLeavesNothingWhenALaterWindowFails(t *testing.T) {
 	server := newTmuxServer(t)
 	plan := planOf(t, "broken", fmt.Sprintf(`{"root": %q, "windows": [{"name": "fine"}, {"name": "main", "panes": [%s]}]}`,
 		t.TempDir(), tooManyPanes()))
-	name, _ := domain.NewProjectName("broken")
+	name := plan.Project()
 
 	if err := server.tmux().Start(plan); err == nil {
 		t.Fatal("got no error, want a split in the second window to run out of space")
@@ -671,11 +678,11 @@ func stale(t *testing.T) tmuxServer {
 
 func TestTmuxUnreachableServer(t *testing.T) {
 	server := unreachable(t)
-	name, _ := domain.NewProjectName("shop")
+	name := refAt(t, "/srv/shop", "shop")
 
 	t.Run("listing fails rather than finding nothing running", func(t *testing.T) {
 		if sessions, err := server.tmux().Running(); err == nil {
-			t.Fatalf("got %q, want an error", sessions)
+			t.Fatalf("got %v, want an error", sessions)
 		}
 	})
 
@@ -698,12 +705,12 @@ func TestTmuxStaleSocket(t *testing.T) {
 
 	t.Run("lists no sessions", func(t *testing.T) {
 		if sessions, err := server.tmux().Running(); err != nil || len(sessions) != 0 {
-			t.Fatalf("got %q (%v), want none running", sessions, err)
+			t.Fatalf("got %v (%v), want none running", sessions, err)
 		}
 	})
 
 	t.Run("finds no session", func(t *testing.T) {
-		name, _ := domain.NewProjectName("shop")
+		name := refAt(t, "/srv/shop", "shop")
 		if _, running, err := server.tmux().Find(name); err != nil || running {
 			t.Fatalf("got running=%v (%v), want not running", running, err)
 		}
@@ -712,7 +719,8 @@ func TestTmuxStaleSocket(t *testing.T) {
 
 func TestTmuxKill(t *testing.T) {
 	server := newTmuxServer(t)
-	name, _ := domain.NewProjectName("doomed")
+	root := t.TempDir()
+	name := refAt(t, root, "doomed")
 
 	t.Run("reports a session that isn't running", func(t *testing.T) {
 		if err := server.tmux().Kill(name); !errors.Is(err, domain.ErrSessionNotRunning) {
@@ -721,7 +729,7 @@ func TestTmuxKill(t *testing.T) {
 	})
 
 	t.Run("kills a running session", func(t *testing.T) {
-		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q}`, t.TempDir()))); err != nil {
+		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q}`, root))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
@@ -735,17 +743,16 @@ func TestTmuxKill(t *testing.T) {
 
 	t.Run("kills a session with a zoomed window, leaving the others", func(t *testing.T) {
 		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q, "windows": [{"name": "w", "panes": [
-			{"name": "a"}, {"name": "b", "split": {"direction": "right"}}]}]}`, t.TempDir()))); err != nil {
+			{"name": "a"}, {"name": "b", "split": {"direction": "right"}}]}]}`, root))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		server.query(t, "new-session", "-d", "-s", "bystander", "/bin/sh")
-		server.query(t, "resize-pane", "-Z", "-t", "=doomed:w")
+		server.query(t, "resize-pane", "-Z", "-t", "=w/doomed:w")
 
 		if err := server.tmux().Kill(name); err != nil {
 			t.Fatalf("unexpected error: %v", err) // tmux 3.4 would crash, ending every session
 		}
-		bystander, _ := domain.NewProjectName("bystander")
-		if server.running(t, name) || !server.running(t, bystander) {
+		if server.running(t, name) || !strings.Contains(server.query(t, "list-sessions", "-F", "#{session_name}"), "bystander") {
 			t.Fatal("want doomed gone and bystander still running")
 		}
 	})
@@ -753,7 +760,8 @@ func TestTmuxKill(t *testing.T) {
 
 func TestTmuxInterruptPanes(t *testing.T) {
 	server := newTmuxServer(t)
-	name, _ := domain.NewProjectName("doomed")
+	root := t.TempDir()
+	name := refAt(t, root, "doomed")
 	// started is doomed, its pane a running sleep, and b a sleep that
 	// ignores ctrl+c, once both run.
 	// stubborn is a sleep that ignores ctrl+c, whatever the shell.
@@ -766,11 +774,11 @@ func TestTmuxInterruptPanes(t *testing.T) {
 		_ = server.tmux().Kill(name)
 		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q, "windows": [{"name": "w", "panes": [
 			{"name": "a", "command": "sleep 300"},
-			{"name": "b", "split": {"direction": "right"}, "command": %q}]}]}`, t.TempDir(), stubborn))); err != nil {
+			{"name": "b", "split": {"direction": "right"}, "command": %q}]}]}`, root, stubborn))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		for range 100 {
-			if strings.Count(server.query(t, "list-panes", "-t", "=doomed:w", "-F", "#{pane_current_command}"), "sleep") == 2 {
+			if strings.Count(server.query(t, "list-panes", "-t", "=w/doomed:w", "-F", "#{pane_current_command}"), "sleep") == 2 {
 				return
 			}
 			time.Sleep(50 * time.Millisecond)
@@ -823,7 +831,7 @@ func TestTmuxRunning(t *testing.T) {
 
 	t.Run("lists no sessions when no server runs", func(t *testing.T) {
 		if sessions, err := server.tmux().Running(); err != nil || len(sessions) != 0 {
-			t.Fatalf("got %q (%v), want none", sessions, err)
+			t.Fatalf("got %v (%v), want none", sessions, err)
 		}
 	})
 
@@ -838,9 +846,16 @@ func TestTmuxRunning(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		slices.Sort(sessions)
-		if want := []string{"api", "front"}; !slices.Equal(sessions, want) {
-			t.Fatalf("got %q, want %q", sessions, want)
+		var names []string
+		for _, session := range sessions {
+			if !session.Owned() {
+				t.Fatalf("got %s not owned, want weaver's", session.Name())
+			}
+			names = append(names, session.Name())
+		}
+		slices.Sort(names)
+		if want := []string{"w/api", "w/front"}; !slices.Equal(names, want) {
+			t.Fatalf("got %q, want %q", names, want)
 		}
 	})
 
@@ -849,17 +864,17 @@ func TestTmuxRunning(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "a$b") // tmux names it a\$b
 		sessions, err := server.tmux().Running()
 		if err != nil || len(sessions) != 1 {
-			t.Fatalf("got %q (%v), want one session", sessions, err)
+			t.Fatalf("got %v (%v), want one session", sessions, err)
 		}
-		if _, err := server.tmux().Capture(sessions[0]); err != nil {
-			t.Fatalf("capturing %q: %v", sessions[0], err)
+		if _, err := server.tmux().Capture(sessions[0].Name()); err != nil {
+			t.Fatalf("capturing %q: %v", sessions[0].Name(), err)
 		}
 	})
 }
 
 func TestTmuxFind(t *testing.T) {
 	server := newTmuxServer(t)
-	shop, _ := domain.NewProjectName("shop")
+	shop := refAt(t, "/srv/shop", "shop")
 
 	t.Run("reports no session when no server runs", func(t *testing.T) {
 		if server.running(t, shop) {
@@ -867,10 +882,11 @@ func TestTmuxFind(t *testing.T) {
 		}
 	})
 
-	if err := server.tmux().Start(planOf(t, "shop-api", fmt.Sprintf(`{"root": %q, "windows": [{"name": "api"}, {"name": "app"}]}`, t.TempDir()))); err != nil {
+	apiPlan := planOf(t, "shop-api", fmt.Sprintf(`{"root": %q, "windows": [{"name": "api"}, {"name": "app"}]}`, t.TempDir()))
+	if err := server.tmux().Start(apiPlan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	shopAPI, _ := domain.NewProjectName("shop-api")
+	shopAPI := apiPlan.Project()
 
 	t.Run("reports a session it started as owned", func(t *testing.T) {
 		if session, running, err := server.tmux().Find(shopAPI); err != nil || !running || !session.Owned() {
@@ -879,7 +895,7 @@ func TestTmuxFind(t *testing.T) {
 	})
 
 	t.Run("reports the project windows the session has", func(t *testing.T) {
-		server.query(t, "rename-window", "-t", "shop-api:app", "renamed by hand")
+		server.query(t, "rename-window", "-t", "w/shop-api:app", "renamed by hand")
 		session, _, err := server.tmux().Find(shopAPI)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -894,10 +910,11 @@ func TestTmuxFind(t *testing.T) {
 	})
 
 	t.Run("reads a window name with a dollar as written", func(t *testing.T) {
-		if err := server.tmux().Start(planOf(t, "dollar", fmt.Sprintf(`{"root": %q, "windows": [{"name": "run $HOME ${X}"}]}`, t.TempDir()))); err != nil {
+		plan := planOf(t, "dollar", fmt.Sprintf(`{"root": %q, "windows": [{"name": "run $HOME ${X}"}]}`, t.TempDir()))
+		if err := server.tmux().Start(plan); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		dollar, _ := domain.NewProjectName("dollar")
+		dollar := plan.Project()
 		session, _, err := server.tmux().Find(dollar)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -913,12 +930,28 @@ func TestTmuxFind(t *testing.T) {
 		}
 	})
 
-	t.Run("reports a session started otherwise as not owned", func(t *testing.T) {
-		server.query(t, "new-session", "-d", "-s", "plain")
-		plain, _ := domain.NewProjectName("plain")
-		if session, running, err := server.tmux().Find(plain); err != nil || !running || session.Owned() {
+	t.Run("reports a session started by hand in its root under its name as not owned", func(t *testing.T) {
+		root := t.TempDir()
+		server.query(t, "new-session", "-d", "-s", "w/plain", "-c", root)
+		if session, running, err := server.tmux().Find(refAt(t, root, "plain")); err != nil || !running || session.Owned() {
 			t.Fatalf("got running=%v owned=%v (%v), want a running session not owned", running, session.Owned(), err)
 		}
+	})
+
+	t.Run("doesn't take a session started by hand elsewhere for the project's", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "w/elsewhere", "-c", t.TempDir())
+		if server.running(t, refAt(t, t.TempDir(), "elsewhere")) {
+			t.Fatal("got elsewhere running, want its session not counted")
+		}
+	})
+
+	t.Run("finds the session it started once renamed", func(t *testing.T) {
+		server.query(t, "rename-session", "-t", "=w/shop-api", "renamed")
+		session, running, err := server.tmux().Find(shopAPI)
+		if err != nil || !running || !session.Owned() || session.Name() != "renamed" {
+			t.Fatalf("got %q running=%v owned=%v (%v), want the renamed session", session.Name(), running, session.Owned(), err)
+		}
+		server.query(t, "rename-session", "-t", "=renamed", "w/shop-api")
 	})
 }
 
@@ -944,19 +977,19 @@ func TestTmuxRestore(t *testing.T) {
 		if err := server.tmux().Start(project.Plan()); err != nil {
 			t.Fatalf("starting: %v", err)
 		}
-		server.query(t, "new-window", "-d", "-t", "restore:", "-n", "manual")
+		server.query(t, "new-window", "-d", "-t", "w/restore:", "-n", "manual")
 		for _, window := range closed {
-			server.query(t, "kill-window", "-t", "restore:"+window)
+			server.query(t, "kill-window", "-t", "w/restore:"+window)
 		}
 
-		session, _, err := server.tmux().Find(project.Name())
+		session, _, err := server.tmux().Find(project.Ref())
 		if err != nil {
 			t.Fatalf("finding: %v", err)
 		}
-		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+		if err := server.tmux().Restore(project.Ref(), project.Restoration(session.Windows())); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		return server, server.query(t, "list-windows", "-t", "=restore", "-F", "#{window_name}")
+		return server, server.query(t, "list-windows", "-t", "=w/restore", "-F", "#{window_name}")
 	}
 
 	t.Run("puts closed windows back in place", func(t *testing.T) {
@@ -985,18 +1018,18 @@ func TestTmuxRestore(t *testing.T) {
 		if err := server.tmux().Start(project.Plan()); err != nil {
 			t.Fatalf("starting: %v", err)
 		}
-		server.query(t, "kill-window", "-t", "dollar:b")
-		server.query(t, "new-window", "-d", "-a", "-t", "dollar:$c", "-n", "manual")
+		server.query(t, "kill-window", "-t", "w/dollar:b")
+		server.query(t, "new-window", "-d", "-a", "-t", "w/dollar:$c", "-n", "manual")
 
-		session, _, err := server.tmux().Find(project.Name())
+		session, _, err := server.tmux().Find(project.Ref())
 		if err != nil {
 			t.Fatalf("finding: %v", err)
 		}
-		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err != nil {
+		if err := server.tmux().Restore(project.Ref(), project.Restoration(session.Windows())); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		// tmux 3.4 prints a "\" before each "$" here.
-		got := strings.ReplaceAll(server.query(t, "list-windows", "-t", "=dollar", "-F", "#{window_name}"), `\$`, "$")
+		got := strings.ReplaceAll(server.query(t, "list-windows", "-t", "=w/dollar", "-F", "#{window_name}"), `\$`, "$")
 		if want := "$a\nb\n$c\nmanual"; got != want {
 			t.Fatalf("got windows %q, want %q", got, want)
 		}
@@ -1013,22 +1046,22 @@ func TestTmuxRestore(t *testing.T) {
 		if err != nil {
 			t.Fatalf("loading: %v", err)
 		}
-		session, _, err := server.tmux().Find(project.Name())
+		session, _, err := server.tmux().Find(project.Ref())
 		if err != nil {
 			t.Fatalf("finding: %v", err)
 		}
 
-		if err := server.tmux().Restore(project.Name(), project.Restoration(session.Windows())); err == nil {
+		if err := server.tmux().Restore(project.Ref(), project.Restoration(session.Windows())); err == nil {
 			t.Fatal("got no error, want a split to run out of space")
 		}
-		if got := server.query(t, "list-windows", "-t", "=shrunk", "-F", "#{window_name}"); got != "a" {
+		if got := server.query(t, "list-windows", "-t", "=w/shrunk", "-F", "#{window_name}"); got != "a" {
 			t.Fatalf("got windows %q, want only a", got)
 		}
 	})
 }
 
-// running reports whether a session named after the project runs.
-func (s tmuxServer) running(t *testing.T, name domain.ProjectName) bool {
+// running reports whether the project's session runs.
+func (s tmuxServer) running(t *testing.T, name domain.ProjectRef) bool {
 	t.Helper()
 	_, running, err := s.tmux().Find(name)
 	if err != nil {
@@ -1078,7 +1111,7 @@ func TestTmuxCapture(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		windows, err := server.tmux().Capture("capture")
+		windows, err := server.tmux().Capture("w/capture")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1092,9 +1125,9 @@ func TestTmuxCapture(t *testing.T) {
 	})
 
 	t.Run("focuses the window and the panes that are active", func(t *testing.T) {
-		server.query(t, "select-window", "-t", "=capture:app")
+		server.query(t, "select-window", "-t", "=w/capture:app")
 		server.query(t, "select-pane", "-t", server.paneLabelled(t, "capture", "main"))
-		windows, err := server.tmux().Capture("capture")
+		windows, err := server.tmux().Capture("w/capture")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1266,9 +1299,9 @@ func TestTmuxCapture(t *testing.T) {
 		]}`, root))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		server.waitFor(t, "=noted:", "hello")
+		server.waitFor(t, "=w/noted:", "hello")
 
-		if cmd, ok := firstStartup(t, server, "noted").Command(); ok {
+		if cmd, ok := firstStartup(t, server, "w/noted").Command(); ok {
 			t.Fatalf("got command %q, want none", cmd)
 		}
 	})
@@ -1392,7 +1425,7 @@ func TestTmuxTasks(t *testing.T) {
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	project := plan.Name()
+	project := plan.Project()
 	api, logs := plan.Windows()[0], plan.Windows()[1]
 	greet := api.Panes()[1].Tasks()[0]
 	back := server.paneLabelled(t, "tasks", "back")
@@ -1413,7 +1446,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("selects the pane a task is typed into", func(t *testing.T) {
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{pane_id}"); got != back {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/tasks:", "#{pane_id}"); got != back {
 			t.Fatalf("got pane %q current, want %q", got, back)
 		}
 	})
@@ -1450,11 +1483,11 @@ func TestTmuxTasks(t *testing.T) {
 		if err := server.tmux().Type(project, logs, 0, logs.Panes()[0].Tasks()[0].Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		server.waitFor(t, "=tasks:logs", "logs-42")
+		server.waitFor(t, "=w/tasks:logs", "logs-42")
 	})
 
 	t.Run("selects the window a task is typed into", func(t *testing.T) {
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "logs" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/tasks:", "#{window_name}"); got != "logs" {
 			t.Fatalf("got %q current, want logs", got)
 		}
 	})
@@ -1465,7 +1498,7 @@ func TestTmuxTasks(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		server.waitFor(t, back, "hi-before task-42")
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "logs" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/tasks:", "#{window_name}"); got != "logs" {
 			t.Fatalf("got %q current, want logs still", got)
 		}
 	})
@@ -1499,28 +1532,28 @@ func TestTmuxTasks(t *testing.T) {
 		if err := server.tmux().RunApart(project, api, 1, greet, true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		shown := server.waitFor(t, "=tasks:greet", "hi-before task-42")
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:greet", "#{pane_current_path}"); got != filepath.Join(root, "back") {
+		shown := server.waitFor(t, "=w/tasks:greet", "hi-before task-42")
+		if got := server.query(t, "display-message", "-p", "-t", "=w/tasks:greet", "#{pane_current_path}"); got != filepath.Join(root, "back") {
 			t.Fatalf("got the throwaway window in %q, want %q; it shows:\n%s", got, filepath.Join(root, "back"), shown)
 		}
 	})
 
 	t.Run("makes the throwaway window current", func(t *testing.T) {
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_name}"); got != "greet" {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/tasks:", "#{window_name}"); got != "greet" {
 			t.Fatalf("got %q current, want greet", got)
 		}
 	})
 
 	t.Run("leaves the current window when running a task apart without landing", func(t *testing.T) {
-		current := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_id}")
-		before := strings.Fields(server.query(t, "list-windows", "-t", "=tasks", "-F", "#{window_id}"))
+		current := server.query(t, "display-message", "-p", "-t", "=w/tasks:", "#{window_id}")
+		before := strings.Fields(server.query(t, "list-windows", "-t", "=w/tasks", "-F", "#{window_id}"))
 		if err := server.tmux().RunApart(project, api, 1, greet, false); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := server.query(t, "display-message", "-p", "-t", "=tasks:", "#{window_id}"); got != current {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/tasks:", "#{window_id}"); got != current {
 			t.Fatalf("got window %q current, want %q still", got, current)
 		}
-		after := strings.Fields(server.query(t, "list-windows", "-t", "=tasks", "-F", "#{window_id}"))
+		after := strings.Fields(server.query(t, "list-windows", "-t", "=w/tasks", "-F", "#{window_id}"))
 		added := slices.DeleteFunc(after, func(id string) bool { return slices.Contains(before, id) })
 		if len(added) != 1 {
 			t.Fatalf("got %q added, want one throwaway window", added)
@@ -1529,7 +1562,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("skips the throwaway window when capturing", func(t *testing.T) {
-		windows, err := server.tmux().Capture("tasks")
+		windows, err := server.tmux().Capture("w/tasks")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -1549,7 +1582,7 @@ func TestTmuxTasks(t *testing.T) {
 	})
 
 	t.Run("reports a pane whose window is closed", func(t *testing.T) {
-		server.query(t, "kill-window", "-t", "=tasks:logs")
+		server.query(t, "kill-window", "-t", "=w/tasks:logs")
 		if _, err := server.tmux().Busy(project, logs, 0); !errors.Is(err, domain.ErrPaneNotRunning) {
 			t.Fatalf("got %v, want ErrPaneNotRunning", err)
 		}
@@ -1565,13 +1598,13 @@ func TestTmuxBusyFindsACommandItsShellWasReplacedWith(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
-	for server.query(t, "display-message", "-p", "-t", "=execd:srv", "#{pane_current_command}") != "cat" {
+	for server.query(t, "display-message", "-p", "-t", "=w/execd:srv", "#{pane_current_command}") != "cat" {
 		if time.Now().After(deadline) {
 			t.Fatal("the pane never ran cat")
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	busy, err := server.tmux().Busy(plan.Name(), plan.Windows()[0], 0)
+	busy, err := server.tmux().Busy(plan.Project(), plan.Windows()[0], 0)
 	if err != nil || !busy {
 		t.Fatalf("got busy %t (err %v), want busy", busy, err)
 	}
@@ -1589,7 +1622,7 @@ func TestTmuxRunningCommands(t *testing.T) {
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	project, api := plan.Name(), plan.Windows()[0]
+	project, api := plan.Project(), plan.Windows()[0]
 	server.waitFor(t, server.paneLabelled(t, "running", "shell"), "$")
 	server.waitFor(t, server.paneLabelled(t, "running", "back"), "$")
 
@@ -1673,7 +1706,7 @@ func TestTmuxRunningCommands(t *testing.T) {
 	})
 
 	t.Run("reaches where a command runs, its window and pane selected", func(t *testing.T) {
-		server.query(t, "select-window", "-t", "=running:api")
+		server.query(t, "select-window", "-t", "=w/running:api")
 		commands, err := server.tmux().RunningCommands(project, plan.Windows())
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1685,7 +1718,7 @@ func TestTmuxRunningCommands(t *testing.T) {
 		if err := server.tmux().Reach(project, commands[i]); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := server.query(t, "display-message", "-p", "-t", "=running:", "#{pane_id}"); got != commands[i].Place() {
+		if got := server.query(t, "display-message", "-p", "-t", "=w/running:", "#{pane_id}"); got != commands[i].Place() {
 			t.Fatalf("the session's current pane is %s, want %s", got, commands[i].Place())
 		}
 	})
@@ -1771,7 +1804,7 @@ func TestTmuxIdle(t *testing.T) {
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	project := plan.Name()
+	project := plan.Project()
 	api, jobs, replaced := plan.Windows()[0], plan.Windows()[1], plan.Windows()[2]
 	windows := []domain.WindowPlan{api, jobs}
 	want := map[domain.WindowName][]int{api.Name(): {0}, jobs.Name(): {0}}
@@ -1805,14 +1838,14 @@ func TestTmuxIdle(t *testing.T) {
 	})
 
 	t.Run("looks only in the first window tagged with a window's name", func(t *testing.T) {
-		later := server.query(t, "new-window", "-d", "-t", "=idle:", "-P", "-F", "#{window_id}")
+		later := server.query(t, "new-window", "-d", "-t", "=w/idle:", "-P", "-F", "#{window_id}")
 		server.query(t, "set-option", "-w", "-t", later, "@weaver_window", "api")
 		server.query(t, "set-option", "-p", "-t", later, "@label", "server")
 		idleAs(t, windows, want)
 	})
 
 	t.Run("finds no pane of a window the session lacks", func(t *testing.T) {
-		server.query(t, "kill-window", "-t", "=idle:jobs")
+		server.query(t, "kill-window", "-t", "=w/idle:jobs")
 		idleAs(t, windows, map[domain.WindowName][]int{api.Name(): {0}})
 	})
 
@@ -1830,8 +1863,8 @@ func TestTmuxIdle(t *testing.T) {
 	})
 
 	t.Run("reports a session that isn't running", func(t *testing.T) {
-		other := planOf(t, "other", fmt.Sprintf(`{"root": %q}`, root))
-		if _, err := server.tmux().Idle(other.Name(), other.Windows()); !errors.Is(err, domain.ErrSessionNotRunning) {
+		other := planOf(t, "other", fmt.Sprintf(`{"root": %q}`, t.TempDir()))
+		if _, err := server.tmux().Idle(other.Project(), other.Windows()); !errors.Is(err, domain.ErrSessionNotRunning) {
 			t.Fatalf("got %v, want ErrSessionNotRunning", err)
 		}
 	})
@@ -1849,7 +1882,7 @@ func TestTmuxPreview(t *testing.T) {
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	project, api, logs := plan.Name(), plan.Windows()[0], plan.Windows()[1]
+	project, api, logs := plan.Project(), plan.Windows()[0], plan.Windows()[1]
 
 	// previewShowing waits until the preview of window has a pane showing
 	// text, and returns it.
@@ -1942,16 +1975,76 @@ func TestTmuxPreview(t *testing.T) {
 	})
 
 	t.Run("reports a window the session lacks", func(t *testing.T) {
-		server.query(t, "kill-window", "-t", "=peek:logs")
+		server.query(t, "kill-window", "-t", "=w/peek:logs")
 		if _, err := server.tmux().Preview(project, logs); !errors.Is(err, domain.ErrWindowNotRunning) {
 			t.Fatalf("got %v, want ErrWindowNotRunning", err)
 		}
 	})
 
 	t.Run("reports a session that isn't running", func(t *testing.T) {
-		server.query(t, "kill-session", "-t", "=peek")
+		server.query(t, "kill-session", "-t", "=w/peek")
 		if _, err := server.tmux().Preview(project, api); !errors.Is(err, domain.ErrSessionNotRunning) {
 			t.Fatalf("got %v, want ErrSessionNotRunning", err)
+		}
+	})
+}
+
+func TestTmuxNamesSessions(t *testing.T) {
+	server := newTmuxServer(t)
+	listed := func(t *testing.T) string {
+		t.Helper()
+		return server.query(t, "list-sessions", "-F", "#{session_name}")
+	}
+
+	a, b := mkdir(t, filepath.Join(t.TempDir(), "a", "api")), mkdir(t, filepath.Join(t.TempDir(), "b", "api"))
+	first, second := planOf(t, "api", fmt.Sprintf(`{"root": %q}`, a)), planOf(t, "api", fmt.Sprintf(`{"root": %q}`, b))
+	for _, plan := range []domain.SessionPlan{first, second} {
+		if err := server.tmux().Start(plan); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
+	t.Run("names a second project of a name after its root", func(t *testing.T) {
+		_, apart := second.Project().SessionNames()
+		if got := listed(t); !strings.Contains(got, "w/api\n") || !strings.Contains(got, apart) {
+			t.Fatalf("got sessions %q, want w/api and %s", got, apart)
+		}
+		if !server.running(t, first.Project()) || !server.running(t, second.Project()) {
+			t.Fatal("want both projects running, each in its own session")
+		}
+	})
+
+	t.Run("renames a session it adopts after the project", func(t *testing.T) {
+		root := t.TempDir()
+		server.query(t, "new-session", "-d", "-s", "scratch", "-c", root)
+		if err := server.tmux().Adopt("scratch", refAt(t, root, "notes")); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := listed(t); !strings.Contains(got, "w/notes") || strings.Contains(got, "scratch") {
+			t.Fatalf("got sessions %q, want scratch renamed w/notes", got)
+		}
+		session, running, err := server.tmux().Find(refAt(t, root, "notes"))
+		if err != nil || !running || session.Owned() {
+			t.Fatalf("got running=%v owned=%v (%v), want the adopted session, not owned", running, session.Owned(), err)
+		}
+	})
+
+	t.Run("leaves a session started outside the project's root as it is", func(t *testing.T) {
+		server.query(t, "new-session", "-d", "-s", "elsewhere", "-c", t.TempDir())
+		if err := server.tmux().Adopt("elsewhere", refAt(t, t.TempDir(), "drafts")); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := listed(t); !strings.Contains(got, "elsewhere") || strings.Contains(got, "w/drafts") {
+			t.Fatalf("got sessions %q, want elsewhere kept", got)
+		}
+	})
+
+	t.Run("leaves a session it started for another project as it is", func(t *testing.T) {
+		if err := server.tmux().Adopt("w/api", refAt(t, t.TempDir(), "journal")); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got := listed(t); !strings.Contains(got, "w/api\n") || strings.Contains(got, "w/journal") {
+			t.Fatalf("got sessions %q, want w/api kept", got)
 		}
 	})
 }
