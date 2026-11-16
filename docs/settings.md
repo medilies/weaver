@@ -56,7 +56,7 @@ that ignores faint.
 
 ## `selected-colour`
 
-The same as `theme.selected`, still read. Setting both is refused.
+The same as `theme.selected`. Setting both is refused.
 
 ## `preview`
 
