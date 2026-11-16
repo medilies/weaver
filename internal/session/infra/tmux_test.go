@@ -686,14 +686,21 @@ func TestTmuxInterruptPanes(t *testing.T) {
 		}
 	})
 
-	t.Run("interrupts what runs, and names the panes still busy once the time is up", func(t *testing.T) {
+	t.Run("interrupts what runs", func(t *testing.T) {
 		started(t)
-		lingering, err := server.tmux().InterruptPanes(name, 500*time.Millisecond)
-		if err != nil || !slices.Equal(lingering, []string{"w › b"}) {
-			t.Fatalf("got %q (%v), want only w › b, which ignores ctrl+c", lingering, err)
+		if _, err := server.tmux().InterruptPanes(name, 2*time.Second); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 		if sleeping(t, "a") {
 			t.Fatal("got a still sleeping, want it interrupted")
+		}
+	})
+
+	t.Run("names the panes still busy once the time is up", func(t *testing.T) {
+		started(t)
+		lingering, err := server.tmux().InterruptPanes(name, 2*time.Second)
+		if err != nil || !slices.Equal(lingering, []string{"w › b"}) {
+			t.Fatalf("got %q (%v), want only w › b, which ignores ctrl+c", lingering, err)
 		}
 	})
 
