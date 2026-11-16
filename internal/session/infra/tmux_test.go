@@ -38,10 +38,14 @@ func newTmuxServer(t *testing.T) tmuxServer {
 	home := t.TempDir()
 	for file, content := range shellHome {
 		path := filepath.Join(home, file)
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		dir := filepath.Dir(path)
+		if strings.HasSuffix(file, "/") {
+			dir = path
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("writing the home: %v", err)
 		}
-		if strings.HasSuffix(file, "/") {
+		if dir == path {
 			continue
 		}
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
