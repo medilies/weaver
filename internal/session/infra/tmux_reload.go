@@ -20,13 +20,16 @@ func (t Tmux) ReloadPane(project domain.ProjectName, window domain.WindowPlan, i
 	if id == t.opts.Pane {
 		return domain.ErrPaneRunsWeaver
 	}
-	l, err := t.launchOf(project)
+	defaultCommand, err := t.option("="+project.String(), "default-command")
+	if absent(err) {
+		return fmt.Errorf("%w: %s", domain.ErrSessionNotRunning, project)
+	}
 	if err != nil {
 		return err
 	}
-	o, log := openingOf(window.Panes()[index]), l.paneLog(window, index)
-	args := []string{"respawn-pane", "-k", "-t", id, "-c", formatArgument(window.Panes()[index].Dir())}
-	if _, err := t.run(append(args, l.respawn(o, log)...)...); err != nil {
+	pane := window.Panes()[index]
+	args := []string{"respawn-pane", "-k", "-t", id, "-c", formatArgument(pane.Dir())}
+	if _, err := t.run(append(args, respawnCommand(pane, defaultCommand)...)...); err != nil {
 		return err
 	}
 	for _, tag := range []string{taskTag, taskSinceTag} {
@@ -34,7 +37,20 @@ func (t Tmux) ReloadPane(project domain.ProjectName, window domain.WindowPlan, i
 			return err
 		}
 	}
-	return t.startUp(id, l.typed(o, id, log))
+	return t.startUp(id, pane)
+}
+
+// respawnCommand is what a respawned pane starts with: its start script,
+// or a plain shell, which the session's panes start as when none is
+// given, since respawn-pane would run the pane's first command again.
+func respawnCommand(pane domain.PanePlan, defaultCommand string) []string {
+	if script := shellCommand(pane, defaultCommand); script != nil {
+		return script
+	}
+	if defaultCommand != "" {
+		return []string{"--", "/bin/sh", "-c", shellLine + "-c " + shellQuote(defaultCommand)}
+	}
+	return []string{"--", "/bin/sh", "-c", shellLine + "-l"}
 }
 
 // ReloadWindow implements domain.SessionReloader. The new window is built
@@ -58,7 +74,7 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 	if err != nil {
 		return err
 	}
-	l, err := t.launchOf(project)
+	defaultCommand, err := t.option(session, "default-command")
 	if err != nil {
 		return err
 	}
@@ -68,11 +84,11 @@ func (t Tmux) ReloadWindow(project domain.ProjectName, window domain.WindowPlan)
 			oldPanes[pane.id] = index
 		}
 	}
-	created, firstPane, err := t.newWindow([]string{"-t", session + ":"}, window, l)
+	created, firstPane, err := t.newWindow([]string{"-t", session + ":"}, window, defaultCommand)
 	if err != nil {
 		return err
 	}
-	if err := t.fill(created, firstPane, window, l); err != nil {
+	if err := t.fill(created, firstPane, window, defaultCommand); err != nil {
 		_, _ = t.run("kill-window", "-t", created)
 		return err
 	}

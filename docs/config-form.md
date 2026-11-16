@@ -64,7 +64,7 @@ move undo, redo, save, J, K and the drawing's keys to others.
 | --- | --- |
 | ↑ ↓ or k j | select a field |
 | enter | type into it, or pick the next choice; on the window list or the pane list, type the window's or pane's name; on `+ add` or `+ window`, add one |
-| ← → or h l | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty; on `clear`, whether the `before` commands run unseen, or as the level above says; on `focus`, whether the window or pane is focused |
+| ← → or h l | on the window list or the pane list, select a window or a pane; on a pane's `starts`, whether it starts a shell, runs a command or prefills it, also while the command typed is empty; on `clear`, whether the `before` commands are cleared, or as the level above says; on `focus`, whether the window or pane is focused |
 | o | add an item to the list selected or a task to the pane's tasks, split the pane selected right, or add a window |
 | d | remove the item or task selected at once; on the pane list or a pane's other fields, remove the pane, and on a window's own fields or the window list, the window, after you confirm |
 | J K | move the item, task or window selected down or up |

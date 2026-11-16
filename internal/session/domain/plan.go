@@ -120,9 +120,9 @@ func (p PanePlan) Before() []Command {
 	return slices.Clone(p.before)
 }
 
-// Clears tells whether the pane's before commands run unseen, then the
-// screen is cleared and its note printed: when the lowest level setting
-// it sets it on, and there are before commands to hide.
+// Clears tells whether clear is typed after the pane's before commands,
+// then its note printed: when the lowest level setting it sets it on,
+// and there are before commands to hide.
 func (p PanePlan) Clears() bool {
 	return p.clears
 }

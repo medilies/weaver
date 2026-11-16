@@ -11,11 +11,10 @@ running, weaver first:
 2. checks every pane's directory exists, and stops if one is missing,
    saying to create it or change it with `e` in the browser: weaver creates
    none;
-3. builds the session, labels its panes in their top border, and runs
-   each pane's `before` commands, then types its `command`, or its
-   `prefill` without running it, into its shell. The `before` commands
-   are typed too, unless the pane clears: then they run unseen (see
-   [`clear`](config.md#fields)).
+3. builds the session, labels its panes in their top border, and types
+   each pane's `before` commands, then `clear` and its note when it
+   clears them, then its `command`, or its `prefill` without running
+   it, into its shell.
 
 If a step fails, nothing is left half-built. What the `setup` commands
 did stays done, though: with no session, there is nothing to kill, so

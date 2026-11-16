@@ -1,6 +1,6 @@
 package domain
 
-// Clearing is whether a pane's before commands run unseen,
+// Clearing is whether a pane's before commands are hidden once they ran,
 // as the project, a window or a pane sets it: the lowest level that sets
 // it wins, and a pane clears only when one sets it on.
 type Clearing int

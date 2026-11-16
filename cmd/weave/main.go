@@ -85,12 +85,7 @@ func wire() (application, error) {
 		}
 		return 0
 	}
-	// Without a cache folder, the panes that clear log nothing.
-	var logs string
-	if cache, err := os.UserCacheDir(); err == nil {
-		logs = filepath.Join(cache, "weaver", "logs")
-	}
-	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize, Limit: limit, Logs: logs})
+	tmux := infra.NewTmux(infra.TmuxOptions{Inside: inside, Pane: pane, Size: infra.TerminalSize, Limit: limit})
 	workspace := infra.NewLocalWorkspace()
 	commands := infra.NewShellRunner(os.Stdin, os.Stdout, os.Stderr)
 
