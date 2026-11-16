@@ -1116,6 +1116,9 @@ func TestTmuxCapture(t *testing.T) {
 	})
 
 	t.Run("keeps the directory of the shell a job left", func(t *testing.T) {
+		if _, err := os.Stat("/proc/self/cwd"); err != nil {
+			t.Skip("no /proc to read the shell's directory from, as on macOS")
+		}
 		server.query(t, "new-session", "-d", "-s", "moved", "-c", root)
 		server.query(t, "send-keys", "-t", "moved:", "sh -c 'cd api && exec sleep 300'", "Enter")
 		server.busy(t, "moved", "sleep")

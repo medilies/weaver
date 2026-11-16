@@ -38,6 +38,7 @@ of scope. Kept so they aren't reported again. What is still to do is in
   against a lost update from a concurrent `weave bind`.
 - **Binding a pane with a job.** It is captured in its shell's directory,
   read from `/proc`, so `make -C sub dev` from the root keeps the root.
+  macOS has no `/proc`, so there it gets the job's directory.
   A subshell that changes directory first loses it:
   `(cd api && exec sleep 300)` is captured with the root and the prefill
   `sleep 300`. A shell a wrapper forks, as a `default-command` of
