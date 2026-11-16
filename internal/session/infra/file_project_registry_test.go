@@ -611,7 +611,25 @@ func TestFileProjectRegistryNames(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		want := "warning: skipping " + filepath.Join(dir, "shop.yml") + " and " + filepath.Join(dir, "shop.yaml") +
+		want := "warning: skipping " + filepath.Join(dir, "shop.yaml") + " and " + filepath.Join(dir, "shop.yml") +
+			": two configs of one project; remove one to register it\n"
+		if got := warnings.String(); got != want || len(names) != 1 || names[0].String() != "nimbus" {
+			t.Fatalf("got %v and %q, want only nimbus and %q", names, got, want)
+		}
+	})
+
+	t.Run("skips a project with configs whose names differ only in case, warning about both", func(t *testing.T) {
+		dir := writeConfigs(t, "nimbus.yml", "shop.yml")
+		caseSensitive(t, dir)
+		writeConfig(t, dir, "Shop.yml")
+		var warnings strings.Builder
+
+		names, err := infra.NewFileProjectRegistry(dir).WithWarnings(&warnings).Names()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		want := "warning: skipping " + filepath.Join(dir, "Shop.yml") + " and " + filepath.Join(dir, "shop.yml") +
 			": two configs of one project; remove one to register it\n"
 		if got := warnings.String(); got != want || len(names) != 1 || names[0].String() != "nimbus" {
 			t.Fatalf("got %v and %q, want only nimbus and %q", names, got, want)
@@ -730,6 +748,64 @@ func TestFileProjectRegistryYAMLExtension(t *testing.T) {
 
 		if err == nil || isNotFound(err) || !strings.Contains(err.Error(), filepath.Join(dir, "shop.yaml")) {
 			t.Fatalf("got %v, want an error naming both configs", err)
+		}
+	})
+}
+
+// writeConfig writes a config of root /srv in dir, under file.
+func writeConfig(t *testing.T, dir, file string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, file), []byte("root: /srv\n"), 0o600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+}
+
+// caseSensitive skips the test where dir's filesystem ignores case, as
+// macOS's does by default, and can't hold names differing only in case.
+func caseSensitive(t *testing.T, dir string) {
+	t.Helper()
+	probe := filepath.Join(dir, "case-probe")
+	writeConfig(t, dir, "case-probe")
+	defer func() { _ = os.Remove(probe) }()
+	if _, err := os.Stat(filepath.Join(dir, "CASE-PROBE")); err == nil {
+		t.Skip("the filesystem ignores case")
+	}
+}
+
+func TestFileProjectRegistryNamesDifferingInCase(t *testing.T) {
+	shop, _ := domain.NewProjectName("shop")
+
+	t.Run("doesn't find a project whose config's name differs in case", func(t *testing.T) {
+		dir := writeConfigs(t, "Shop.yml")
+
+		_, err := infra.NewFileProjectRegistry(dir).FindByName(shop)
+
+		if !isNotFound(err) || !errors.Is(err, domain.ErrNameDiffersInCase) {
+			t.Fatalf("got %v, want ErrProjectNotFound and ErrNameDiffersInCase", err)
+		}
+	})
+
+	t.Run("refuses a project with a config whose name differs in case beside its own, naming both", func(t *testing.T) {
+		dir := writeConfigs(t, "shop.yml")
+		caseSensitive(t, dir)
+		writeConfig(t, dir, "Shop.yml")
+
+		_, err := infra.NewFileProjectRegistry(dir).FindByName(shop)
+
+		if err == nil || isNotFound(err) || !strings.Contains(err.Error(), filepath.Join(dir, "Shop.yml")) {
+			t.Fatalf("got %v, want an error naming both configs", err)
+		}
+	})
+
+	t.Run("refuses to save a project whose name differs in case from a config's", func(t *testing.T) {
+		dir := writeConfigs(t, "Shop.yml")
+		root, _ := domain.NewProjectRoot("/srv/other")
+
+		err := infra.NewFileProjectRegistry(dir).Save(domain.NewProject(shop, root))
+
+		content, _ := os.ReadFile(filepath.Join(dir, "Shop.yml"))
+		if !errors.Is(err, domain.ErrNameDiffersInCase) || string(content) != "root: /srv\n" {
+			t.Fatalf("got %v and Shop.yml %q, want ErrNameDiffersInCase and Shop.yml kept", err, content)
 		}
 	})
 }

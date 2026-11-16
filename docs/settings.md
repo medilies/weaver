@@ -1,9 +1,8 @@
 # Settings
 
 Settings are weaver-wide preferences, the same for every project, in
-`~/.config/weaver/settings.yml` (`$XDG_CONFIG_HOME/weaver` when that is
-set), beside the `projects` folder. They are never part of a project's
-config. Without the file, every setting has its default.
+`settings.yml`, beside the [`projects` folder](config.md). They are never
+part of a project's config. Without the file, every setting has its default.
 
 ```yaml
 # yaml-language-server: $schema=./settings.schema.json

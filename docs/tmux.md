@@ -78,8 +78,8 @@ set -g message-style "bg=#1e1e2e,fg=#94e2d5"
   terminal with 24-bit colour, as most are. In one without, drop it.
 
 For weave's screens to match, make mauve the
-[selected colour](settings.md#theme), in
-`~/.config/weaver/settings.yml`:
+[selected colour](settings.md#theme), in your
+[settings](settings.md):
 
 ```yaml
 theme:

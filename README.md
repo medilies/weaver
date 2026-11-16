@@ -56,7 +56,7 @@ Keep a hand on the mouse:
 One YAML file per project. The demo's:
 
 ```yaml
-# ~/.config/weaver/projects/nimbus.yml
+# nimbus.yml in weaver's projects folder (see docs/config.md)
 root: ~/dev/nimbus
 windows:
   - name: api

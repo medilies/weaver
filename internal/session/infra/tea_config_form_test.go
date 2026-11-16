@@ -384,3 +384,25 @@ func TestFormScrollsBackToItsTop(t *testing.T) {
 	d.sees("╭─ project")
 	d.sees("   name      notes")
 }
+
+func TestSavingUnderANameDifferingInCaseTypesTheNameAgain(t *testing.T) {
+	root, configs := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(configs, "Shop.yml"), []byte("root: "+root+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	documents := NewFileProjectRegistry(configs)
+	form, err := NewTeaConfigForm(NewLocalWorkspace(), documents, DefaultSettings()).form(app.ProjectDraft{
+		Name: "shop", Root: root,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &formDriver{t: t, form: form}
+	d.send(tea.WindowSizeMsg{Width: 160, Height: 45})
+	d.keys("enter", "ctrl+s")
+
+	if d.quit || d.form.reviewing != nil || d.form.focus != projectNameAt {
+		d.fatal("saving went on, rather than back to typing the name")
+	}
+	d.sees("names differing only in case are one project")
+}

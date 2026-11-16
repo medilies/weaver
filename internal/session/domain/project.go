@@ -18,11 +18,8 @@ var projectNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 // reservedNames are weave's own commands: `weave <name>` runs the
 // command, so a project named after one could never be opened. edit,
 // list and show left the CLI in v0.7.0 but stay reserved, so bringing
-// one back breaks no config.
-//
-// TODO: compare names case-insensitively? "Edit" passes, and on a
-// case-insensitive filesystem (macOS) "Edit.yml" and "edit.yml" are one
-// file, so "shop" and "Shop" would overwrite each other.
+// one back breaks no config. They are compared ignoring case, since
+// names differing only in case are one project (ProjectName.SameAs).
 var reservedNames = []string{"bind", "completion", "edit", "help", "kill", "list", "show"}
 
 // ProjectName is a registered project's identifier: non-empty, trimmed,
@@ -40,7 +37,7 @@ func NewProjectName(value string) (ProjectName, error) {
 	if !projectNamePattern.MatchString(trimmed) {
 		return ProjectName{}, ErrInvalidProjectName
 	}
-	if slices.Contains(reservedNames, trimmed) {
+	if slices.ContainsFunc(reservedNames, func(reserved string) bool { return strings.EqualFold(reserved, trimmed) }) {
 		return ProjectName{}, fmt.Errorf("%w: %q", ErrReservedProjectName, trimmed)
 	}
 	return ProjectName{value: trimmed}, nil
@@ -48,6 +45,13 @@ func NewProjectName(value string) (ProjectName, error) {
 
 func (n ProjectName) String() string {
 	return n.value
+}
+
+// SameAs reports whether n and other name one project: names differing
+// only in case do, since a case-insensitive filesystem, as macOS has,
+// keeps their configs in one file.
+func (n ProjectName) SameAs(other ProjectName) bool {
+	return strings.EqualFold(n.value, other.value)
 }
 
 // ProjectRoot is the absolute directory a project's panes and windows are

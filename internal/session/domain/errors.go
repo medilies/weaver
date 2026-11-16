@@ -21,6 +21,10 @@ var (
 	// ErrProjectNotFound is returned when a registry has no project
 	// under the given name.
 	ErrProjectNotFound = errors.New("project not found")
+	// ErrNameDiffersInCase is returned, with ErrProjectNotFound, when a
+	// registry has no project under the given name but has a config
+	// under a name differing from it only in case (ProjectName.SameAs).
+	ErrNameDiffersInCase = errors.New("names differing only in case are one project")
 	// ErrInvalidConfig wraps whatever makes a stored project config
 	// unreadable, as opposed to failing to read it at all.
 	ErrInvalidConfig = errors.New("invalid config")

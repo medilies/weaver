@@ -57,7 +57,7 @@ func demoNimbus(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, config, found := strings.Cut(string(readme), "```yaml\n# ~/.config/weaver/projects/nimbus.yml\n")
+	_, config, found := strings.Cut(string(readme), "```yaml\n# nimbus.yml in weaver's projects folder (see docs/config.md)\n")
 	config, _, closed := strings.Cut(config, "```")
 	if !found || !closed {
 		t.Fatal("the README shows no nimbus.yml")

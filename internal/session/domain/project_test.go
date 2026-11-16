@@ -8,6 +8,19 @@ import (
 	"github.com/medilies/weaver/internal/session/domain"
 )
 
+func TestProjectNameSameAs(t *testing.T) {
+	shop, _ := domain.NewProjectName("shop")
+	cases := map[string]bool{"shop": true, "Shop": true, "SHOP": true, "shops": false}
+	for other, same := range cases {
+		t.Run(other, func(t *testing.T) {
+			name, _ := domain.NewProjectName(other)
+			if got := shop.SameAs(name); got != same {
+				t.Fatalf("shop.SameAs(%s) = %v, want %v", other, got, same)
+			}
+		})
+	}
+}
+
 func TestNewProjectName(t *testing.T) {
 	t.Run("trims surrounding whitespace", func(t *testing.T) {
 		name, err := domain.NewProjectName("  weaver  ")
@@ -51,6 +64,13 @@ func TestNewProjectName(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("rejects a command's name in another case", func(t *testing.T) {
+		_, err := domain.NewProjectName("Edit")
+		if !errors.Is(err, domain.ErrReservedProjectName) {
+			t.Fatalf("got %v, want ErrReservedProjectName", err)
+		}
+	})
 
 	t.Run("rejects a name kept for a removed command", func(t *testing.T) {
 		_, err := domain.NewProjectName("show")

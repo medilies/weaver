@@ -14,7 +14,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 | Term | Meaning | Config / CLI / browser | Code |
 | --- | --- | --- | --- |
-| project | A named dev environment weaver can open | `<name>.yml` or `<name>.yaml` | `Project`, `ProjectName` |
+| project | A named dev environment weaver can open; names differing only in case are one project | `<name>.yml` or `<name>.yaml` | `Project`, `ProjectName`, `ProjectName.SameAs`, `ErrNameDiffersInCase` |
 | settings | Weaver-wide preferences, the same for every project, in one file beside the configs; never part of a project's config | `settings.yml` | `Settings` |
 | popup | A tmux popup the size of the window, which the browser and the config form re-run themselves in when started in a tmux pane, if the settings ask for it; off unless set | `popup:` (settings) | `Settings.Popup`, `Tmux.Popup` |
 | selected colour | The colour marking what is selected, and where the cursor is, in the browser and the config form; cyan unless set. In a window list or pane list, the selected item is underlined, and in this colour while the cursor is on the list, or in the browser while it is in the project list | `theme: selected:`, formerly `selected-colour:` (settings) | `palette`, `theme` |

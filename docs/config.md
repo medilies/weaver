@@ -1,14 +1,25 @@
 # Project config
 
-A project is one config file at `~/.config/weaver/projects/<name>.yml`
-(`$XDG_CONFIG_HOME/weaver/projects` when that is set). The file name is
-the project's name and its tmux session's name: letters, digits, `-` and
-`_`, starting with a letter or a digit, and not `bind`, `completion`,
-`edit`, `help`, `kill`, `list` or `show`.
+A project is one config file, `<name>.yml`, in weaver's projects folder:
+
+- Linux: `~/.config/weaver/projects`, or
+  `$XDG_CONFIG_HOME/weaver/projects` when that is set.
+- macOS: `~/Library/Application Support/weaver/projects`.
+
+The file name is the project's name and its tmux session's name:
+
+- letters, digits, `-` and `_`, starting with a letter or a digit;
+- not `bind`, `completion`, `edit`, `help`, `kill`, `list` or `show`, in
+  any case.
+
+Names differing only in case are one project: binding `Shop` while
+`shop` is registered asks for another name, and `weave Shop` doesn't
+open `shop`.
+
 A config may end in `.yaml` instead; weave saves a new one as `.yml` and
-keeps an existing one's extension. A project with both a `.yml` and a
-`.yaml` config isn't registered: weave warns about it until one is
-removed.
+keeps an existing one's extension. A project with two configs, a `.yml` and
+a `.yaml`, or `shop.yml` and `Shop.yml`, isn't registered: weave warns
+about it until one is removed.
 
 A config may be a symbolic link, as dotfiles managers make. Saving
 replaces the file it points to and keeps the link; deleting, with `d` in

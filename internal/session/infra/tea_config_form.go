@@ -421,6 +421,11 @@ func (m configForm) save() (configForm, tea.Cmd) {
 		return m, nil
 	}
 	stored, replaces, err := m.replaced()
+	if errors.Is(err, domain.ErrNameDiffersInCase) {
+		m, cmd := m.typeInto(projectNameAt, m.project.Name().String(), false)
+		m.edit.err = fmt.Errorf("a registered name differs from %s only in case, and %w: type another name", m.project.Name(), domain.ErrNameDiffersInCase)
+		return m, cmd
+	}
 	if err != nil {
 		m.problem = err.Error()
 		return m, nil
@@ -435,13 +440,15 @@ func (m configForm) save() (configForm, tea.Cmd) {
 }
 
 // replaced is the config saving replaces: the one stored, else, for a new
-// project, the config registered under its name, if any.
+// project, the config registered under its name, if any. A config under
+// a name differing from it only in case is an error wrapping
+// domain.ErrNameDiffersInCase.
 func (m configForm) replaced() ([]byte, bool, error) {
 	if len(m.stored) > 0 || m.nameStays || m.documents == nil {
 		return m.stored, false, nil
 	}
 	document, err := m.documents.Document(m.project.Name())
-	if errors.Is(err, domain.ErrProjectNotFound) {
+	if errors.Is(err, domain.ErrProjectNotFound) && !errors.Is(err, domain.ErrNameDiffersInCase) {
 		return nil, false, nil
 	}
 	if err != nil {

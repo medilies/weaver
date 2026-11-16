@@ -45,9 +45,40 @@ func (r FileProjectRegistry) WithWarnings(w io.Writer) FileProjectRegistry {
 
 // Names implements domain.ProjectRegistry. It reads file names only:
 // config files whose stem isn't exactly a valid project name, and a
-// project with both a .yml and a .yaml config, are skipped, with a
-// warning, and a missing directory has no projects.
+// project with two configs, a .yml and a .yaml or names differing only
+// in case, are skipped, with a warning, and a missing directory has no
+// projects.
 func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
+	configs, err := r.configs()
+	if err != nil {
+		return nil, err
+	}
+	var names []domain.ProjectName
+	for _, config := range configs {
+		if config.skipped != nil {
+			r.warnSkipped(config.file, config.skipped)
+			continue
+		}
+		if same := r.filesOf(configs, config.name); len(same) > 1 {
+			r.warnOnce(strings.Join(same, " and "), "two configs of one project; remove one to register it")
+			continue
+		}
+		names = append(names, config.name)
+	}
+	slices.SortFunc(names, func(a, b domain.ProjectName) int { return strings.Compare(a.String(), b.String()) })
+	return names, nil
+}
+
+// config is a config file in the directory, and the project it names,
+// or why it names none: its stem isn't exactly a valid project name.
+type config struct {
+	file    string
+	name    domain.ProjectName
+	skipped error
+}
+
+// configs are the config files in the directory.
+func (r FileProjectRegistry) configs() ([]config, error) {
 	entries, err := os.ReadDir(r.dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -55,8 +86,7 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 	if err != nil {
 		return nil, err
 	}
-	configs := map[string]int{}
-	var names []domain.ProjectName
+	var configs []config
 	for _, entry := range entries {
 		// Dot-files, such as the .#shop.yml lock Emacs makes while
 		// shop.yml is edited, aren't configs and aren't worth a warning.
@@ -68,28 +98,25 @@ func (r FileProjectRegistry) Names() ([]domain.ProjectName, error) {
 			continue
 		}
 		name, err := domain.NewProjectName(stem)
-		if err != nil {
-			r.warnSkipped(entry.Name(), err)
-			continue
-		}
 		// "shop .yml" would list as shop, whose config is shop.yml.
-		if name.String() != stem {
-			r.warnSkipped(entry.Name(), fmt.Errorf("blank space around its name, read as %q", name))
-			continue
+		if err == nil && name.String() != stem {
+			err = fmt.Errorf("blank space around its name, read as %q", name)
 		}
-		if configs[stem]++; configs[stem] == 1 {
-			names = append(names, name)
+		configs = append(configs, config{file: entry.Name(), name: name, skipped: err})
+	}
+	return configs, nil
+}
+
+// filesOf are the paths of the configs among configs of the project
+// name, or of a name differing from it only in case.
+func (r FileProjectRegistry) filesOf(configs []config, name domain.ProjectName) []string {
+	var files []string
+	for _, config := range configs {
+		if config.skipped == nil && config.name.SameAs(name) {
+			files = append(files, filepath.Join(r.dir, config.file))
 		}
 	}
-	names = slices.DeleteFunc(names, func(name domain.ProjectName) bool {
-		if configs[name.String()] == 1 {
-			return false
-		}
-		r.warnOnce(strings.Join(r.paths(name), " and "), "two configs of one project; remove one to register it")
-		return true
-	})
-	slices.SortFunc(names, func(a, b domain.ProjectName) int { return strings.Compare(a.String(), b.String()) })
-	return names, nil
+	return files
 }
 
 // configStem is file without its config extension, if it has one.
@@ -179,14 +206,15 @@ func (r FileProjectRegistry) Commented(name domain.ProjectName) (bool, error) {
 
 // Save implements domain.ProjectRegistry. It writes the config and
 // saves the JSON Schema next to it, which it points to so editors
-// complete and check it.
+// complete and check it. It refuses a new project whose name differs
+// from a config's only in case, wrapping domain.ErrNameDiffersInCase.
 func (r FileProjectRegistry) Save(project domain.Project) error {
 	doc, err := encodeProject(project)
 	if err != nil {
 		return err
 	}
 	path, err := r.find(project.Name())
-	if errors.Is(err, domain.ErrProjectNotFound) {
+	if errors.Is(err, domain.ErrProjectNotFound) && !errors.Is(err, domain.ErrNameDiffersInCase) {
 		path, err = r.paths(project.Name())[0], nil
 	}
 	if err != nil {
@@ -209,27 +237,27 @@ func (r FileProjectRegistry) Delete(name domain.ProjectName) error {
 }
 
 // find is the path of the config file of project name, which has one
-// config, ending in .yml or .yaml.
+// config, ending in .yml or .yaml. The file is looked up by its exact
+// name, as on a case-sensitive filesystem, so that a config whose name
+// differs only in case isn't taken for name's, wherever weave runs.
+// Extensions are matched exactly too: on macOS, saving shop replaces a
+// shop.YML, which no listing registers.
 func (r FileProjectRegistry) find(name domain.ProjectName) (string, error) {
-	var found []string
-	for _, path := range r.paths(name) {
-		_, err := os.Stat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		found = append(found, path)
+	configs, err := r.configs()
+	if err != nil {
+		return "", err
 	}
-	switch len(found) {
-	case 0:
+	found := r.filesOf(configs, name)
+	switch {
+	case len(found) == 0:
 		return "", fmt.Errorf("%w: %s", domain.ErrProjectNotFound, name)
-	case 1:
-		return found[0], nil
-	default:
+	case len(found) > 1:
 		return "", fmt.Errorf("%s has two configs, %s; remove one", name, strings.Join(found, " and "))
+	case !slices.Contains(r.paths(name), found[0]):
+		twin, _ := configStem(filepath.Base(found[0]))
+		return "", fmt.Errorf("%w: %s; %s's config is %s, and %w", domain.ErrProjectNotFound, name, twin, found[0], domain.ErrNameDiffersInCase)
 	}
+	return found[0], nil
 }
 
 // paths are where the config of project name may live, the first where
