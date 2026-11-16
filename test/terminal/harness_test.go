@@ -478,11 +478,22 @@ func (h *harness) activePane(session string) string {
 	return h.tmux("display", "-p", "-t", "="+session+":", "#{@label}")
 }
 
-// logsIdle is shop's logs pane, once its sleep 3 exited.
+// logsIdle is shop's logs pane, once its sleep 3 exited and its shell
+// took the terminal back, as weave tells a shell idles: tmux names the
+// shell a moment before then.
 func (h *harness) logsIdle() string {
 	h.t.Helper()
 	logs := h.paneOf("w/shop:api", "logs")
 	h.waitRuns(logs, "bash", 8*time.Second)
+	pid := h.tmux("display", "-p", "-t", logs, "#{pane_pid}")
+	var tpgid string
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		out, _ := exec.Command("ps", "-o", "tpgid=", "-p", pid).Output()
+		if tpgid = strings.TrimSpace(string(out)); tpgid == pid {
+			return logs
+		}
+	}
+	h.fatal("%s's shell %s never took the terminal back from %s", logs, pid, tpgid)
 	return logs
 }
 
