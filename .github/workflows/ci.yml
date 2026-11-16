@@ -30,13 +30,21 @@ jobs:
   test:
     # 24.04 ships tmux 3.4, the only version weaver is tested on.
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The shell the tmux adapter's tests run their panes in.
+        shell: [/bin/sh, bash, zsh, fish]
+    name: test (${{ matrix.shell }})
+    env:
+      WEAVE_TEST_SHELL: ${{ matrix.shell }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       # The tmux adapter's tests drive a private tmux server.
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux zsh fish
       - run: go test ./...
 
   terminal:

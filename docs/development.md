@@ -4,6 +4,7 @@
 go build ./...               # build everything
 go run ./cmd/weave X         # run without building
 go test ./...                # run tests (the tmux adapter's need tmux)
+WEAVE_TEST_SHELL=zsh go test ./...  # the tmux adapter's panes in zsh, not sh
 golangci-lint run ./...      # format check, static analysis, layer boundaries
 
 cd test/terminal
@@ -12,7 +13,9 @@ golangci-lint run --build-tags terminal ./...
 ```
 
 Tests that need tmux start private tmux servers on their own sockets;
-they never touch your sessions. The terminal tests are described in
+they never touch your sessions. Their panes run `/bin/sh`, or the shell
+`WEAVE_TEST_SHELL` names; CI runs them in sh, bash, zsh and fish, so a
+command a test types must work in all four. The terminal tests are described in
 [docs/agents/terminal-testing.md](agents/terminal-testing.md).
 
 ## Architecture

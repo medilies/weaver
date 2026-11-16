@@ -89,7 +89,7 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 - Meaningful tests over coverage: test behaviour through public APIs, one reason to fail per test, descriptive names. `domain`/`app` tests use in-memory fakes; `infra` tests may touch disk (`t.TempDir()`) since they test the disk-backed adapter itself. No coverage targets.
 - Never run `go test` with `-v`: its output floods the context (about 136 KB for the unit tests). A failure prints without it; narrow one down with `-run`, and the terminal tests' `-keep` or `-traces`.
-- tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`, `/bin/sh` panes) and never touch the user's sessions. tmux tests skip when tmux is missing, except in CI, which installs it.
+- tmux adapter tests start a private server (own `-S` socket, `-f /dev/null`) and never touch the user's sessions. Their panes run the shell `WEAVE_TEST_SHELL` names, `/bin/sh` unless set; CI runs them in sh, bash, zsh and fish, so the commands they type work in all four. tmux tests skip when tmux, or that shell, is missing, except in CI, which installs them.
 - The config form's model is unit-tested in `tea_config_form_test.go`; the browser's and the confirmation dialog's models aren't. What needs tmux or a real terminal is checked by the terminal tests in `test/terminal`: see `docs/agents/terminal-testing.md`, including how never to reach the user's tmux server. A case they miss, once found, is added there.
 
 ## Docs

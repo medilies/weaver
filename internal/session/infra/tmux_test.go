@@ -1,6 +1,7 @@
 package infra_test
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"maps"
@@ -18,8 +19,9 @@ import (
 )
 
 // tmuxServer is a private tmux server for one test: its own socket, no
-// user config, and /bin/sh panes in an empty home. Tests never touch the
-// user's own server.
+// user config, and panes running the shell $WEAVE_TEST_SHELL names,
+// /bin/sh unless set, in a home holding only what gives each shell a
+// plain "$ " prompt. Tests never touch the user's own server.
 type tmuxServer struct {
 	global []string
 	env    []string
@@ -28,6 +30,19 @@ type tmuxServer struct {
 func newTmuxServer(t *testing.T) tmuxServer {
 	t.Helper()
 	requireTool(t, "tmux")
+	shell := cmp.Or(os.Getenv("WEAVE_TEST_SHELL"), "/bin/sh")
+	requireTool(t, shell)
+	shell, _ = exec.LookPath(shell)
+	home := t.TempDir()
+	for file, content := range shellHome {
+		path := filepath.Join(home, file)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("writing the home: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("writing the home: %v", err)
+		}
+	}
 	// Not t.TempDir(): its long path would overflow a socket address.
 	dir, err := os.MkdirTemp("", "wv")
 	if err != nil {
@@ -41,12 +56,22 @@ func newTmuxServer(t *testing.T) tmuxServer {
 	return tmuxServer{
 		global: []string{"-S", socket, "-f", "/dev/null"},
 		env: []string{
-			"HOME=" + t.TempDir(),
+			"HOME=" + home,
 			"PATH=" + os.Getenv("PATH"),
-			"SHELL=/bin/sh",
+			"SHELL=" + shell,
 			"TERM=xterm-256color",
 		},
 	}
+}
+
+// shellHome is the files of a test server's home, by path: each shell's
+// prompt a plain "$ ", as sh's is, and nothing of its own shown, such as
+// fish's greeting and suggestions or zsh's mark of a partial line.
+var shellHome = map[string]string{
+	".bashrc":                  "PS1='$ '\n",
+	".bash_profile":            ". ~/.bashrc\n",
+	".zshrc":                   "PROMPT='$ '\nPROMPT_EOL_MARK=''\n",
+	".config/fish/config.fish": "set -g fish_greeting\nset -g fish_autosuggestion_enabled 0\nfunction fish_prompt; echo -n '$ '; end\nfunction fish_right_prompt; end\n",
 }
 
 // tmux is the adapter under test, talking to this server in a 200x51
@@ -170,11 +195,11 @@ func TestTmuxStart(t *testing.T) {
 	plan := planOf(t, "start", fmt.Sprintf(`{"root": %q, "windows": [
 		{"name": "api", "panes": [
 			{"name": "shell"},
-			{"name": "side", "dir": "sub", "split": {"direction": "right", "size": "30%%"}, "command": "echo w-$((40+2))"},
-			{"name": "below", "split": {"direction": "below"}, "prefill": "echo p-$((40+2))"}
+			{"name": "side", "dir": "sub", "split": {"direction": "right", "size": "30%%"}, "command": "echo w-\"42\""},
+			{"name": "below", "split": {"direction": "below"}, "prefill": "echo p-\"42\""}
 		]},
-		{"name": "env", "before": ["W=window"], "panes": [
-			{"note": ["it's a note"], "env": {"GREETING": "hi $HOME"}, "before": ["P=$W-pane"],
+		{"name": "env", "before": ["export W=window"], "panes": [
+			{"note": ["it's a note"], "env": {"GREETING": "hi $HOME"}, "before": ["export P=$W-pane"],
 			 "command": "echo \"[$GREETING]\" first-$P"}
 		]},
 		{"name": "repo"}
@@ -237,7 +262,7 @@ func TestTmuxStart(t *testing.T) {
 
 	t.Run("leaves a prefilled command at the prompt until Enter", func(t *testing.T) {
 		below := server.paneLabelled(t, "start", "below")
-		server.waitFor(t, below, "echo p-$((40+2))")
+		server.waitFor(t, below, "echo p-\"42\"")
 		time.Sleep(300 * time.Millisecond)
 		if shown := server.query(t, "capture-pane", "-p", "-t", below); strings.Contains(shown, "p-42") {
 			t.Fatalf("the prefilled command ran by itself:\n%s", shown)
@@ -390,7 +415,7 @@ func TestTmuxStartClearing(t *testing.T) {
 	server := newTmuxServer(t)
 	plan := planOf(t, "cleared", fmt.Sprintf(`{"root": %q, "clear": true, "windows": [
 		{"name": "w", "panes": [
-			{"before": ["echo hidden-$((1+1))"], "note": ["kept note"], "command": "echo shown-$((2+2))"}
+			{"before": ["echo hidden-\"2\""], "note": ["kept note"], "command": "echo shown-\"4\""}
 		]}
 	]}`, t.TempDir()))
 
@@ -659,12 +684,17 @@ func TestTmuxInterruptPanes(t *testing.T) {
 	name, _ := domain.NewProjectName("doomed")
 	// started is doomed, its pane a running sleep, and b a sleep that
 	// ignores ctrl+c, once both run.
+	// stubborn is a sleep that ignores ctrl+c, whatever the shell.
+	stubborn := filepath.Join(t.TempDir(), "stubborn")
+	if err := os.WriteFile(stubborn, []byte("#!/bin/sh\ntrap '' INT\nexec sleep 301\n"), 0o700); err != nil {
+		t.Fatalf("writing the stubborn sleep: %v", err)
+	}
 	started := func(t *testing.T) {
 		t.Helper()
 		_ = server.tmux().Kill(name)
 		if err := server.tmux().Start(planOf(t, "doomed", fmt.Sprintf(`{"root": %q, "windows": [{"name": "w", "panes": [
 			{"name": "a", "command": "sleep 300"},
-			{"name": "b", "split": {"direction": "right"}, "command": "trap '' INT; sleep 301"}]}]}`, t.TempDir()))); err != nil {
+			{"name": "b", "split": {"direction": "right"}, "command": %q}]}]}`, t.TempDir(), stubborn))); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		for range 100 {
@@ -825,7 +855,7 @@ func TestTmuxRestore(t *testing.T) {
 		{"name": "a"},
 		{"name": "b", "panes": [
 			{"name": "left"},
-			{"name": "right", "split": {"direction": "right"}, "command": "echo restored-$((40+2))"}
+			{"name": "right", "split": {"direction": "right"}, "command": "echo restored-\"42\""}
 		]},
 		{"name": "c"}
 	]}`, t.TempDir())
@@ -1051,7 +1081,7 @@ func TestTmuxCapture(t *testing.T) {
 
 	t.Run("keeps the directory of the shell a job left", func(t *testing.T) {
 		server.query(t, "new-session", "-d", "-s", "moved", "-c", root)
-		server.query(t, "send-keys", "-t", "moved:", "(cd api && exec sleep 300)", "Enter")
+		server.query(t, "send-keys", "-t", "moved:", "sh -c 'cd api && exec sleep 300'", "Enter")
 		server.busy(t, "moved", "sleep")
 
 		windows, err := server.tmux().Capture("moved")
@@ -1276,13 +1306,13 @@ func TestTmuxTasks(t *testing.T) {
 	server := newTmuxServer(t)
 	root := t.TempDir()
 	mkdir(t, filepath.Join(root, "back"))
-	plan := planOf(t, "tasks", fmt.Sprintf(`{"root": %q, "before": ["B=before"], "windows": [
+	plan := planOf(t, "tasks", fmt.Sprintf(`{"root": %q, "before": ["export B=before"], "windows": [
 		{"name": "api", "panes": [
 			{"name": "shell"},
 			{"name": "back", "dir": "back", "env": {"GREETING": "hi"}, "split": {"direction": "right"},
-			 "tasks": [{"name": "greet", "command": "echo \"$GREETING-$B\" task-$((40+2))"}]}
+			 "tasks": [{"name": "greet", "command": "echo \"$GREETING-$B\" task-\"42\""}]}
 		]},
-		{"name": "logs", "panes": [{"tasks": [{"command": "echo logs-$((40+2))"}]}]}
+		{"name": "logs", "panes": [{"tasks": [{"command": "echo logs-\"42\""}]}]}
 	]}`, root))
 	if err := server.tmux().Start(plan); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1318,7 +1348,7 @@ func TestTmuxTasks(t *testing.T) {
 		if err := server.tmux().Type(project, api, 1, greet.Command(), true); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		shown := server.waitFor(t, back, "$ echo \"$GREETING-$B\" task-$((40+2))\nhi-before task-42")
+		shown := server.waitFor(t, back, "$ echo \"$GREETING-$B\" task-\"42\"\nhi-before task-42")
 		if strings.Contains(shown, "prefilled") {
 			t.Fatalf("the task was typed after what was at the prompt:\n%s", shown)
 		}
