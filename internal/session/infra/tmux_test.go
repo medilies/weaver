@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -39,6 +41,9 @@ func newTmuxServer(t *testing.T) tmuxServer {
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			t.Fatalf("writing the home: %v", err)
 		}
+		if strings.HasSuffix(file, "/") {
+			continue
+		}
 		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatalf("writing the home: %v", err)
 		}
@@ -50,7 +55,9 @@ func newTmuxServer(t *testing.T) tmuxServer {
 	}
 	socket := filepath.Join(dir, "s")
 	t.Cleanup(func() {
+		shells := panePIDs(socket)
 		_ = exec.Command("tmux", "-S", socket, "kill-server").Run()
+		awaitExit(shells) // fish writes to its home as it exits
 		_ = os.RemoveAll(dir)
 	})
 	return tmuxServer{
@@ -64,14 +71,41 @@ func newTmuxServer(t *testing.T) tmuxServer {
 	}
 }
 
-// shellHome is the files of a test server's home, by path: each shell's
-// prompt a plain "$ ", as sh's is, and nothing of its own shown, such as
-// fish's greeting and suggestions or zsh's mark of a partial line.
+// shellHome is the files of a test server's home, by path, a path ending
+// in "/" being a directory: each shell's prompt a plain "$ ", as sh's is,
+// and nothing of its own shown or done, such as fish's greeting and
+// suggestions, zsh's mark of a partial line, the question Debian's global
+// zshrc asks when compinit finds insecure directories, or the completions
+// fish generates from man pages on its first run.
 var shellHome = map[string]string{
 	".bashrc":                  "PS1='$ '\n",
 	".bash_profile":            ". ~/.bashrc\n",
+	".zshenv":                  "skip_global_compinit=1\n",
 	".zshrc":                   "PROMPT='$ '\nPROMPT_EOL_MARK=''\n",
 	".config/fish/config.fish": "set -g fish_greeting\nset -g fish_autosuggestion_enabled 0\nfunction fish_prompt; echo -n '$ '; end\nfunction fish_right_prompt; end\n",
+	".local/share/fish/generated_completions/": "",
+}
+
+// panePIDs lists the processes the panes of the server on socket run.
+func panePIDs(socket string) []int {
+	out, _ := exec.Command("tmux", "-S", socket, "list-panes", "-a", "-F", "#{pane_pid}").Output()
+	var pids []int
+	for field := range strings.FieldsSeq(string(out)) {
+		if pid, err := strconv.Atoi(field); err == nil {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
+}
+
+// awaitExit waits, up to five seconds, until the processes pids are gone.
+func awaitExit(pids []int) {
+	deadline := time.Now().Add(5 * time.Second)
+	for _, pid := range pids {
+		for syscall.Kill(pid, 0) == nil && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
 }
 
 // tmux is the adapter under test, talking to this server in a 200x51
