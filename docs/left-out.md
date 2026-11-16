@@ -8,10 +8,11 @@ of scope. Kept so they aren't reported again. What is still to do is in
 
 - **Any tmux but 3.4.** CI and releases run on ubuntu-24.04 for Ubuntu's
   tmux 3.4, not ubuntu-latest; re-pin when GitHub retires that runner.
-  Another version may differ in what weaver reads back: 3.4 prints a `\`
-  before some `$` (see `verbatim` in `infra/tmux.go`). Older than 3.2
-  fails for sure: restoration needs `new-window -b`. Hence no tmux
-  version check when weave runs.
+  CI's macOS job builds 3.4 from its release, Homebrew having only the
+  newest. Another version may differ in what weaver reads back: 3.4
+  prints a `\` before some `$` (see `verbatim` in `infra/tmux.go`).
+  Older than 3.2 fails for sure: restoration needs `new-window -b`. Hence
+  no tmux version check when weave runs.
 
 ## Left
 

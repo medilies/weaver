@@ -47,6 +47,29 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tmux zsh fish
       - run: go test ./...
 
+  test-macos:
+    runs-on: macos-latest
+    env:
+      # The only version weaver is tested on, built from its release, as
+      # Homebrew only has the newest.
+      TMUX_VERSION: "3.4"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # The tmux adapter's tests drive a private tmux server.
+      - name: Build tmux
+        run: |
+          brew install libevent ncurses utf8proc pkgconf
+          curl -fsSL "https://github.com/tmux/tmux/releases/download/$TMUX_VERSION/tmux-$TMUX_VERSION.tar.gz" | tar xz
+          cd "tmux-$TMUX_VERSION"
+          PKG_CONFIG_PATH="$(brew --prefix ncurses)/lib/pkgconfig" ./configure --enable-utf8proc --prefix="$RUNNER_TEMP/tmux"
+          make -j"$(sysctl -n hw.ncpu)" install
+          echo "$RUNNER_TEMP/tmux/bin" >> "$GITHUB_PATH"
+      - run: test "$(tmux -V)" = "tmux $TMUX_VERSION"
+      - run: go test ./...
+
   terminal:
     # weave in a real terminal emulator, attached to a private tmux server.
     runs-on: ubuntu-24.04
