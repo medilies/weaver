@@ -72,12 +72,14 @@ func newTmuxServer(t *testing.T) tmuxServer {
 }
 
 // shellHome is the files of a test server's home, by path, a path ending
-// in "/" being a directory: each shell's prompt a plain "$ ", as sh's is,
-// and nothing of its own shown or done, such as fish's greeting and
-// suggestions, zsh's mark of a partial line, the question Debian's global
-// zshrc asks when compinit finds insecure directories, or the completions
-// fish generates from man pages on its first run.
+// in "/" being a directory: each shell's prompt a plain "$ ", and nothing
+// of its own shown or done, such as fish's greeting and suggestions, the
+// prompt macOS's /etc/profile gives its sh (bash), zsh's mark of a
+// partial line, the question Debian's global zshrc asks when compinit
+// finds insecure directories, or the completions fish generates from man
+// pages on its first run.
 var shellHome = map[string]string{
+	".profile":                 "PS1='$ '\n",
 	".bashrc":                  "PS1='$ '\n",
 	".bash_profile":            ". ~/.bashrc\n",
 	".zshenv":                  "skip_global_compinit=1\n",
