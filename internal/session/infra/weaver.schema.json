@@ -64,7 +64,7 @@
       }
     },
     "clear": {
-      "description": "Hide the before commands once they ran: clear is typed after them, then the note printed. Set on the project, a window or a pane, the lowest winning; off unless set.",
+      "description": "Hide the before commands once they ran: clear is typed after them, then the note printed, and they are kept out of the shell history where it leaves out commands starting with a space. Set on the project, a window or a pane, the lowest winning; off unless set.",
       "type": "boolean"
     },
     "window": {

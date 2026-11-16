@@ -475,6 +475,38 @@ func TestTmuxStartClearing(t *testing.T) {
 	})
 }
 
+func TestTmuxStartTypesAClearingPanesBeforeCommandsAfterASpace(t *testing.T) {
+	server := newTmuxServer(t)
+	// Panes run cat, which shows each line typed into it as it was typed.
+	config := filepath.Join(t.TempDir(), "tmux.conf")
+	if err := os.WriteFile(config, []byte(`set -g default-command "exec cat"`+"\n"), 0o600); err != nil {
+		t.Fatalf("writing the config: %v", err)
+	}
+	server.global[3] = config
+	plan := planOf(t, "spaced", fmt.Sprintf(`{"root": %q, "windows": [
+		{"name": "kept", "panes": [{"before": ["echo typed"], "command": "echo done"}]},
+		{"name": "cleared", "clear": true, "panes": [{"before": ["echo typed"], "command": "echo done"}]}
+	]}`, t.TempDir()))
+
+	if err := server.tmux().Start(plan); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	typed := func(window string) string {
+		shown := server.waitFor(t, "=spaced:"+window, "echo done")
+		for line := range strings.SplitSeq(shown, "\n") {
+			if strings.Contains(line, "echo typed") {
+				return line
+			}
+		}
+		t.Fatalf("the before command was not typed in %s:\n%s", window, shown)
+		return ""
+	}
+
+	if kept, cleared := typed("kept"), typed("cleared"); kept != "echo typed" || cleared != " echo typed" {
+		t.Fatalf("got %q and %q, want %q and %q: the clearing pane's before command after a space", kept, cleared, "echo typed", " echo typed")
+	}
+}
+
 func TestTmuxStartEndsAPaneScriptWithTheDefaultCommand(t *testing.T) {
 	server := newTmuxServer(t)
 	// In the config, read by the server Start starts: there is none before.

@@ -1299,7 +1299,7 @@ func (t Tmux) fill(windowID, firstPaneID string, window domain.WindowPlan, defau
 // command.
 func (t Tmux) startUp(id string, pane domain.PanePlan) error {
 	for _, cmd := range pane.Before() {
-		if err := t.typeCommand(id, cmd.String(), true); err != nil {
+		if err := t.typeCommand(id, beforeLine(pane, cmd), true); err != nil {
 			return err
 		}
 	}

@@ -48,6 +48,16 @@ func startScript(env []domain.EnvVar, note []string, defaultCommand string) []st
 	return []string{"--", "/bin/sh", "-c", strings.Join(lines, "\n")}
 }
 
+// beforeLine is how cmd, one of pane's before commands, is typed: after
+// a space when the pane clears, as clearLine is, leaving it out of the
+// history of shells told to ignore such lines.
+func beforeLine(pane domain.PanePlan, cmd domain.Command) string {
+	if pane.Clears() {
+		return " " + cmd.String()
+	}
+	return cmd.String()
+}
+
 // clearLine is what a pane that clears types after its before commands:
 // clear, then its note printed. A space first leaves it out of the
 // history of shells told to ignore such lines.
