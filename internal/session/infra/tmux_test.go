@@ -1995,6 +1995,7 @@ func TestTmuxNamesSessions(t *testing.T) {
 		t.Helper()
 		return server.query(t, "list-sessions", "-F", "#{session_name}")
 	}
+	lists := func(sessions, name string) bool { return slices.Contains(strings.Split(sessions, "\n"), name) }
 
 	a, b := mkdir(t, filepath.Join(t.TempDir(), "a", "api")), mkdir(t, filepath.Join(t.TempDir(), "b", "api"))
 	first, second := planOf(t, "api", fmt.Sprintf(`{"root": %q}`, a)), planOf(t, "api", fmt.Sprintf(`{"root": %q}`, b))
@@ -2006,7 +2007,7 @@ func TestTmuxNamesSessions(t *testing.T) {
 
 	t.Run("names a second project of a name after its root", func(t *testing.T) {
 		_, apart := second.Project().SessionNames()
-		if got := listed(t); !strings.Contains(got, "w/api\n") || !strings.Contains(got, apart) {
+		if got := listed(t); !lists(got, "w/api") || !lists(got, apart) {
 			t.Fatalf("got sessions %q, want w/api and %s", got, apart)
 		}
 		if !server.running(t, first.Project()) || !server.running(t, second.Project()) {
@@ -2043,7 +2044,7 @@ func TestTmuxNamesSessions(t *testing.T) {
 		if err := server.tmux().Adopt("w/api", refAt(t, t.TempDir(), "journal")); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := listed(t); !strings.Contains(got, "w/api\n") || strings.Contains(got, "w/journal") {
+		if got := listed(t); !lists(got, "w/api") || strings.Contains(got, "w/journal") {
 			t.Fatalf("got sessions %q, want w/api kept", got)
 		}
 	})
