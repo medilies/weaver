@@ -114,6 +114,8 @@ Code, configs, CLI, browser text, docs and commits use these words, and only the
 
 Build, run, test and lint commands, the terminal tests' included, are in `docs/development.md`.
 
+Navigate Go code with gopls through the LSP tool: definitions, references, implementers of a port, callers. Grep for text, docs and configs, which gopls doesn't read; a rename still greps the docs for the old word.
+
 ## Agent skills
 
 ### Issue tracker
